@@ -1,0 +1,25 @@
+# Dépendances
+/.pub-cache/
+/.dart_tool/
+/build/
+/.flutter-plugins
+/.packages
+/pubspec.lock
+
+# iOS
+/ios/.generated/
+/ios/Flutter/.last_build_id
+
+# Android
+/android/.gradle
+/android/app/build/
+/android/app/google-services.json
+
+# Autres
+*.log
+*.iml
+.DS_Store
+.idea/
+
+# Inclure uniquement lib
+!lib/
