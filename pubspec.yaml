@@ -1,0 +1,47 @@
+name: garagelink
+description: "A new Flutter project."
+
+publish_to: 'none' 
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.8.1
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+  firebase_core: ^4.0.0
+  cloud_firestore: ^6.0.0
+  firebase_auth: ^6.0.0
+  flutter_riverpod: ^2.6.1
+  image_picker: ^1.1.2
+  get: ^4.7.2
+  google_sign_in: ^6.2.1
+  awesome_dialog: ^3.2.1
+  intl: ^0.20.2
+
+  flutter_svg: ^2.0.10+1
+  path_drawing: ^1.0.1
+  fl_chart: ^0.68.0
+  flutter_map: ^8.2.1
+  latlong2: ^0.9.1
+  geolocator: ^14.0.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  
+  flutter_lints: ^6.0.0
+
+
+flutter:
+
+  uses-material-design: true
+
+  assets:
+    - assets/images/
+    - assets/icons/
