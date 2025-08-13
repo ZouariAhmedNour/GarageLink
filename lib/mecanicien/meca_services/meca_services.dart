@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:garagelink/mecanicien/meca_services/service_card.dart';
-import 'package:garagelink/mecanicien/meca_services/service_provider.dart';
+import 'package:garagelink/providers/service_provider.dart';
 
 class MecaServicesPage extends ConsumerStatefulWidget {
   const MecaServicesPage({super.key});

@@ -2,6 +2,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:garagelink/configurations/app_routes.dart';
 import 'package:garagelink/configurations/generate_routes.dart';
@@ -60,6 +61,11 @@ class _MyAppState extends State<MyApp> {
       ),
       getPages: GenerateRoutes.getPages,
       initialRoute: AppRoutes.splashScreen, // nouvelle route par défaut
+
+       // 🔹 Ajout pour le DatePicker
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
+      supportedLocales: const [Locale('fr'), Locale('en')],
+      locale: const Locale('fr'), // pour que le DatePicker soit en français
     );
   }
 }

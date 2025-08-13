@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:garagelink/mecanicien/meca_services/service_provider.dart';
+import 'package:garagelink/providers/service_provider.dart';
 
 
 class ServiceCard extends ConsumerWidget {

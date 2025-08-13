@@ -10,4 +10,6 @@ class AppRoutes {
   static const String dashboard = '/dashboard';
   static const String mecaServices = '/meca_services';
   static const String editLocalisation = '/editLocalisation';
+  static const String creation_devis = '/creationDevis';
+  static const String devis_preview_page = '/devisPreviewPage';
 }

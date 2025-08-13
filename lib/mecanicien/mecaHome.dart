@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:garagelink/components/default_app_bar.dart';
 import 'package:garagelink/dashboard/screens/dash_board_screen.dart';
+import 'package:garagelink/mecanicien/devis/creation_devis.dart';
 import 'package:garagelink/mecanicien/edit_localisation.dart';
 import 'package:garagelink/mecanicien/meca_services/meca_services.dart';
 import 'package:get/get.dart';
@@ -259,6 +260,13 @@ class MecaHomePage extends ConsumerWidget {
               description: 'Gestion de la localisation de votre garage',
               color: const Color.fromARGB(255, 240, 62, 18),
               onTap: () => Get.to(() => EditLocalisation()),
+            ),
+            buildMenuCard(
+              icon: Icons.receipt,
+              title: 'Devis',
+              description: 'Création et gestion des devis',
+              color: const Color.fromARGB(255, 243, 228, 20),
+              onTap: () => Get.to(() => CreationDevisPage ()),
             ),
 
             // 🚀 FUTURES FONCTIONNALITÉS
