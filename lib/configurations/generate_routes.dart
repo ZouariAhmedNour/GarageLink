@@ -6,9 +6,11 @@ import 'package:garagelink/configurations/app_routes.dart';
 import 'package:garagelink/dashboard/screens/dash_board_screen.dart';
 import 'package:garagelink/mecanicien/devis/creation_devis.dart';
 import 'package:garagelink/mecanicien/devis/devis_preview_page.dart';
+import 'package:garagelink/mecanicien/devis/historique_devis.dart';
 import 'package:garagelink/mecanicien/edit_localisation.dart';
 import 'package:garagelink/mecanicien/mecaHome.dart';
 import 'package:garagelink/mecanicien/meca_services/meca_services.dart';
+import 'package:garagelink/mecanicien/work%20order/work_order_page.dart';
 import 'package:garagelink/splash_screen.dart';
 import 'package:get/get.dart';
 
@@ -27,5 +29,7 @@ class GenerateRoutes {
     GetPage(name: AppRoutes.editLocalisation, page: () =>  EditLocalisation()),
     GetPage(name: AppRoutes.creation_devis, page: () =>  CreationDevisPage()),
     GetPage(name: AppRoutes.devis_preview_page, page: () =>  DevisPreviewPage()),
+    GetPage(name: AppRoutes.historique_devis, page: () =>  HistoriqueDevisPage()),
+    GetPage(name: AppRoutes.workOrderPage, page: () =>  WorkOrderPage()),
   ];
 }

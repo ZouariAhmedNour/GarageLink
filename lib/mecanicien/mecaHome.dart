@@ -6,6 +6,7 @@ import 'package:garagelink/dashboard/screens/dash_board_screen.dart';
 import 'package:garagelink/mecanicien/devis/creation_devis.dart';
 import 'package:garagelink/mecanicien/edit_localisation.dart';
 import 'package:garagelink/mecanicien/meca_services/meca_services.dart';
+import 'package:garagelink/mecanicien/work%20order/work_order_page.dart';
 import 'package:get/get.dart';
 import 'package:garagelink/configurations/app_routes.dart';
 
@@ -267,6 +268,13 @@ class MecaHomePage extends ConsumerWidget {
               description: 'Création et gestion des devis',
               color: const Color.fromARGB(255, 243, 228, 20),
               onTap: () => Get.to(() => CreationDevisPage ()),
+            ),
+            buildMenuCard(
+              icon: Icons.assignment,
+              title: 'Ordres de Travail',
+              description: 'Création et gestion des ordres de travail',
+              color: const Color.fromARGB(255, 243, 228, 20),
+              onTap: () => Get.to(() => WorkOrderPage ()),
             ),
 
             // 🚀 FUTURES FONCTIONNALITÉS

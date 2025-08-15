@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:garagelink/models/devis.dart';
-import 'package:garagelink/models/piece.dart';
+import 'package:garagelink/mecanicien/devis/models/piece.dart';
 
 
 class DevisProvider{

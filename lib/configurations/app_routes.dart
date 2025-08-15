@@ -12,4 +12,6 @@ class AppRoutes {
   static const String editLocalisation = '/editLocalisation';
   static const String creation_devis = '/creationDevis';
   static const String devis_preview_page = '/devisPreviewPage';
+  static const String historique_devis = '/historiqueDevis';
+  static const String workOrderPage = '/workOrderPage';
 }

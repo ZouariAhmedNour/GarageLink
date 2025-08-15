@@ -4,7 +4,6 @@ import 'package:garagelink/providers/devis_provider.dart';
 
 import 'package:garagelink/utils/format.dart';
 
-
 class TotalsCard extends ConsumerWidget {
   const TotalsCard({super.key});
 
@@ -12,6 +11,12 @@ class TotalsCard extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final q = ref.watch(devisProvider);
     return Card(
+      color: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: const BorderSide(color: Color(0xFF4A90E2), width: 1),
+      ),
+      elevation: 1,
       margin: const EdgeInsets.symmetric(vertical: 8),
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -20,7 +25,10 @@ class TotalsCard extends ConsumerWidget {
           children: [
             _row('Sous-total (pièces + main-d’œuvre)', Fmt.money(q.sousTotal)),
             const SizedBox(height: 6),
-            _row('TVA (${(q.tva * 100).toStringAsFixed(0)}%)', Fmt.money(q.montantTva)),
+            _row(
+              'TVA (${(q.tva * 100).toStringAsFixed(0)}%)',
+              Fmt.money(q.montantTva),
+            ),
             const Divider(height: 20),
             _row('Total TTC', Fmt.money(q.totalTtc), isBold: true),
           ],
@@ -30,10 +38,23 @@ class TotalsCard extends ConsumerWidget {
   }
 
   Widget _row(String label, String value, {bool isBold = false}) => Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(label),
-          Text(value, style: TextStyle(fontWeight: isBold ? FontWeight.w800 : FontWeight.w600)),
-        ],
-      );
+    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    children: [
+      Expanded(
+        child: Text(label,
+         style: const TextStyle(
+          color: Colors.black
+          ),
+            overflow: TextOverflow.ellipsis,
+          ),
+      ),
+      Text(
+        value,
+        style: TextStyle(
+          fontWeight: isBold ? FontWeight.w800 : FontWeight.w600,
+          color: Colors.black,
+        ),
+      ),
+    ],
+  );
 }

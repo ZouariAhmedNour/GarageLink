@@ -1,15 +1,18 @@
-import 'package:garagelink/models/piece.dart';
+import 'package:garagelink/mecanicien/devis/models/piece.dart';
+import 'package:uuid/uuid.dart';
 
 class Devis {
+  final String id;
   final String client;
-  final String numeroSerie; // VIN
+  final String numeroSerie;
   final DateTime date;
   final List<Piece> pieces;
-  final double mainOeuvre; // montant total main d'œuvre
-  final Duration dureeEstimee; // durée estimée de travail
-  final double tva; // ex: 0.19
+  final double mainOeuvre;
+  final Duration dureeEstimee;
+  final double tva;
 
-  const Devis({
+  Devis({
+    String? id,
     required this.client,
     required this.numeroSerie,
     required this.date,
@@ -17,7 +20,7 @@ class Devis {
     required this.mainOeuvre,
     required this.dureeEstimee,
     this.tva = 0.19,
-  });
+  }) : id = id ?? const Uuid().v4(); // génère un id unique par défaut
 
   double get sousTotalPieces => pieces.fold(0.0, (s, p) => s + p.total);
   double get sousTotal => sousTotalPieces + mainOeuvre;
@@ -25,6 +28,7 @@ class Devis {
   double get totalTtc => sousTotal + montantTva;
 
   Devis copyWith({
+    String? id,
     String? client,
     String? numeroSerie,
     DateTime? date,
@@ -33,6 +37,7 @@ class Devis {
     Duration? dureeEstimee,
     double? tva,
   }) => Devis(
+        id: id ?? this.id,
         client: client ?? this.client,
         numeroSerie: numeroSerie ?? this.numeroSerie,
         date: date ?? this.date,

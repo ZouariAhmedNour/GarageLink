@@ -1,12 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:garagelink/components/devis_widgets/piece_row.dart';
-import 'package:garagelink/components/devis_widgets/totals_card.dart';
-import 'package:garagelink/mecanicien/devis/devis_preview_page.dart';
-import 'package:garagelink/models/catalogItem.dart';
-import 'package:garagelink/models/piece.dart';
+import 'package:garagelink/mecanicien/devis/devis_widgets/add_piece_button.dart';
+import 'package:garagelink/mecanicien/devis/devis_widgets/catalog_dropdown.dart';
+import 'package:garagelink/mecanicien/devis/devis_widgets/date_picker.dart';
+import 'package:garagelink/mecanicien/devis/devis_widgets/generate_button.dart';
+import 'package:garagelink/mecanicien/devis/devis_widgets/main_oeuvre_inputs.dart';
+import 'package:garagelink/mecanicien/devis/devis_widgets/modern_card.dart';
+import 'package:garagelink/mecanicien/devis/devis_widgets/modern_text_field.dart';
+import 'package:garagelink/mecanicien/devis/devis_widgets/num_serie_input.dart';
+import 'package:garagelink/mecanicien/devis/devis_widgets/piece_inputs.dart';
+import 'package:garagelink/mecanicien/devis/devis_widgets/piece_row.dart';
+import 'package:garagelink/mecanicien/devis/devis_widgets/tva_and_totals.dart';
+import 'package:garagelink/mecanicien/devis/historique_devis.dart';
+import 'package:garagelink/mecanicien/devis/models/catalogItem.dart';
+import 'package:garagelink/mecanicien/devis/utils/on_add_piece.dart';
+import 'package:garagelink/mecanicien/devis/utils/on_generate.dart';
 import 'package:garagelink/providers/devis_provider.dart';
-import 'package:garagelink/utils/format.dart';
 
 class CreationDevisPage extends ConsumerStatefulWidget {
   const CreationDevisPage({super.key});
@@ -15,7 +24,8 @@ class CreationDevisPage extends ConsumerStatefulWidget {
   ConsumerState<CreationDevisPage> createState() => _CreationDevisPageState();
 }
 
-class _CreationDevisPageState extends ConsumerState<CreationDevisPage> {
+class _CreationDevisPageState extends ConsumerState<CreationDevisPage>
+    with TickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   final _clientCtrl = TextEditingController();
   final _vinCtrl = TextEditingController();
@@ -27,13 +37,34 @@ class _CreationDevisPageState extends ConsumerState<CreationDevisPage> {
   final _qteCtrl = TextEditingController(text: '1');
   final _puCtrl = TextEditingController();
 
+  // Entrée numéro de série
+  final _numLocalCtrl = TextEditingController();
+
   // Main d'œuvre & TVA & durée
   final _mainOeuvreCtrl = TextEditingController(text: '0');
   final _tvaCtrl = TextEditingController(text: '19');
   Duration _duree = const Duration(hours: 1);
 
+  late AnimationController _animationController;
+  late Animation<double> _fadeAnimation;
+
+  @override
+  void initState() {
+    super.initState();
+    _animationController = AnimationController(
+      duration: const Duration(milliseconds: 800),
+      vsync: this,
+    );
+    _fadeAnimation = CurvedAnimation(
+      parent: _animationController,
+      curve: Curves.easeInOut,
+    );
+    _animationController.forward();
+  }
+
   @override
   void dispose() {
+    _animationController.dispose();
     _clientCtrl.dispose();
     _vinCtrl.dispose();
     _pieceNomCtrl.dispose();
@@ -41,371 +72,257 @@ class _CreationDevisPageState extends ConsumerState<CreationDevisPage> {
     _puCtrl.dispose();
     _mainOeuvreCtrl.dispose();
     _tvaCtrl.dispose();
+    _numLocalCtrl.dispose();
+
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final q = ref.watch(devisProvider);
+    final screenWidth = MediaQuery.of(context).size.width;
+    final isTablet = screenWidth > 768;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Nouveau devis')),
-      body: Form(
-        key: _formKey,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Client & Véhicule',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 8),
-              TextFormField(
-                controller: _clientCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Nom du client',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (v) =>
-                    (v == null || v.isEmpty) ? 'Obligatoire' : null,
-                onChanged: (v) => ref.read(devisProvider.notifier).setClient(v),
-              ),
-              const SizedBox(height: 8),
-              TextFormField(
-                controller: _vinCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'N° de série (VIN)',
-                  border: OutlineInputBorder(),
-                ),
-                validator: (v) =>
-                    (v == null || v.isEmpty) ? 'Obligatoire' : null,
-                onChanged: (v) =>
-                    ref.read(devisProvider.notifier).setNumeroSerie(v),
-              ),
-
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(child: Text('Date: ${Fmt.date(_date)}')),
-                  ElevatedButton.icon(
-                    onPressed: () async {
-                      final d = await showDatePicker(
-                        context: context,
-                        firstDate: DateTime(2020),
-                        lastDate: DateTime(2100),
-                        initialDate: _date,
-                        locale: const Locale('fr'),
-                      );
-                      if (d != null) {
-                        setState(() => _date = d);
-                        ref.read(devisProvider.notifier).setDate(d);
-                      }
-                    },
-                    icon: const Icon(Icons.event),
-                    label: const Text('Choisir date'),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 16),
-              const Text(
-                'Pièces de rechange',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 8),
-              DropdownButtonFormField<CatalogItem>(
-                decoration: const InputDecoration(
-                  labelText: 'Depuis le catalogue',
-                  border: OutlineInputBorder(),
-                ),
-                items: kCatalog
-                    .map(
-                      (e) => DropdownMenuItem(
-                        value: e,
-                        child: Text('${e.nom} — ${Fmt.money(e.prixUnitaire)}'),
-                      ),
-                    )
-                    .toList(),
-                onChanged: (val) {
-                  setState(() => _selectedItem = val);
-                  if (val != null) {
-                    _pieceNomCtrl.text = val.nom;
-                    _puCtrl.text = val.prixUnitaire.toStringAsFixed(2);
-                    _qteCtrl.text = '1';
-                  }
-                },
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    flex: 3,
-                    child: TextFormField(
-                      controller: _pieceNomCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Désignation (saisie libre)',
-                        border: OutlineInputBorder(),
-                      ),
-                      // Désignation
-                     validator: (v) {
-  // Si la liste de pièces contient déjà des entrées, on n'exige pas ce champ
-  if (ref.read(devisProvider).pieces.isNotEmpty) return null;
-  if (v == null || v.isEmpty) return 'Nom requis';
-  return null;
-}
-                    ),
-                  ),
-
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: TextFormField(
-                      controller: _qteCtrl,
-                      keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: 'Qté',
-                        border: OutlineInputBorder(),
-                      ),
-                      // Quantité
-                     validator: (v) {
-  // Si la liste de pièces contient déjà des entrées, on n'exige pas ce champ
-  if (ref.read(devisProvider).pieces.isNotEmpty) return null;
-  if (v == null || v.isEmpty) return 'Qté';
-  return null;
-}
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: TextFormField(
-                      controller: _puCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'PU',
-                        border: OutlineInputBorder(),
-                      ),
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      // Prix unitaire
-                      validator: (v) {
-  // Si la liste de pièces contient déjà des entrées, on n'exige pas ce champ
-  if (ref.read(devisProvider).pieces.isNotEmpty) return null;
-  if (v == null || v.isEmpty) return 'PU';
-  return null;
-}
-                    ),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 8),
-              Align(
-                alignment: Alignment.centerRight,
-                child: FilledButton.icon(
-                  onPressed: _onAddPiece,
-                  icon: const Icon(Icons.add),
-                  label: const Text('Ajouter la pièce'),
-                ),
-              ),
-              const SizedBox(height: 8),
-              ...q.pieces.asMap().entries.map(
-                (e) => PieceRow(
-                  piece: e.value,
-                  onDelete: () =>
-                      ref.read(devisProvider.notifier).removePieceAt(e.key),
-                ),
-              ),
-
-              const SizedBox(height: 16),
-              const Text(
-                'Main d’œuvre & Durée',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextFormField(
-                      controller: _mainOeuvreCtrl,
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      decoration: const InputDecoration(
-                        labelText: 'Montant main d’œuvre',
-                        border: OutlineInputBorder(),
-                      ),
-                      onChanged: (v) => ref
-                          .read(devisProvider.notifier)
-                          .setMainOeuvre(double.tryParse(v.replaceAll(',', '.')) ?? 0
-),
-                    ),
-                  ),
-
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: _DureePicker(
-                      value: _duree,
-                      onChanged: (d) {
-                        setState(() => _duree = d);
-                        ref.read(devisProvider.notifier).setDuree(d);
-                      },
-                    ),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: TextFormField(
-                      controller: _tvaCtrl,
-                      keyboardType: const TextInputType.numberWithOptions(
-                        decimal: true,
-                      ),
-                      decoration: const InputDecoration(
-                        labelText: 'TVA %',
-                        border: OutlineInputBorder(),
-                      ),
-                      onChanged: (v) {
-                        final t = (double.tryParse(v) ?? 0) / 100.0;
-                        ref.read(devisProvider.notifier).setTva(t);
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Expanded(child: TotalsCard()),
-                ],
-              ),
-
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: FilledButton.icon(
-                      onPressed: _onGenerate,
-                      icon: const Icon(Icons.description),
-                      label: const Text('Générer le devis'),
-                    ),
-                  ),
-                ],
-              ),
+      backgroundColor: Colors.white,
+      body: CustomScrollView(
+        slivers: [
+          // Header avec gradient bleu
+          SliverAppBar(
+  expandedHeight: 120,
+  floating: false,
+  pinned: true,
+  actions: [
+    IconButton(
+      icon: const Icon(Icons.history, color: Colors.white),
+      onPressed: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => const HistoriqueDevisPage(),
+          ),
+        );
+      },
+    ),
+  ],
+  flexibleSpace: FlexibleSpaceBar(
+    title: const Text(
+      'Nouveau devis',
+      style: TextStyle(
+        color: Colors.white,
+        fontWeight: FontWeight.w600,
+        fontSize: 20,
+      ),
+    ),
+    background: Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [Color(0xFF4A90E2), Color(0xFF357ABD)],
+        ),
+      ),
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Colors.transparent,
+              Colors.black.withOpacity(0.1),
             ],
           ),
         ),
       ),
-    );
-  }
+    ),
+  ),
+  backgroundColor: const Color(0xFF4A90E2),
+   iconTheme: const IconThemeData(color: Colors.white),
+  elevation: 0,
+),
 
-  void _onAddPiece() {
-    // Si une pièce vient du catalogue
-    if (_selectedItem != null) {
-      final p = Piece(
-        nom: _pieceNomCtrl.text.trim(),
-        prixUnitaire: double.tryParse(_puCtrl.text.trim()) ?? 0,
-        quantite: int.tryParse(_qteCtrl.text.trim()) ?? 1,
-      );
-      ref.read(devisProvider.notifier).addPiece(p);
+          // Contenu principal
+          SliverToBoxAdapter(
+            child: FadeTransition(
+              opacity: _fadeAnimation,
+              child: Form(
+                key: _formKey,
+                child: Padding(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: isTablet ? 32 : 16,
+                    vertical: 16,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Section Client & Véhicule
+                      ModernCard(
+                        title: 'Client & Véhicule',
+                        icon: Icons.person_outline,
+                        borderColor: const Color(0xFF4A90E2),
+                        child: Column(
+                          children: [
+                            ModernTextField(
+                              controller: _clientCtrl,
+                              label: 'Nom du client',
+                              icon: Icons.person,
+                              validator: (v) => (v == null || v.isEmpty)
+                                  ? 'Obligatoire'
+                                  : null,
+                              onChanged: (v) =>
+                                  ref.read(devisProvider.notifier).setClient(v),
+                            ),
+                            const SizedBox(height: 16),
+                            NumeroSerieInput(
+                              vinCtrl: _vinCtrl,
+                              numLocalCtrl: _numLocalCtrl,
+                              onChanged: (value) {
+                                ref
+                                    .read(devisProvider.notifier)
+                                    .setNumeroSerie(value);
+                              },
+                            ),
+                            const SizedBox(height: 16),
+                            DatePicker(
+                              date: _date,
+                              isTablet: isTablet,
+                              onDateChanged: (d) {
+                                setState(() => _date = d);
+                                ref.read(devisProvider.notifier).setDate(d);
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
 
-      // Reset
-      setState(() {
-        _selectedItem = null;
-        _pieceNomCtrl.clear();
-        _qteCtrl.text = '1';
-        _puCtrl.clear();
-      });
-      return;
-    }
+                      const SizedBox(height: 20),
 
-    // Sinon, validation manuelle
-    if ((_pieceNomCtrl.text).isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Veuillez saisir le nom de la pièce.')),
-      );
-      return;
-    }
+                      // Section Pièces de rechange
+                      ModernCard(
+                        title: 'Pièces de rechange',
+                        icon: Icons.build_outlined,
+                        borderColor: const Color(0xFF4A90E2),
+                        child: Column(
+                          children: [
+                            CatalogDropdown(
+                              selectedItem: _selectedItem,
+                              onChanged: (val) {
+                                if (val != null) {
+                                  _pieceNomCtrl.text = val.nom;
+                                  _puCtrl.text = val.prixUnitaire
+                                      .toStringAsFixed(2);
+                                  _qteCtrl.text = '1';
 
-    final qte = int.tryParse(_qteCtrl.text.trim());
-    final pu = double.tryParse(_puCtrl.text.trim());
-    if (qte == null || qte <= 0 || pu == null || pu < 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Vérifiez quantité et prix unitaire.')),
-      );
-      return;
-    }
+                                  onAddPiece(
+                                    context: context,
+                                    ref: ref,
+                                    selectedItem: val,
+                                    pieceNomCtrl: _pieceNomCtrl,
+                                    qteCtrl: _qteCtrl,
+                                    puCtrl: _puCtrl,
+                                    onSuccess: () {
+                                      setState(() {
+                                        _selectedItem = null;
+                                        _pieceNomCtrl.clear();
+                                        _qteCtrl.text = '1';
+                                        _puCtrl.clear();
+                                      });
+                                    },
+                                  );
+                                }
+                              },
+                            ),
+                            const SizedBox(height: 16),
+                            PieceInputs(
+                              isTablet: isTablet,
+                              pieceNomCtrl: _pieceNomCtrl,
+                              qteCtrl: _qteCtrl,
+                              puCtrl: _puCtrl,
+                              validator: (v) {
+                                if (ref.read(devisProvider).pieces.isNotEmpty)
+                                  return null;
+                                if (v == null || v.isEmpty)
+                                  return 'Champ requis';
+                                return null;
+                              },
+                            ),
+                            const SizedBox(height: 16),
+                            AddPieceButton(
+                              onPressed: () => onAddPiece(
+                                context: context,
+                                ref: ref,
+                                selectedItem: _selectedItem,
+                                pieceNomCtrl: _pieceNomCtrl,
+                                qteCtrl: _qteCtrl,
+                                puCtrl: _puCtrl,
+                                onSuccess: () {
+                                  setState(() {
+                                    _selectedItem = null;
+                                    _pieceNomCtrl.clear();
+                                    _qteCtrl.text = '1';
+                                    _puCtrl.clear();
+                                  });
+                                },
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            ...q.pieces.asMap().entries.map(
+                              (e) => Padding(
+                                padding: const EdgeInsets.only(bottom: 8),
+                                child: PieceRow(
+                                  piece: e.value,
+                                  onDelete: () => ref
+                                      .read(devisProvider.notifier)
+                                      .removePieceAt(e.key),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
 
-    final p = Piece(
-      nom: _pieceNomCtrl.text.trim(),
-      prixUnitaire: pu,
-      quantite: qte,
-    );
-    ref.read(devisProvider.notifier).addPiece(p);
+                      const SizedBox(height: 20),
 
-    // Reset
-    setState(() {
-      _selectedItem = null;
-      _pieceNomCtrl.text = ''; // vide
-      _qteCtrl.text = '1'; // valeur par défaut
-      _puCtrl.text = '0'; // éviter "PU requis"
-    });
-  }
+                      // Section Main d'œuvre & Durée
+                      ModernCard(
+                        title:
+                            'Main d'
+                            'œuvre & Durée',
+                        icon: Icons.timer_outlined,
+                        borderColor: const Color(0xFF4A90E2),
+                        child: Column(
+                          children: [
+                            MainOeuvreInputs(
+                              isTablet: isTablet,
+                              mainOeuvreCtrl: _mainOeuvreCtrl,
+                              duree: _duree,
+                              onDureeChanged: (d) {
+                                setState(() => _duree = d);
+                                ref.read(devisProvider.notifier).setDuree(d);
+                              },
+                            ),
+                            const SizedBox(height: 16),
+                            TvaAndTotals(isTablet: isTablet, tvaCtrl: _tvaCtrl),
+                          ],
+                        ),
+                      ),
 
-  void _onGenerate() {
-    if (!_formKey.currentState!.validate()) return;
-    if (ref.read(devisProvider).pieces.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Ajoutez au moins une pièce.')),
-      );
-      return;
-    }
+                      const SizedBox(height: 32),
 
-    Navigator.of(
-      context,
-    ).push(MaterialPageRoute(builder: (_) => const DevisPreviewPage()));
-  }
-}
+                      // Bouton de génération
+                      GenerateButton(
+                        onPressed: () => onGenerate(
+                          context: context,
+                          formKey: _formKey,
+                          pieces: ref.read(devisProvider).pieces,
+                        ),
+                      ),
 
-class _DureePicker extends StatelessWidget {
-  final Duration value;
-  final ValueChanged<Duration> onChanged;
-  const _DureePicker({required this.value, required this.onChanged});
-
-  @override
-  Widget build(BuildContext context) {
-    final hours = value.inHours;
-    final minutes = value.inMinutes % 60;
-    return InputDecorator(
-      decoration: const InputDecoration(
-        labelText: 'Durée estimée',
-        border: OutlineInputBorder(),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: DropdownButton<int>(
-              isExpanded: true,
-              value: hours,
-              items: List.generate(
-                24,
-                (i) => DropdownMenuItem(value: i, child: Text('$i h')),
+                      const SizedBox(height: 32),
+                    ],
+                  ),
+                ),
               ),
-              onChanged: (h) =>
-                  onChanged(Duration(hours: h ?? 0, minutes: minutes)),
-              underline: const SizedBox.shrink(),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: DropdownButton<int>(
-              isExpanded: true,
-              value: minutes,
-              items: const [0, 15, 30, 45]
-                  .map((m) => DropdownMenuItem(value: m, child: Text('$m min')))
-                  .toList(),
-              onChanged: (m) =>
-                  onChanged(Duration(hours: hours, minutes: m ?? 0)),
-              underline: const SizedBox.shrink(),
             ),
           ),
         ],
