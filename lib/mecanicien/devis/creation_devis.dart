@@ -315,7 +315,7 @@ class _CreationDevisPageState extends ConsumerState<CreationDevisPage>
                           context: context,
                           formKey: _formKey,
                           pieces: ref.read(devisProvider).pieces,
-                        ),
+                        ), text: 'Générer le devis',
                       ),
 
                       const SizedBox(height: 32),

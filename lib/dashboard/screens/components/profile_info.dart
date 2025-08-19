@@ -6,7 +6,7 @@ import 'package:garagelink/dashboard/constants/responsive.dart';
 
 
 class ProfileInfo extends StatelessWidget {
-  const ProfileInfo({Key? key}) : super(key: key);
+  const ProfileInfo({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -44,13 +44,13 @@ class ProfileInfo extends StatelessWidget {
           child: Row(
             children: [
               ClipRRect(
+                borderRadius: BorderRadius.circular(30),
                 child: Image.asset(
                   'assets/images/photo3.jpg',
                   height: 38,
                   width: 38,
                   fit: BoxFit.cover,
                 ),
-                borderRadius: BorderRadius.circular(30),
               ),
               if(!Responsive.isMobile(context))
               Padding(

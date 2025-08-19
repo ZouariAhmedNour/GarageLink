@@ -1,12 +1,11 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:garagelink/dashboard/constants/constants.dart';
 import 'package:garagelink/dashboard/constants/responsive.dart';
 import 'package:garagelink/dashboard/controllers/controller.dart';
 import 'package:garagelink/dashboard/screens/components/dashboard_content.dart';
-
-import 'components/drawer_menu.dart';
+import 'package:garagelink/dashboard/screens/components/drawer_menu.dart';
+import 'package:garagelink/mecanicien/mecaHome.dart';
 
 class DashBoardScreen extends ConsumerWidget {
   const DashBoardScreen({Key? key}) : super(key: key);
@@ -19,6 +18,32 @@ class DashBoardScreen extends ConsumerWidget {
       backgroundColor: bgColor,
       drawer: const DrawerMenu(),
       key: controller.scaffoldKey,
+     appBar: AppBar(
+  leading: IconButton(
+    icon: const Icon(Icons.arrow_back, color: Colors.white),
+    onPressed: () {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(builder: (context) => const MecaHomePage()),
+      );
+    },
+    tooltip: 'Retour à MecaHome',
+  ),
+  title: const Text(
+    'Tableau de bord',
+    style: TextStyle(
+      color: Colors.white,
+      fontWeight: FontWeight.w600,
+    ),
+  ),
+  backgroundColor: const Color(0xFF357ABD),
+  elevation: 0,
+  iconTheme: const IconThemeData(color: Colors.white), // Ensures all icons are white
+  titleTextStyle: const TextStyle(
+    color: Colors.white,
+    fontWeight: FontWeight.w600,
+  ), // Ensures title text is white
+),
       body: SafeArea(
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -28,7 +53,7 @@ class DashBoardScreen extends ConsumerWidget {
             const Expanded(
               flex: 5,
               child: DashboardContent(),
-            )
+            ),
           ],
         ),
       ),

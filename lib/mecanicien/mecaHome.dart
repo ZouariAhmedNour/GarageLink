@@ -6,6 +6,7 @@ import 'package:garagelink/dashboard/screens/dash_board_screen.dart';
 import 'package:garagelink/mecanicien/devis/creation_devis.dart';
 import 'package:garagelink/mecanicien/edit_localisation.dart';
 import 'package:garagelink/mecanicien/meca_services/meca_services.dart';
+import 'package:garagelink/mecanicien/work%20order/notif_screen.dart';
 import 'package:garagelink/mecanicien/work%20order/work_order_page.dart';
 import 'package:get/get.dart';
 import 'package:garagelink/configurations/app_routes.dart';
@@ -273,8 +274,15 @@ class MecaHomePage extends ConsumerWidget {
               icon: Icons.assignment,
               title: 'Ordres de Travail',
               description: 'Création et gestion des ordres de travail',
-              color: const Color.fromARGB(255, 243, 228, 20),
+              color: const Color.fromARGB(255, 0, 173, 72),
               onTap: () => Get.to(() => WorkOrderPage ()),
+            ),
+            buildMenuCard(
+              icon: Icons.assignment,
+              title: 'Notifications',
+              description: 'Création et gestion des Norifications',
+              color: const Color.fromARGB(255, 250, 26, 201),
+              onTap: () => Get.to(() => NotifScreen ()),
             ),
 
             // 🚀 FUTURES FONCTIONNALITÉS

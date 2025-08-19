@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:garagelink/providers/service_provider.dart';
 
-
 class ServiceCard extends ConsumerWidget {
   final Service service;
   final VoidCallback onEdit;
@@ -58,7 +57,7 @@ class ServiceCard extends ConsumerWidget {
           // Prix & Durée
           Row(
             children: [
-              const Icon(Icons.euro, size: 16, color: Colors.green),
+              const Icon(Icons.monetization_on, size: 16, color: Colors.green),
               Text('${service.prix}DT', style: const TextStyle(color: Colors.green)),
               const Spacer(),
               const Icon(Icons.schedule, size: 16, color: Colors.blue),

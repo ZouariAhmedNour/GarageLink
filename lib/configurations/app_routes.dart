@@ -14,4 +14,9 @@ class AppRoutes {
   static const String devis_preview_page = '/devisPreviewPage';
   static const String historique_devis = '/historiqueDevis';
   static const String workOrderPage = '/workOrderPage';
+  static const String notifScreen = '/notifScreen';
+  static const String suiviScreen = '/suiviScreen';
+  static const String rapportScreen = '/rapportScreen';
+  static const String createOrderScreen = '/createOrderScreen';
+  static const String addEditServiceScreen = '/addEditServiceScreen';
 }
