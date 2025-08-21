@@ -19,7 +19,7 @@ void onAddPiece({
     final p = Piece(
       nom: pieceNomCtrl.text.trim(),
       prixUnitaire: double.tryParse(puCtrl.text.trim()) ?? 0,
-      quantite: int.tryParse(qteCtrl.text.trim()) ?? 1,
+      quantite: int.tryParse(qteCtrl.text.trim()) ?? 1, id: '', sku: '',
     );
     ref.read(devisProvider.notifier).addPiece(p);
     onSuccess();
@@ -41,7 +41,7 @@ void onAddPiece({
   final p = Piece(
     nom: pieceNomCtrl.text.trim(),
     prixUnitaire: pu,
-    quantite: qte,
+    quantite: qte, id: '', sku: '', updatedAt: null,
   );
   ref.read(devisProvider.notifier).addPiece(p);
   onSuccess();

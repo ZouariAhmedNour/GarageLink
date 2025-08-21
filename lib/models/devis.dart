@@ -1,6 +1,8 @@
 import 'package:garagelink/mecanicien/devis/models/piece.dart';
 import 'package:uuid/uuid.dart';
 
+enum DevisStatus { brouillon, envoye, enAttente, accepte, refuse }
+
 class Devis {
   final String id;
   final String client;
@@ -10,6 +12,8 @@ class Devis {
   final double mainOeuvre;
   final Duration dureeEstimee;
   final double tva;
+  final DevisStatus status;
+  
 
   Devis({
     String? id,
@@ -20,7 +24,9 @@ class Devis {
     required this.mainOeuvre,
     required this.dureeEstimee,
     this.tva = 0.19,
+      this.status = DevisStatus.brouillon,
   }) : id = id ?? const Uuid().v4(); // génère un id unique par défaut
+  
 
   double get sousTotalPieces => pieces.fold(0.0, (s, p) => s + p.total);
   double get sousTotal => sousTotalPieces + mainOeuvre;
@@ -36,6 +42,7 @@ class Devis {
     double? mainOeuvre,
     Duration? dureeEstimee,
     double? tva,
+    DevisStatus? status
   }) => Devis(
         id: id ?? this.id,
         client: client ?? this.client,
@@ -45,5 +52,6 @@ class Devis {
         mainOeuvre: mainOeuvre ?? this.mainOeuvre,
         dureeEstimee: dureeEstimee ?? this.dureeEstimee,
         tva: tva ?? this.tva,
+        status: status ?? this.status,
       );
 }

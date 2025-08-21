@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:garagelink/mecanicien/devis/devis_widgets/add_piece_button.dart';
 import 'package:garagelink/mecanicien/devis/devis_widgets/catalog_dropdown.dart';
 import 'package:garagelink/mecanicien/devis/devis_widgets/date_picker.dart';
-import 'package:garagelink/mecanicien/devis/devis_widgets/generate_button.dart';
 import 'package:garagelink/mecanicien/devis/devis_widgets/main_oeuvre_inputs.dart';
 import 'package:garagelink/mecanicien/devis/devis_widgets/modern_card.dart';
 import 'package:garagelink/mecanicien/devis/devis_widgets/modern_text_field.dart';
@@ -14,8 +13,9 @@ import 'package:garagelink/mecanicien/devis/devis_widgets/tva_and_totals.dart';
 import 'package:garagelink/mecanicien/devis/historique_devis.dart';
 import 'package:garagelink/mecanicien/devis/models/catalogItem.dart';
 import 'package:garagelink/mecanicien/devis/utils/on_add_piece.dart';
-import 'package:garagelink/mecanicien/devis/utils/on_generate.dart';
 import 'package:garagelink/providers/devis_provider.dart';
+import 'package:garagelink/utils/devis_actions.dart';
+import 'package:get/get.dart';
 
 class CreationDevisPage extends ConsumerStatefulWidget {
   const CreationDevisPage({super.key});
@@ -96,12 +96,7 @@ class _CreationDevisPageState extends ConsumerState<CreationDevisPage>
     IconButton(
       icon: const Icon(Icons.history, color: Colors.white),
       onPressed: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => const HistoriqueDevisPage(),
-          ),
-        );
+        Get.to(() => const HistoriqueDevisPage());
       },
     ),
   ],
@@ -310,13 +305,60 @@ class _CreationDevisPageState extends ConsumerState<CreationDevisPage>
                       const SizedBox(height: 32),
 
                       // Bouton de génération
-                      GenerateButton(
-                        onPressed: () => onGenerate(
-                          context: context,
-                          formKey: _formKey,
-                          pieces: ref.read(devisProvider).pieces,
-                        ), text: 'Générer le devis',
-                      ),
+                      // Boutons Enregistrer brouillon & Générer/Envoyer
+Row(
+  children: [
+    Expanded(
+      child: ElevatedButton.icon(
+        icon: const Icon(Icons.save_outlined),
+        label: const Text('Enregistrer brouillon'),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.grey[700],
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+        onPressed: () async {
+          if (_formKey.currentState == null) return;
+
+          // 👉 tu peux choisir de ne pas forcer la validation pour un brouillon
+          // if (!_formKey.currentState!.validate()) return;
+
+          await saveDraft(ref);
+
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Brouillon enregistré')),
+            
+          );
+           Get.to(() => const HistoriqueDevisPage());
+        },
+      ),
+    ),
+    const SizedBox(width: 12),
+    Expanded(
+      child: ElevatedButton.icon(
+        icon: const Icon(Icons.send),
+        label: const Text('Générer & Envoyer'),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: const Color(0xFF4A90E2),
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+        ),
+        onPressed: () async {
+          if (!_formKey.currentState!.validate()) return;
+
+          await generateAndSendDevis(ref, context);
+
+          // Navigation vers l’historique après génération
+           Get.to(() => const HistoriqueDevisPage());
+        },
+      ),
+    ),
+  ],
+),
 
                       const SizedBox(height: 32),
                     ],

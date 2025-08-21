@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:garagelink/mecanicien/Facture/facture_screen.dart';
+import 'package:garagelink/mecanicien/devis/devis_preview_page.dart';
 import 'package:garagelink/mecanicien/devis/devis_widgets/num_serie_input.dart';
+import 'package:garagelink/models/devis.dart';
 import 'package:garagelink/providers/historique_devis_provider.dart';
 
 enum TypeFiltre { date, numeroSerie, id, client }
@@ -259,93 +262,186 @@ class _HistoriqueDevisPageState extends ConsumerState<HistoriqueDevisPage>
   }
 
   Widget _buildResultsList() {
-    final historique = ref.watch(devisFiltresProvider);
-    
-    if (historique.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(color: lightBlue, shape: BoxShape.circle),
-              child: const Icon(Icons.search_off, size: 48, color: primaryBlue),
-            ),
-            const SizedBox(height: 16),
-            const Text('Aucun devis trouvé', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: darkGrey)),
-            const SizedBox(height: 8),
-            Text('Essayez de modifier vos critères de recherche', style: TextStyle(color: darkGrey.withOpacity(0.7))),
-          ],
-        ),
-      );
-    }
+  final historique = ref.watch(devisFiltresProvider);
 
-    return ListView.builder(
-      physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.all(16),
-      itemCount: historique.length,
-      itemBuilder: (context, index) {
-        final devis = historique[index];
-        return Container(
-          margin: const EdgeInsets.only(bottom: 12),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 2))],
+  if (historique.isEmpty) {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(color: lightBlue, shape: BoxShape.circle),
+            child: const Icon(Icons.search_off, size: 48, color: primaryBlue),
           ),
-          child: ListTile(
-            contentPadding: const EdgeInsets.all(16),
-            leading: Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(color: lightBlue, borderRadius: BorderRadius.circular(12)),
-              child: const Icon(Icons.description, color: primaryBlue, size: 24),
-            ),
-            title: Text(
-              devis.client,
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: darkGrey),
-            ),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    Icon(Icons.calendar_today, size: 14, color: darkGrey.withOpacity(0.6)),
-                    const SizedBox(width: 4),
-                    Text(
-                      devis.date.toLocal().toString().split(" ")[0],
-                      style: TextStyle(color: darkGrey.withOpacity(0.7)),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    Icon(Icons.euro, size: 14, color: darkGrey.withOpacity(0.6)),
-                    const SizedBox(width: 4),
-                    Text(
-                      '${devis.totalTtc.toStringAsFixed(2)}€',
-                      style: const TextStyle(fontWeight: FontWeight.w600, color: primaryBlue),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-            trailing: Container(
-              decoration: BoxDecoration(color: lightBlue, borderRadius: BorderRadius.circular(8)),
-              child: IconButton(
-                icon: const Icon(Icons.edit, color: primaryBlue),
-                onPressed: () {
-                  HapticFeedback.lightImpact();
-                  // TODO: Naviguer vers l'édition du devis
-                },
-              ),
-            ),
-          ),
-        );
-      },
+          const SizedBox(height: 16),
+          const Text('Aucun devis trouvé',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: darkGrey)),
+          const SizedBox(height: 8),
+          Text('Essayez de modifier vos critères de recherche',
+              style: TextStyle(color: darkGrey.withOpacity(0.7))),
+        ],
+      ),
     );
   }
+
+  return ListView.builder(
+    physics: const BouncingScrollPhysics(),
+    padding: const EdgeInsets.all(16),
+    itemCount: historique.length,
+    itemBuilder: (context, index) {
+      final devis = historique[index];
+
+      // --- Gestion statut ---
+      Color statusColor;
+      String statusLabel;
+      switch (devis.status) {
+        case DevisStatus.brouillon:
+          statusLabel = 'Brouillon';
+          statusColor = Colors.grey;
+          break;
+        case DevisStatus.envoye:
+        case DevisStatus.enAttente:
+          statusLabel = 'Envoyé';
+          statusColor = Colors.orange;
+          break;
+        case DevisStatus.accepte:
+          statusLabel = 'Accepté';
+          statusColor = Colors.green;
+          break;
+        case DevisStatus.refuse:
+          statusLabel = 'Refusé';
+          statusColor = Colors.red;
+          break;
+        }
+
+      // --- UI ---
+      return Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            )
+          ],
+        ),
+        child: ListTile(
+          contentPadding: const EdgeInsets.all(16),
+          leading: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: lightBlue,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(Icons.description, color: primaryBlue, size: 24),
+          ),
+          title: Text(
+            devis.client,
+            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: darkGrey),
+          ),
+          subtitle: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  Icon(Icons.calendar_today, size: 14, color: darkGrey.withOpacity(0.6)),
+                  const SizedBox(width: 4),
+                  Text(
+                    devis.date.toLocal().toString().split(" ")[0],
+                    style: TextStyle(color: darkGrey.withOpacity(0.7)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  Icon(Icons.euro, size: 14, color: darkGrey.withOpacity(0.6)),
+                  const SizedBox(width: 4),
+                  Text(
+                    '${devis.totalTtc.toStringAsFixed(2)}€',
+                    style: const TextStyle(fontWeight: FontWeight.w600, color: primaryBlue),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          trailing: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: statusColor.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(statusLabel,
+                    style: TextStyle(color: statusColor, fontWeight: FontWeight.bold)),
+              ),
+              const SizedBox(height: 8),
+              if (devis.status == DevisStatus.brouillon ||
+                  devis.status == DevisStatus.envoye ||
+                  devis.status == DevisStatus.enAttente)
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.check, color: Colors.green),
+                      tooltip: 'Accepter',
+                      onPressed: () {
+                        ref
+                            .read(historiqueDevisProvider.notifier)
+                            .updateStatusById(devis.id, DevisStatus.accepte);
+                      },
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.red),
+                      tooltip: 'Refuser',
+                      onPressed: () {
+                        ref
+                            .read(historiqueDevisProvider.notifier)
+                            .updateStatusById(devis.id, DevisStatus.refuse);
+                      },
+                    ),
+                  ],
+                ),
+              if (devis.status == DevisStatus.accepte)
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: primaryBlue,
+                    foregroundColor: Colors.white,
+                    minimumSize: const Size(120, 36),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: const Text('Générer facture'),
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => FactureScreen(devis: devis)),
+                    );
+                  },
+                ),
+            ],
+          ),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => DevisPreviewPage()),
+            );
+          },
+        ),
+      );
+    },
+  );
+}
+
 
   @override
   Widget build(BuildContext context) {

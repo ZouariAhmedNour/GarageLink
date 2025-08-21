@@ -375,7 +375,7 @@ class _NotifScreenState extends ConsumerState<NotifScreen>
                   ),
                 ],
               ),
-              if (client.email?.isNotEmpty == true) ...[
+              if (client.email.isNotEmpty == true) ...[
                 const SizedBox(height: 2),
                 Row(
                   children: [
@@ -384,7 +384,7 @@ class _NotifScreenState extends ConsumerState<NotifScreen>
                     const SizedBox(width: 4),
                     Expanded(
                       child: Text(
-                        client.email!,
+                        client.email,
                         style: TextStyle(
                           color: AppColors.textSecondary,
                           fontSize: 13,

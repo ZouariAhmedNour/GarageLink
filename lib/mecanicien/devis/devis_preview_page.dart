@@ -1,15 +1,40 @@
+import 'dart:typed_data';
+import 'dart:ui' as ui;
+
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:garagelink/providers/devis_provider.dart';
 import 'package:garagelink/services/pdf_service.dart';
 import 'package:garagelink/services/share_email_service.dart';
+import 'package:garagelink/utils/devis_actions.dart';
 import 'package:printing/printing.dart';
 
-class DevisPreviewPage extends ConsumerWidget {
+class DevisPreviewPage extends ConsumerStatefulWidget {
   const DevisPreviewPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<DevisPreviewPage> createState() => _DevisPreviewPageState();
+}
+
+class _DevisPreviewPageState extends ConsumerState<DevisPreviewPage> {
+  final GlobalKey _previewKey = GlobalKey();
+
+  Future<Uint8List?> _capturePreviewPng() async {
+    try {
+      final boundary =
+          _previewKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
+      final image = await boundary.toImage(pixelRatio: 3.0);
+      final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+      return byteData?.buffer.asUint8List();
+    } catch (e) {
+      debugPrint("Erreur capture PNG: $e");
+      return null;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final devis = ref.watch(devisProvider).toDevis();
 
     return Scaffold(
@@ -41,15 +66,11 @@ class DevisPreviewPage extends ConsumerWidget {
             backgroundColor: const Color(0xFF4A90E2),
             actions: [
               IconButton(
-                tooltip: 'Partager PDF',
+                tooltip: 'Partager PDF + PNG',
                 icon: const Icon(Icons.share_outlined, color: Colors.white),
                 onPressed: () async {
-                  final bytes = await PdfService.buildDevisPdf(devis);
-                  await ShareEmailService.sharePdf(
-                    bytes,
-                    subject: 'Devis GarageLink',
-                    text: 'Veuillez trouver ci-joint le devis.',
-                  );
+                  final png = await _capturePreviewPng();
+                  await generateAndSendDevis(ref, context, previewPng: png);
                 },
               ),
               IconButton(
@@ -86,16 +107,19 @@ class DevisPreviewPage extends ConsumerWidget {
             ],
           ),
 
-          // Contenu PDF
+          // Contenu prévisualisation
           SliverFillRemaining(
             child: Padding(
               padding: const EdgeInsets.all(8.0),
-              child: PdfPreview(
-                canChangeOrientation: false,
-                canChangePageFormat: false,
-                build: (format) => PdfService.buildDevisPdf(devis),
-                pdfFileName: 'devis_${devis.client}.pdf',
-                allowSharing: false, // car on a déjà nos boutons persos
+              child: RepaintBoundary(
+                key: _previewKey,
+                child: PdfPreview(
+                  canChangeOrientation: false,
+                  canChangePageFormat: false,
+                  build: (format) => PdfService.buildDevisPdf(devis),
+                  pdfFileName: 'devis_${devis.client}.pdf',
+                  allowSharing: false, // car on a déjà nos boutons persos
+                ),
               ),
             ),
           ),
