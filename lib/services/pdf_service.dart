@@ -5,9 +5,9 @@ import 'package:garagelink/utils/format.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 
-
 class PdfService {
-  static Future<Uint8List> buildDevisPdf(Devis devis) async {
+  /// Génère un document. [title] est "Devis" par défaut; passe "Facture" pour générer la facture.
+  static Future<Uint8List> buildDevisPdf(Devis devis, {String title = 'Devis'}) async {
     final doc = pw.Document();
 
     final tableHeaders = ['Article', 'Qté', 'PU', 'Total'];
@@ -23,12 +23,13 @@ class PdfService {
             children: [
               pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
                 pw.Text('GarageLink', style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold)),
-                pw.Text('Devis', style: pw.TextStyle(fontSize: 16)),
+                pw.Text(title, style: pw.TextStyle(fontSize: 16)), // <-- utilise title ici
               ]),
               pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
                 pw.Text('Date: ${Fmt.date(devis.date)}'),
                 pw.Text('Client: ${devis.client}'),
                 pw.Text('N° Série: ${devis.numeroSerie}'),
+                pw.Text('${title} ID: ${devis.id}'),
               ]),
             ],
           ),
@@ -72,7 +73,18 @@ class PdfService {
           pw.SizedBox(height: 24),
           pw.Text('Durée estimée de travail: ${Fmt.duration(devis.dureeEstimee)}'),
           pw.SizedBox(height: 8),
-          pw.Text('Conditions: Devis valable 15 jours. Paiement à la livraison du véhicule.'),
+
+          // Conditions différentes si c'est une facture
+          if (title.toLowerCase() == 'facture')
+            pw.Column(children: [
+              pw.Text('Facture émise. Paiement : selon conditions convenues.'),
+              pw.SizedBox(height: 6),
+              pw.Text('Merci pour votre confiance.'),
+            ])
+          else
+            pw.Column(children: [
+              pw.Text('Conditions: Devis valable 15 jours. Paiement à la livraison du véhicule.'),
+            ]),
         ],
       ),
     );

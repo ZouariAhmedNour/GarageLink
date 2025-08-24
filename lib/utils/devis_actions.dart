@@ -15,38 +15,32 @@ Future<void> saveDraft(WidgetRef ref) async {
   ref.read(historiqueDevisProvider.notifier).ajouterDevis(d);
 }
 
-/// Génère PDF et lance le partage (email). Après partage on marque le devis comme 'envoye'
-/// previewPng optionnel si tu veux joindre une image d'aperçu.
-Future<void> generateAndSendDevis(WidgetRef ref, BuildContext context, {Uint8List? previewPng, String adminEmail = 'admin@tondomaine.com'}) async {
-  final providerState = ref.read(devisProvider);
-  Devis d = providerState.toDevis().copyWith(status: DevisStatus.envoye);
+/// Génère PDF et lance le partage (email).
+/// Si [devisToSend] est fourni, on l'utilise, sinon on prend le devis courant du provider.
+Future<void> generateAndSendDevis(
+  WidgetRef ref,
+  BuildContext context, {
+  Uint8List? previewPng,
+  String adminEmail = 'admin@tondomaine.com',
+  Devis? devisToSend,
+}) async {
+  // Prendre soit le devis passé, soit le devis courant du provider
+  final Devis base = devisToSend ?? ref.read(devisProvider).toDevis();
 
-  // 1) Enregister/mettre à jour dans l'historique comme envoye
+  // Marquer comme envoye
+  final Devis d = base.copyWith(status: DevisStatus.envoye);
+
+  // 1) Enregistrer/mettre à jour dans l'historique comme envoye
   ref.read(historiqueDevisProvider.notifier).ajouterDevis(d);
 
   // 2) Générer PDF
   final Uint8List pdfBytes = await PdfService.buildDevisPdf(d);
 
-  // 3) Préparer email body (ici mailto links pour action manuelle)
+  // 3) Préparer email body (avec liens cliquables)
   final id = d.id;
-  final acceptMailto = Uri(
-    scheme: 'mailto',
-    path: adminEmail,
-    queryParameters: {
-      'subject': 'ACCEPTER DEVIS $id',
-      'body': 'Je confirme l\\''acceptation du devis $id\n\nClient: ${d.client}\nMontant: ${d.totalTtc.toStringAsFixed(2)}'
-    },
-  ).toString();
-
-
-  final refuseMailto = Uri(
-    scheme: 'mailto',
-    path: adminEmail,
-    queryParameters: {
-      'subject': 'REFUSER DEVIS $id',
-      'body': 'Je refuse le devis $id\n\nClient: ${d.client}\nMontant: ${d.totalTtc.toStringAsFixed(2)}'
-    },
-  ).toString();
+  final baseUrl = 'https://tondomaine.com'; // change pour ton domaine
+  final acceptUrl = '$baseUrl/devis/$id/accept';
+  final refuseUrl = '$baseUrl/devis/$id/refuse';
 
   final emailBody = '''
 Bonjour,
@@ -54,8 +48,8 @@ Bonjour,
 Veuillez trouver ci-joint le devis (ID: $id).
 
 Actions :
-- Accepter (envoyer un mail) : $acceptMailto
-- Refuser  (envoyer un mail) : $refuseMailto
+- Accepter : $acceptUrl
+- Refuser  : $refuseUrl
 
 Cordialement,
 GarageLink
@@ -70,8 +64,10 @@ GarageLink
     previewPng: previewPng,
   );
 
-  // 5) Optionnel: montrer un SnackBar
+  // 5) SnackBar
   if (ScaffoldMessenger.maybeOf(context) != null) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Devis $id enregistré et partage ouvert.')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Devis $id enregistré et partage ouvert.')),
+    );
   }
 }

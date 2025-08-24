@@ -14,16 +14,19 @@ class FactureScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Simple: transforme le devis en facture (ici on réutilise le PDF generation)
     return Scaffold(
       appBar: AppBar(title: const Text('Générer facture')),
       body: Center(
         child: ElevatedButton(
           child: const Text('Générer et envoyer la facture'),
           onPressed: () async {
-            // Ici, tu devrais mapper Devis -> Facture model si tu veux conserver la facture
-            final bytes = await PdfService.buildDevisPdf(devis); // réutilise le PDF pour la facture ou crée un PdfService.buildFacture
-            await ShareEmailService.sharePdf(bytes, fileName: 'facture_${devis.id}.pdf', subject: 'Facture GarageLink');
+            final bytes = await PdfService.buildDevisPdf(devis, title: 'Facture');
+            await ShareEmailService.sharePdf(
+              bytes,
+              fileName: 'facture_${devis.id}.pdf',
+              subject: 'Facture GarageLink - ${devis.id}',
+              text: 'Bonjour,\n\nVeuillez trouver ci-joint la facture (ID: ${devis.id}).\n\nCordialement,\nGarageLink',
+            );
           },
         ),
       ),

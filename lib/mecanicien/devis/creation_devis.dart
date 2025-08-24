@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:garagelink/mecanicien/devis/devis_preview_page.dart';
 import 'package:garagelink/mecanicien/devis/devis_widgets/add_piece_button.dart';
 import 'package:garagelink/mecanicien/devis/devis_widgets/catalog_dropdown.dart';
 import 'package:garagelink/mecanicien/devis/devis_widgets/date_picker.dart';
@@ -310,10 +311,13 @@ Row(
   children: [
     Expanded(
       child: ElevatedButton.icon(
-        icon: const Icon(Icons.save_outlined),
-        label: const Text('Enregistrer brouillon'),
+        icon: const Icon(Icons.save_outlined, color: Colors.white,),
+        label: const Text(
+          'Enregistrer brouillon',
+          style: TextStyle(color: Colors.white),
+                ),
         style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.grey[700],
+          backgroundColor: const Color(0xFF4A90E2),
           padding: const EdgeInsets.symmetric(vertical: 16),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
@@ -338,8 +342,8 @@ Row(
     const SizedBox(width: 12),
     Expanded(
       child: ElevatedButton.icon(
-        icon: const Icon(Icons.send),
-        label: const Text('Générer & Envoyer'),
+        icon: const Icon(Icons.send, color: Colors.white,),
+        label: const Text('Générer & Envoyer',style: TextStyle(color: Colors.white),),
         style: ElevatedButton.styleFrom(
           backgroundColor: const Color(0xFF4A90E2),
           padding: const EdgeInsets.symmetric(vertical: 16),
@@ -353,7 +357,7 @@ Row(
           await generateAndSendDevis(ref, context);
 
           // Navigation vers l’historique après génération
-           Get.to(() => const HistoriqueDevisPage());
+           Get.to(() => const DevisPreviewPage());
         },
       ),
     ),
