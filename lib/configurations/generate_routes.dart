@@ -9,6 +9,8 @@ import 'package:garagelink/mecanicien/devis/creation_devis.dart';
 import 'package:garagelink/mecanicien/devis/devis_preview_page.dart';
 import 'package:garagelink/mecanicien/devis/historique_devis.dart';
 import 'package:garagelink/mecanicien/edit_localisation.dart';
+import 'package:garagelink/mecanicien/gestion%20mec/add_mec_screen.dart';
+import 'package:garagelink/mecanicien/gestion%20mec/mec_list_screen.dart';
 import 'package:garagelink/mecanicien/mecaHome.dart';
 import 'package:garagelink/mecanicien/meca_services/add_edit_service_screen.dart';
 import 'package:garagelink/mecanicien/meca_services/meca_services.dart';
@@ -57,5 +59,8 @@ class GenerateRoutes {
     return FactureScreen(devis: devis);
   },
 ),
+    GetPage(name: AppRoutes.mec_list_screen, page: () =>  MecListScreen()),
+    GetPage(name: AppRoutes.addMecScreen, page: () =>  AddMecScreen()),
+
   ];
 }

@@ -4,7 +4,18 @@ import '../models/client.dart';
 final notifProvider = Provider<List<Client>>((ref) {
   // Liste statique pour test
   return [
-    Client(nom: 'Jean Dupont', email: 'jean.dupont@example.com', tel: '12345678'),
-    Client(nom: 'Marie Curie', email: 'marie.curie@example.com', tel: '87654321'),
+    Client(
+      id: '1',
+      nom: 'Jean Dupont',
+      email: 'jean.dupont@example.com',
+      tel: '12345678',
+      numSerie: 'VF1AAAA0001234567', // optionnel
+    ),
+    Client(
+      id: '2',
+      nom: 'Marie Curie',
+      email: 'marie.curie@example.com',
+      tel: '87654321',
+    ),
   ];
 });

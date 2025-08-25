@@ -39,7 +39,7 @@ class _RapportScreenState extends ConsumerState<RapportScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text('Rapport de ${widget.order.client}')),
+      appBar: AppBar(title: Text('Rapport de ${widget.order.clientId}')),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(

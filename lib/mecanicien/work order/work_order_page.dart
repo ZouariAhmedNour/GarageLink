@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:garagelink/mecanicien/devis/devis_widgets/modern_card.dart';
 import 'package:garagelink/mecanicien/work%20order/rapport_screen.dart';
 import 'package:garagelink/models/order.dart';
+import 'package:garagelink/providers/notif_providers.dart';
 import 'package:garagelink/providers/orders_provider.dart';
 import 'package:garagelink/services/notif_service.dart';
 import 'package:get/get.dart';
@@ -24,6 +25,8 @@ class _WorkOrderPageState extends ConsumerState<WorkOrderPage> with TickerProvid
   String _searchQuery = '';
   final TextEditingController _searchController = TextEditingController();
 
+  
+
   @override
   void initState() {
     super.initState();
@@ -43,7 +46,7 @@ class _WorkOrderPageState extends ConsumerState<WorkOrderPage> with TickerProvid
     var filtered = orders.where((order) {
       final matchesFilter = _selectedFilter == 'Tous' || order.status == _selectedFilter;
       final matchesSearch = _searchQuery.isEmpty || 
-          order.client.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+          order.clientId.toLowerCase().contains(_searchQuery.toLowerCase()) ||
           order.id.toLowerCase().contains(_searchQuery.toLowerCase());
       return matchesFilter && matchesSearch;
     }).toList();
@@ -217,7 +220,7 @@ class _WorkOrderPageState extends ConsumerState<WorkOrderPage> with TickerProvid
             contentPadding: const EdgeInsets.all(16),
             title: Row(
               children: [
-                Expanded(child: Text('${order.id} - ${order.client}', style: const TextStyle(fontWeight: FontWeight.w600))),
+                Expanded(child: Text('${order.id} - ${order.clientId}', style: const TextStyle(fontWeight: FontWeight.w600))),
                 _buildStatusChip(order.status),
               ],
             ),
@@ -225,8 +228,9 @@ class _WorkOrderPageState extends ConsumerState<WorkOrderPage> with TickerProvid
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: 8),
-                Text('📱 ${order.phone} • 🔧 ${order.mechanic}', style: TextStyle(color: Colors.grey[600])),
-                Text('🏭 ${order.workshop} • 📅 ${order.date.toString().substring(0, 16)}', style: TextStyle(color: Colors.grey[600])),
+                Text('🔧 ${order.mecanicien}', style: TextStyle(color: Colors.grey[600])),
+Text('🏭 ${order.atelier} • 📅 ${order.date.toString().substring(0, 16)}', style: TextStyle(color: Colors.grey[600])),
+
               ],
             ),
             trailing: PopupMenuButton<String>(
@@ -261,18 +265,22 @@ class _WorkOrderPageState extends ConsumerState<WorkOrderPage> with TickerProvid
   void _handleOrderAction(BuildContext context, WidgetRef ref, WorkOrder order, String action) {
     switch (action) {
       case 'edit': _editOrderStatus(context, ref, order); break;
-      case 'call': launchUrl(Uri.parse('tel:${order.phone}')); break;
+      case 'call':
+  final client = ref.read(notifProvider).firstWhere((c) => c.id == order.clientId);
+  launchUrl(Uri.parse('tel:${client.tel}'));
+  break;
       case 'report': Get.to(() => RapportScreen(order: order)); break;
     }
   }
 
   void _editOrderStatus(BuildContext context, WidgetRef ref, WorkOrder order) {
     String status = order.status;
+    final client = ref.read(notifProvider).firstWhere((c) => c.id == order.clientId);
     showDialog(
       context: context,
       builder: (_) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text('Modifier ${order.client}'),
+        title: Text('Modifier ${client.nom}'),
         content: StatefulBuilder(
           builder: (context, setState) => DropdownButton<String>(
             value: status,
@@ -298,21 +306,31 @@ class _WorkOrderPageState extends ConsumerState<WorkOrderPage> with TickerProvid
   }
 
   void _showNotificationDialog(BuildContext context, WorkOrder order) {
+    final client = ref.read(notifProvider).firstWhere((c) => c.id == order.clientId);
     AwesomeDialog(
       context: context,
       dialogType: DialogType.question,
       title: 'Notifier le client',
       desc: 'Voulez-vous envoyer un email ou un SMS au client ?',
       btnCancelText: "SMS",
-      btnCancelOnPress: () => ShareNotifService.openSmsClient(phone: order.phone, message: "Bonjour ${order.client}, votre véhicule est prêt."),
-      btnOkText: "Email",
-      btnOkOnPress: () async {
-        final emailUri = Uri(scheme: 'mailto', queryParameters: {
-          'subject': "Votre véhicule est prêt",
-          'body': "Bonjour ${order.client},\n\nVotre véhicule est prêt. Vous pouvez venir le récupérer.",
-        });
-        if (await canLaunchUrl(emailUri)) await launchUrl(emailUri, mode: LaunchMode.externalApplication);
-      },
+btnCancelOnPress: () => ShareNotifService.openSmsClient(
+  phone: client.tel,
+  message: "Bonjour ${client.nom}, votre véhicule est prêt."
+),
+btnOkText: "Email",
+btnOkOnPress: () async {
+  final emailUri = Uri(
+    scheme: 'mailto',
+    path: client.email, // ✅ adresse email du client
+    queryParameters: {
+      'subject': "Votre véhicule est prêt",
+      'body': "Bonjour ${client.nom},\n\nVotre véhicule est prêt. Vous pouvez venir le récupérer.",
+    },
+  );
+  if (await canLaunchUrl(emailUri)) {
+    await launchUrl(emailUri, mode: LaunchMode.externalApplication);
+  }
+},
     ).show();
   }
 }

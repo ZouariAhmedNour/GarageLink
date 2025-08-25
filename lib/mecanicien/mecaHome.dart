@@ -5,6 +5,7 @@ import 'package:garagelink/components/default_app_bar.dart';
 import 'package:garagelink/mecanicien/dashboard/screens/dash_board_screen.dart';
 import 'package:garagelink/mecanicien/devis/creation_devis.dart';
 import 'package:garagelink/mecanicien/edit_localisation.dart';
+import 'package:garagelink/mecanicien/gestion%20mec/mec_list_screen.dart';
 import 'package:garagelink/mecanicien/meca_services/meca_services.dart';
 import 'package:garagelink/mecanicien/stock/stock_dashboard.dart';
 import 'package:garagelink/mecanicien/work%20order/notif_screen.dart';
@@ -291,6 +292,13 @@ class MecaHomePage extends ConsumerWidget {
               description: 'Création et gestion du stock',
               color: const Color.fromARGB(255, 3, 8, 22),
               onTap: () => Get.to(() => StockDashboard ()),
+            ),
+            buildMenuCard(
+              icon: Icons.assignment_ind_sharp,
+              title: 'Mécaniciens',
+              description: 'Création et gestion des mécaniciens',
+              color: const Color.fromARGB(255, 17, 50, 141),
+              onTap: () => Get.to(() => MecListScreen ()),
             ),
 
             // 🚀 FUTURES FONCTIONNALITÉS

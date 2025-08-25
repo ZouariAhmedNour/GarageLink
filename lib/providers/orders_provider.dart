@@ -6,37 +6,34 @@ class OrdersNotifier extends StateNotifier<List<WorkOrder>> {
   OrdersNotifier() : super([
     WorkOrder(
       id: 'WO-001',
-      client: 'Jean Dupont',
-      phone: '0600000000',
-      email: 'jean@test.com',
-      mechanic: 'Marie',
-      workshop: 'Atelier 2',
+      clientId: '1', // fait référence à Client.id
+      immatriculation: '1HGCM82633A123456',
       date: DateTime(2025, 8, 16, 9, 0),
-      status: 'En cours',
-      vin: '1HGCM82633A123456', // Added VIN for the first order
+      dateDebut: DateTime(2025, 8, 16, 9, 0),
       service: 'Révision',
+      atelier: 'Atelier 2',
+      description: 'Contrôle général',
+      mecanicien: 'Marie',
+      status: 'En cours',
     ),
     WorkOrder(
       id: 'WO-002',
-      client: 'Pierre Martin',
-      phone: '0611111111',
-      email: 'pierre@test.com',
-      mechanic: 'Jean',
-      workshop: 'Atelier 1',
+      clientId: '2',
+      immatriculation: '1HGCM82633A654321',
       date: DateTime(2025, 8, 17, 10, 0),
-      status: 'En attente',
-      vin: '1HGCM82633A654321', // Added VIN for the second order
+      dateDebut: DateTime(2025, 8, 17, 10, 0),
       service: 'Réparation',
+      atelier: 'Atelier 1',
+      description: 'Changement embrayage',
+      mecanicien: 'Jean',
+      status: 'En attente',
     ),
   ]);
 
   void updateStatus(String id, String newStatus) {
-    state = state.map((order) {
-      if (order.id == id) {
-        return order.copyWith(status: newStatus);
-      }
-      return order;
-    }).toList();
+    state = state.map((order) =>
+      order.id == id ? order.copyWith(status: newStatus) : order
+    ).toList();
   }
 
   void addOrder(WorkOrder order) {

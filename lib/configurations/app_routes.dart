@@ -21,5 +21,7 @@ class AppRoutes {
   static const String addEditServiceScreen = '/addEditServiceScreen';
   static const String stockDashboard = '/stockDashboard';
   static const String factureScreen = '/factureScreen';
+  static const String mec_list_screen= '/mecListScreen';
+  static const String addMecScreen = '/addMecScreen';
 
 }
