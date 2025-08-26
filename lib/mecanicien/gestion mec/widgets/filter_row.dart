@@ -30,19 +30,19 @@ class FilterRow extends ConsumerStatefulWidget {
 class _FilterRowState extends ConsumerState<FilterRow> {
   final List<String> posteOptions = [
     'Tous',
-    'apprenti',
-    'chefEquipe',
-    'carrossier',
-    'mecanicien',
-    'electricien'
+    'Apprenti',
+    'Chef Equipe',
+    'Carrossier',
+    'Mécanicien',
+    'Eléctricien'
   ];
   final List<String> statutOptions = [
     'Tous',
     'actif',
-    'conges',
-    'arretMaladie',
+    'congès',
+    'Arret Maladie',
     'suspendu',
-    'demissionne'
+    'démissionné'
   ];
   final List<String> contratOptions = [
     'Tous',
