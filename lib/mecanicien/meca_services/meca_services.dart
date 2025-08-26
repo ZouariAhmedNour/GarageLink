@@ -1,7 +1,9 @@
+// mecanicien/meca_services/meca_services.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:garagelink/mecanicien/meca_services/service_card.dart';
+import 'package:garagelink/models/service.dart';
 import 'package:garagelink/providers/service_provider.dart';
+import 'package:garagelink/mecanicien/meca_services/service_card.dart';
 import 'package:garagelink/mecanicien/meca_services/add_edit_service_screen.dart';
 
 class MecaServicesPage extends ConsumerStatefulWidget {
@@ -11,12 +13,10 @@ class MecaServicesPage extends ConsumerStatefulWidget {
   ConsumerState<MecaServicesPage> createState() => _MecaServicesPageState();
 }
 
-class _MecaServicesPageState extends ConsumerState<MecaServicesPage> with TickerProviderStateMixin {
+class _MecaServicesPageState extends ConsumerState<MecaServicesPage>
+    with TickerProviderStateMixin {
   String searchTerm = '';
-  String selectedCategory = '';
-  String sortBy = 'nom';
   bool showActiveOnly = false;
-  final categories = ['Entretien', 'Révision', 'Freinage', 'Électricité', 'Carrosserie'];
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
   final TextEditingController _searchController = TextEditingController();
@@ -24,8 +24,10 @@ class _MecaServicesPageState extends ConsumerState<MecaServicesPage> with Ticker
   @override
   void initState() {
     super.initState();
-    _animationController = AnimationController(duration: const Duration(milliseconds: 800), vsync: this);
-    _fadeAnimation = CurvedAnimation(parent: _animationController, curve: Curves.easeInOut);
+    _animationController =
+        AnimationController(duration: const Duration(milliseconds: 800), vsync: this);
+    _fadeAnimation =
+        CurvedAnimation(parent: _animationController, curve: Curves.easeInOut);
     _animationController.forward();
   }
 
@@ -37,33 +39,22 @@ class _MecaServicesPageState extends ConsumerState<MecaServicesPage> with Ticker
   }
 
   List<Service> _getFilteredServices(List<Service> services) {
-    var filtered = services.where((s) {
-      final matchesSearch = searchTerm.isEmpty || 
-          s.nom.toLowerCase().contains(searchTerm.toLowerCase()) ||
+    final filtered = services.where((s) {
+      final matchesSearch = searchTerm.isEmpty ||
+          s.nomService.toLowerCase().contains(searchTerm.toLowerCase()) ||
           s.description.toLowerCase().contains(searchTerm.toLowerCase());
-      final matchesCategory = selectedCategory.isEmpty || s.categorie == selectedCategory;
-      final matchesActive = !showActiveOnly || s.actif;
-      return matchesSearch && matchesCategory && matchesActive;
+      final matchesActive = !showActiveOnly || s.status == ServiceStatus.actif;
+      return matchesSearch && matchesActive;
     }).toList();
 
-    // Tri
-    filtered.sort((a, b) {
-      switch (sortBy) {
-        case 'prix': return a.prix.compareTo(b.prix);
-        case 'duree': return a.duree.compareTo(b.duree);
-        case 'categorie': return a.categorie.compareTo(b.categorie);
-        default: return a.nom.compareTo(b.nom);
-      }
-    });
-    
+    filtered.sort((a, b) => a.nomService.compareTo(b.nomService));
     return filtered;
   }
 
   Map<String, int> _getServiceStats(List<Service> services) {
     return {
       'total': services.length,
-      'actifs': services.where((s) => s.actif).length,
-      'categories': services.map((s) => s.categorie).toSet().length,
+      'actifs': services.where((s) => s.status == ServiceStatus.actif).length,
     };
   }
 
@@ -76,9 +67,12 @@ class _MecaServicesPageState extends ConsumerState<MecaServicesPage> with Ticker
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
+      appBar: AppBar(
+        title: const Text('Gestion Services'),
+        backgroundColor: const Color(0xFF357ABD),
+      ),
       body: CustomScrollView(
         slivers: [
-          _buildAppBar(),
           SliverToBoxAdapter(
             child: FadeTransition(
               opacity: _fadeAnimation,
@@ -86,7 +80,15 @@ class _MecaServicesPageState extends ConsumerState<MecaServicesPage> with Ticker
                 padding: const EdgeInsets.all(16),
                 child: Column(
                   children: [
-                    _buildStatsCards(stats),
+                    Row(
+                      children: [
+                        _buildStatCard('Total', '${stats['total']}', Icons.build,
+                            const Color(0xFF357ABD)),
+                        const SizedBox(width: 12),
+                        _buildStatCard('Actifs', '${stats['actifs']}', Icons.check_circle,
+                            const Color(0xFF10B981)),
+                      ],
+                    ),
                     const SizedBox(height: 20),
                     _buildSearchAndFilters(),
                     const SizedBox(height: 20),
@@ -99,45 +101,13 @@ class _MecaServicesPageState extends ConsumerState<MecaServicesPage> with Ticker
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const AddEditServiceScreen())),
+        onPressed: () => Navigator.push(
+            context, MaterialPageRoute(builder: (c) => const AddEditServiceScreen())),
         backgroundColor: const Color(0xFF357ABD),
         icon: const Icon(Icons.add, color: Colors.white),
-        label: const Text('Nouveau service', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+        label: const Text('Nouveau service',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
       ),
-    );
-  }
-
-  Widget _buildAppBar() {
-    return SliverAppBar(
-      expandedHeight: 120,
-      floating: false,
-      pinned: true,
-      flexibleSpace: FlexibleSpaceBar(
-        title: const Text('Gestion Services', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 22)),
-        background: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [Color(0xFF357ABD), Color(0xFF2A5A8A)],
-            ),
-          ),
-        ),
-      ),
-      backgroundColor: const Color(0xFF357ABD),
-      elevation: 0,
-    );
-  }
-
-  Widget _buildStatsCards(Map<String, int> stats) {
-    return Row(
-      children: [
-        _buildStatCard('Total', '${stats['total']}', Icons.build, const Color(0xFF357ABD)),
-        const SizedBox(width: 12),
-        _buildStatCard('Actifs', '${stats['actifs']}', Icons.check_circle, const Color(0xFF10B981)),
-        const SizedBox(width: 12),
-        _buildStatCard('Catégories', '${stats['categories']}', Icons.category, const Color(0xFFEF4444)),
-      ],
     );
   }
 
@@ -148,14 +118,16 @@ class _MecaServicesPageState extends ConsumerState<MecaServicesPage> with Ticker
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(16),
-          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)],
         ),
         child: Column(
           children: [
             Icon(icon, color: color, size: 28),
             const SizedBox(height: 8),
-            Text(value, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: Color(0xFF1E293B))),
-            Text(title, style: TextStyle(fontSize: 12, color: Colors.grey[600], fontWeight: FontWeight.w500)),
+            Text(value,
+                style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: Color(0xFF1E293B))),
+            Text(title,
+                style: TextStyle(fontSize: 12, color: Colors.grey[600], fontWeight: FontWeight.w500)),
           ],
         ),
       ),
@@ -165,16 +137,21 @@ class _MecaServicesPageState extends ConsumerState<MecaServicesPage> with Ticker
   Widget _buildSearchAndFilters() {
     return Column(
       children: [
-        // Barre de recherche
         TextField(
           controller: _searchController,
           onChanged: (value) => setState(() => searchTerm = value),
           decoration: InputDecoration(
             hintText: 'Rechercher un service...',
             prefixIcon: const Icon(Icons.search, color: Color(0xFF6B7280)),
-            suffixIcon: searchTerm.isNotEmpty 
-              ? IconButton(icon: const Icon(Icons.clear), onPressed: () => setState(() { _searchController.clear(); searchTerm = ''; }))
-              : null,
+            suffixIcon: searchTerm.isNotEmpty
+                ? IconButton(
+                    icon: const Icon(Icons.clear),
+                    onPressed: () => setState(() {
+                      _searchController.clear();
+                      searchTerm = '';
+                    }),
+                  )
+                : null,
             filled: true,
             fillColor: Colors.white,
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
@@ -182,37 +159,13 @@ class _MecaServicesPageState extends ConsumerState<MecaServicesPage> with Ticker
           ),
         ),
         const SizedBox(height: 12),
-        // Filtres horizontaux
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: [
-              _buildFilterChip('Toutes', selectedCategory.isEmpty, () => setState(() => selectedCategory = '')),
-              ...categories.map((cat) => _buildFilterChip(cat, selectedCategory == cat, () => setState(() => selectedCategory = cat))),
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
-        // Contrôles supplémentaires
         Row(
           children: [
             Expanded(
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                 decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<String>(
-                    value: sortBy,
-                    hint: const Text('Trier par'),
-                    items: const [
-                      DropdownMenuItem(value: 'nom', child: Text('Nom')),
-                      DropdownMenuItem(value: 'prix', child: Text('Prix')),
-                      DropdownMenuItem(value: 'duree', child: Text('Durée')),
-                      DropdownMenuItem(value: 'categorie', child: Text('Catégorie')),
-                    ],
-                    onChanged: (value) => setState(() => sortBy = value!),
-                  ),
-                ),
+                child: const Text('Trier par: Nom'),
               ),
             ),
             const SizedBox(width: 12),
@@ -237,25 +190,6 @@ class _MecaServicesPageState extends ConsumerState<MecaServicesPage> with Ticker
     );
   }
 
-  Widget _buildFilterChip(String label, bool selected, VoidCallback onTap) {
-    return Container(
-      margin: const EdgeInsets.only(right: 8),
-      child: FilterChip(
-        label: Text(label),
-        selected: selected,
-        onSelected: (_) => onTap(),
-        backgroundColor: Colors.white,
-        selectedColor: const Color(0xFF357ABD).withOpacity(0.1),
-        labelStyle: TextStyle(
-          color: selected ? const Color(0xFF357ABD) : Colors.grey[700],
-          fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
-        ),
-        side: BorderSide(color: selected ? const Color(0xFF357ABD) : Colors.grey[300]!),
-        showCheckmark: false,
-      ),
-    );
-  }
-
   Widget _buildServicesList(List<Service> services, double screenWidth) {
     if (services.isEmpty) {
       return Container(
@@ -277,7 +211,7 @@ class _MecaServicesPageState extends ConsumerState<MecaServicesPage> with Ticker
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -288,10 +222,7 @@ class _MecaServicesPageState extends ConsumerState<MecaServicesPage> with Ticker
               children: [
                 Container(
                   padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF357ABD).withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+                  decoration: BoxDecoration(color: const Color(0xFF357ABD).withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
                   child: const Icon(Icons.build, color: Color(0xFF357ABD), size: 24),
                 ),
                 const SizedBox(width: 16),
@@ -305,7 +236,7 @@ class _MecaServicesPageState extends ConsumerState<MecaServicesPage> with Ticker
             padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
             gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: screenWidth > 768 ? 2 : 1,
-              childAspectRatio: screenWidth > 768 ? 1.2 : 1.4,
+              childAspectRatio: screenWidth > 768 ? 2.8 : 2.2,
               crossAxisSpacing: 16,
               mainAxisSpacing: 16,
             ),
@@ -345,7 +276,7 @@ class _MecaServicesPageState extends ConsumerState<MecaServicesPage> with Ticker
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: const Text('Supprimer le service'),
-        content: Text('Êtes-vous sûr de vouloir supprimer "${service.nom}" ?\nCette action est irréversible.'),
+        content: Text('Êtes-vous sûr de vouloir supprimer "${service.nomService}" ?\nCette action est irréversible.'),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Annuler')),
           ElevatedButton(
@@ -354,7 +285,7 @@ class _MecaServicesPageState extends ConsumerState<MecaServicesPage> with Ticker
               ref.read(serviceProvider.notifier).deleteService(service.id);
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Service "${service.nom}" supprimé'), backgroundColor: Colors.red),
+                SnackBar(content: Text('Service "${service.nomService}" supprimé'), backgroundColor: Colors.red),
               );
             },
             child: const Text('Supprimer'),

@@ -175,7 +175,7 @@ void initState() {
     return switch (statut.toLowerCase()) {
       'actif' => MecItemColors.success,
       'inactif' => MecItemColors.danger,
-      'conge' => MecItemColors.warning,
+      'congès' => MecItemColors.warning,
       _ => MecItemColors.textSecondary,
     };
   }
@@ -435,7 +435,7 @@ void initState() {
           children: [
             Icon(Icons.build, size: 16, color: MecItemColors.primary),
             const SizedBox(width: 8),
-            const Text('Compétences', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+            const Text('Services', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
           ],
         ),
         const SizedBox(height: 8),

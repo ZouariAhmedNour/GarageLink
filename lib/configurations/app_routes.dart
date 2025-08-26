@@ -23,5 +23,9 @@ class AppRoutes {
   static const String factureScreen = '/factureScreen';
   static const String mec_list_screen= '/mecListScreen';
   static const String addMecScreen = '/addMecScreen';
+  static const String clientDash = '/clientDash';
+  static const String addClientScreen = '/addClientScreen';
+  static const String addVehiculeScreen = '/addVehiculeScreen';
+  static const String vehiculeInfoScreen = '/vehiculeInfoScreen';
 
 }

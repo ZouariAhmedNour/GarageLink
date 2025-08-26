@@ -320,53 +320,75 @@ class _NotifScreenState extends ConsumerState<NotifScreen>
   }
 
   Widget _buildClientCard(Client client, int index) {
-    return Card(
-      elevation: 2,
-      shadowColor: Colors.black.withOpacity(0.1),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(16),
-          gradient: LinearGradient(
-            colors: [Colors.white, AppColors.surface],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
+  return Card(
+    elevation: 2,
+    shadowColor: Colors.black.withOpacity(0.1),
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+    child: Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        gradient: LinearGradient(
+          colors: [Colors.white, AppColors.surface],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      child: ListTile(
+        contentPadding: const EdgeInsets.all(16),
+        leading: CircleAvatar(
+          backgroundColor: AppColors.primary,
+          radius: 24,
+          child: Text(
+            client.nomComplet.isNotEmpty
+                ? client.nomComplet[0].toUpperCase()
+                : '?',
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 16,
+            ),
           ),
         ),
-        child: ListTile(
-          contentPadding: const EdgeInsets.all(16),
-          leading: CircleAvatar(
-            backgroundColor: AppColors.primary,
-            radius: 24,
-            child: Text(
-              client.nom.isNotEmpty ? client.nom[0].toUpperCase() : '?',
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-              ),
-            ),
+        title: Text(
+          client.nomComplet,
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w600,
+            color: AppColors.textPrimary,
           ),
-          title: Text(
-            client.nom,
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textPrimary,
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 4),
+            Row(
+              children: [
+                Icon(Icons.directions_car,
+                    size: 14, color: AppColors.textSecondary),
+                const SizedBox(width: 4),
+                Expanded(
+                  child: Text(
+                    client.vehiculeIds.isNotEmpty
+                        ? 'Véhicules liés: ${client.vehiculeIds.length}'
+                        : 'Aucun véhicule lié',
+                    style: TextStyle(
+                      color: AppColors.textSecondary,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ),
-          subtitle: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: 4),
+            if (client.mail.isNotEmpty) ...[
+              const SizedBox(height: 2),
               Row(
                 children: [
-                  Icon(Icons.confirmation_number, 
-                       size: 14, color: AppColors.textSecondary),
+                  Icon(Icons.email_outlined,
+                      size: 14, color: AppColors.textSecondary),
                   const SizedBox(width: 4),
                   Expanded(
                     child: Text(
-                      'N° série: ${client.numSerie ?? 'Non renseigné'}',
+                      client.mail,
                       style: TextStyle(
                         color: AppColors.textSecondary,
                         fontSize: 13,
@@ -375,32 +397,34 @@ class _NotifScreenState extends ConsumerState<NotifScreen>
                   ),
                 ],
               ),
-              if (client.email.isNotEmpty == true) ...[
-                const SizedBox(height: 2),
-                Row(
-                  children: [
-                    Icon(Icons.email_outlined, 
-                         size: 14, color: AppColors.textSecondary),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Text(
-                        client.email,
-                        style: TextStyle(
-                          color: AppColors.textSecondary,
-                          fontSize: 13,
-                        ),
+            ],
+            if (client.telephone.isNotEmpty) ...[
+              const SizedBox(height: 2),
+              Row(
+                children: [
+                  Icon(Icons.phone,
+                      size: 14, color: AppColors.textSecondary),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      client.telephone,
+                      style: TextStyle(
+                        color: AppColors.textSecondary,
+                        fontSize: 13,
                       ),
                     ),
-                  ],
-                ),
-              ],
+                  ),
+                ],
+              ),
             ],
-          ),
-          trailing: _buildActionButton(client),
+          ],
         ),
+        trailing: _buildActionButton(client),
       ),
-    );
-  }
+    ),
+  );
+}
+
 
   Widget _buildActionButton(Client client) {
     return Container(
@@ -437,7 +461,7 @@ class _NotifScreenState extends ConsumerState<NotifScreen>
                 children: [
                   const Text('Nouveau message', style: TextStyle(fontSize: 18)),
                   Text(
-                    'à ${client.nom}',
+                    'à ${client.nomComplet}',
                     style: TextStyle(
                       fontSize: 14,
                       color: AppColors.textSecondary,
@@ -493,8 +517,8 @@ class _NotifScreenState extends ConsumerState<NotifScreen>
 
     try {
       await ShareEmailService.openEmailClient(
-        to: client.email,
-        subject: "Notification GarageLink - ${client.nom}",
+        to: client.mail,
+        subject: "Notification GarageLink - ${client.nomComplet}",
         body: message,
       );
       if (mounted) {
@@ -506,13 +530,16 @@ class _NotifScreenState extends ConsumerState<NotifScreen>
     }
   }
 
-  List<Client> _getFilteredClients(List<Client> clients) {
-    return clients.where((client) {
-      final matchNom = client.nom.toLowerCase().contains(_filterNom.toLowerCase());
-      final matchVin = (client.numSerie ?? '').toLowerCase().contains(_filterVin.toLowerCase());
-      return matchNom && matchVin;
-    }).toList();
-  }
+List<Client> _getFilteredClients(List<Client> clients) {
+  return clients.where((client) {
+    final matchNom = client.nomComplet
+        .toLowerCase()
+        .contains(_filterNom.toLowerCase());
+    final matchVehicule = client.vehiculeIds
+        .any((id) => id.toLowerCase().contains(_filterVin.toLowerCase()));
+    return matchNom && matchVehicule;
+  }).toList();
+}
 
   void _provideFeedback() {
     HapticFeedback.lightImpact();

@@ -267,7 +267,7 @@ Text('🏭 ${order.atelier} • 📅 ${order.date.toString().substring(0, 16)}',
       case 'edit': _editOrderStatus(context, ref, order); break;
       case 'call':
   final client = ref.read(notifProvider).firstWhere((c) => c.id == order.clientId);
-  launchUrl(Uri.parse('tel:${client.tel}'));
+  launchUrl(Uri.parse('tel:${client.telephone}'));
   break;
       case 'report': Get.to(() => RapportScreen(order: order)); break;
     }
@@ -280,7 +280,7 @@ Text('🏭 ${order.atelier} • 📅 ${order.date.toString().substring(0, 16)}',
       context: context,
       builder: (_) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text('Modifier ${client.nom}'),
+        title: Text('Modifier ${client.nomComplet}'),
         content: StatefulBuilder(
           builder: (context, setState) => DropdownButton<String>(
             value: status,
@@ -314,17 +314,17 @@ Text('🏭 ${order.atelier} • 📅 ${order.date.toString().substring(0, 16)}',
       desc: 'Voulez-vous envoyer un email ou un SMS au client ?',
       btnCancelText: "SMS",
 btnCancelOnPress: () => ShareNotifService.openSmsClient(
-  phone: client.tel,
-  message: "Bonjour ${client.nom}, votre véhicule est prêt."
+  phone: client.telephone,
+  message: "Bonjour ${client.nomComplet}, votre véhicule est prêt."
 ),
 btnOkText: "Email",
 btnOkOnPress: () async {
   final emailUri = Uri(
     scheme: 'mailto',
-    path: client.email, // ✅ adresse email du client
+    path: client.mail, // ✅ adresse email du client
     queryParameters: {
       'subject': "Votre véhicule est prêt",
-      'body': "Bonjour ${client.nom},\n\nVotre véhicule est prêt. Vous pouvez venir le récupérer.",
+      'body': "Bonjour ${client.nomComplet},\n\nVotre véhicule est prêt. Vous pouvez venir le récupérer.",
     },
   );
   if (await canLaunchUrl(emailUri)) {

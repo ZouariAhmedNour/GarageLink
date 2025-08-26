@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:garagelink/mecanicien/gestion%20mec/mec_list_screen.dart';
 import 'package:garagelink/models/mecanicien.dart';
 import 'package:garagelink/providers/mecaniciens_provider.dart';
 import 'package:get/get.dart';
@@ -387,9 +388,9 @@ class _AddMecScreenState extends ConsumerState<AddMecScreen>
                           Expanded(child: _buildTextField(
                             controller: salaireCtrl,
                             label: 'Salaire',
-                            icon: Icons.euro,
+                            icon: Icons.attach_money,
                             keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                            suffix: '€',
+                            suffix: 'DT',
                           )),
                         ],
                       ),
@@ -474,71 +475,72 @@ class _AddMecScreenState extends ConsumerState<AddMecScreen>
     );
   }
 
-  void _save() {
-    HapticFeedback.mediumImpact();
-    
-    if (!_formKey.currentState!.validate()) {
-      Get.snackbar(
-        'Erreur de validation',
-        'Veuillez corriger les erreurs dans le formulaire',
-        backgroundColor: errorColor,
-        colorText: Colors.white,
-        snackPosition: SnackPosition.BOTTOM,
-        icon: const Icon(Icons.error, color: Colors.white),
-        duration: const Duration(seconds: 3),
-      );
-      return;
+void _save() {
+  HapticFeedback.mediumImpact();
+
+  if (!_formKey.currentState!.validate()) {
+    Get.snackbar(
+      'Erreur de validation',
+      'Veuillez corriger les erreurs dans le formulaire',
+      backgroundColor: errorColor,
+      colorText: Colors.white,
+      snackPosition: SnackPosition.BOTTOM,
+      icon: const Icon(Icons.error, color: Colors.white),
+      duration: const Duration(seconds: 3),
+    );
+    return;
+  }
+
+  final id = widget.mecanicien?.id ?? 'MEC-${DateTime.now().millisecondsSinceEpoch}';
+  final salaire = double.tryParse(salaireCtrl.text.replaceAll(',', '.')) ?? 0.0;
+
+  final mec = Mecanicien(
+    id: id,
+    nom: nomCtrl.text.trim(),
+    dateNaissance: dateNaissance,
+    telephone: telCtrl.text.trim(),
+    email: emailCtrl.text.trim(),
+    matricule: matriculeCtrl.text.trim(),
+    poste: poste ?? Poste.mecanicien,
+    dateEmbauche: dateEmbauche,
+    typeContrat: typeContrat ?? TypeContrat.cdi,
+    statut: statut ?? Statut.actif,
+    salaire: salaire,
+    services: selectedServices.toList(),
+    experience: experienceCtrl.text.trim(),
+    permisConduite: permisCtrl.text.trim(),
+  );
+
+  try {
+    if (widget.mecanicien == null) {
+      ref.read(mecaniciensProvider.notifier).addMec(mec);
+    } else {
+      ref.read(mecaniciensProvider.notifier).updateMec(id, mec);
     }
 
-    final id = widget.mecanicien?.id ?? 'MEC-${DateTime.now().millisecondsSinceEpoch}';
-    final salaire = double.tryParse(salaireCtrl.text.replaceAll(',', '.')) ?? 0.0;
-
-    final mec = Mecanicien(
-      id: id,
-      nom: nomCtrl.text.trim(),
-      dateNaissance: dateNaissance,
-      telephone: telCtrl.text.trim(),
-      email: emailCtrl.text.trim(),
-      matricule: matriculeCtrl.text.trim(),
-      poste: poste ?? Poste.mecanicien,
-      dateEmbauche: dateEmbauche,
-      typeContrat: typeContrat ?? TypeContrat.cdi,
-      statut: statut ?? Statut.actif,
-      salaire: salaire,
-      services: selectedServices.toList(),
-      experience: experienceCtrl.text.trim(),
-      permisConduite: permisCtrl.text.trim(),
+    // Affiche l'alerte de succès
+    Get.snackbar(
+      'Succès',
+      'Vos modifications sont enregistrées',
+      backgroundColor: successColor,
+      colorText: Colors.white,
+      icon: const Icon(Icons.check, color: Colors.white),
+      snackPosition: SnackPosition.BOTTOM,
+      duration: const Duration(seconds: 3),
     );
 
-    try {
-      if (widget.mecanicien == null) {
-        ref.read(mecaniciensProvider.notifier).addMec(mec);
-        Get.snackbar(
-          'Succès',
-          'Mécanicien ajouté avec succès',
-          backgroundColor: successColor,
-          colorText: Colors.white,
-          icon: const Icon(Icons.check, color: Colors.white),
-        );
-      } else {
-        ref.read(mecaniciensProvider.notifier).updateMec(id, mec);
-        Get.snackbar(
-          'Succès',
-          'Mécanicien modifié avec succès',
-          backgroundColor: successColor,
-          colorText: Colors.white,
-          icon: const Icon(Icons.check, color: Colors.white),
-        );
-      }
-      Get.back();
-    } catch (e) {
-      Get.snackbar(
-        'Erreur',
-        'Une erreur est survenue lors de l\'enregistrement',
-        backgroundColor: errorColor,
-        colorText: Colors.white,
-        icon: const Icon(Icons.error, color: Colors.white),
-      );
-    }
+    // Navigation vers la liste des mécaniciens
+    // Utilise Get.to si tu veux empiler, Get.off pour remplacer la page actuelle,
+    // ou Get.offAll pour vider la pile. Ici j'utilise Get.to comme demandé :
+    Get.to(() => const MecListScreen());
+  } catch (e) {
+    Get.snackbar(
+      'Erreur',
+      'Une erreur est survenue lors de l\'enregistrement',
+      backgroundColor: errorColor,
+      colorText: Colors.white,
+      icon: const Icon(Icons.error, color: Colors.white),
+    );
   }
+}
 }

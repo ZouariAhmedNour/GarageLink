@@ -7,7 +7,7 @@ import 'package:get/get.dart';
 import 'add_mec_screen.dart';
 import 'widgets/search_and_sort_row.dart';
 import 'widgets/filter_row.dart';
-import 'widgets/competence_chips.dart';
+import 'widgets/service_chips.dart';
 import 'widgets/mec_list_item.dart';
 import 'widgets/pagination_controls.dart';
 
@@ -327,12 +327,12 @@ _fabScaleAnimation = Tween<double>(begin: 0.0, end: 1.0)
             const SizedBox(height: 12),
             _buildSectionHeader(Icons.psychology, 'Compétences :'),
             const SizedBox(height: 8),
-            CompetenceChips(
-              onCompetenceSelected: (c, on) => _updateFilter(() {
+            ServicesChips(
+              onServiceSelected: (c, on) => _updateFilter(() {
                 if (on) _filterState.servicesFilter.add(c);
                 else _filterState.servicesFilter.remove(c);
               }),
-              competencesFilter: _filterState.servicesFilter,
+              servicesFilter: _filterState.servicesFilter,
             ),
           ],
         ),

@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:garagelink/components/default_app_bar.dart';
+import 'package:garagelink/mecanicien/clients_liste/client_dash.dart';
 import 'package:garagelink/mecanicien/dashboard/screens/dash_board_screen.dart';
 import 'package:garagelink/mecanicien/devis/creation_devis.dart';
 import 'package:garagelink/mecanicien/edit_localisation.dart';
@@ -280,14 +281,14 @@ class MecaHomePage extends ConsumerWidget {
               onTap: () => Get.to(() => WorkOrderPage ()),
             ),
             buildMenuCard(
-              icon: Icons.assignment,
+              icon: Icons.notification_important,
               title: 'Notifications',
               description: 'Création et gestion des Norifications',
               color: const Color.fromARGB(255, 250, 26, 201),
               onTap: () => Get.to(() => NotifScreen ()),
             ),
             buildMenuCard(
-              icon: Icons.assignment,
+              icon: Icons.inventory,
               title: 'Stock',
               description: 'Création et gestion du stock',
               color: const Color.fromARGB(255, 3, 8, 22),
@@ -299,6 +300,13 @@ class MecaHomePage extends ConsumerWidget {
               description: 'Création et gestion des mécaniciens',
               color: const Color.fromARGB(255, 17, 50, 141),
               onTap: () => Get.to(() => MecListScreen ()),
+            ),
+            buildMenuCard(
+              icon: Icons.person,
+              title: 'Clients',
+              description: 'Création et gestion des clients',
+              color: const Color.fromARGB(255, 134, 64, 6),
+              onTap: () => Get.to(() => ClientDash ()),
             ),
 
             // 🚀 FUTURES FONCTIONNALITÉS
