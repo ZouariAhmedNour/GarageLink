@@ -450,7 +450,7 @@ void initState() {
               border: Border.all(color: MecItemColors.primary.withOpacity(0.2)),
             ),
             child: Text(
-              service,
+               service.label,
               style: const TextStyle(
                 fontSize: 11,
                 color: MecItemColors.primary,

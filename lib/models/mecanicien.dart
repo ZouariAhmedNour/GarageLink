@@ -4,6 +4,38 @@ enum Poste { apprenti, chefEquipe, carrossier, mecanicien, electricien }
 enum TypeContrat { cdi, cdd, stage, apprentissage }
 enum Statut { actif, conges, arretMaladie, suspendu, demissionne }
 
+
+enum Service {
+  entretien,
+  diagnostic,
+  revision,
+  depannage,
+  electricite,
+  carrosserie,
+  climatisation,
+}
+
+// Extension pour avoir le label lisible
+extension ServiceExtension on Service {
+  String get label {
+    switch (this) {
+      case Service.entretien:
+        return "Entretien";
+      case Service.diagnostic:
+        return "Diagnostic";
+      case Service.revision:
+        return "Révision";
+      case Service.depannage:
+        return "Dépannage";
+      case Service.electricite:
+        return "Électricité";
+      case Service.carrosserie:
+        return "Carrosserie";
+      case Service.climatisation:
+        return "Climatisation";
+    }
+  }
+}
 class Mecanicien {
   final String id;
   final String nom;
@@ -15,8 +47,8 @@ class Mecanicien {
   final DateTime? dateEmbauche;
   final TypeContrat typeContrat;
   final Statut statut;
-  final double salaire;
-  final List<String> services; 
+  final int salaire;
+  final List<Service> services;
   final String experience;
   final String permisConduite;
 
@@ -48,8 +80,8 @@ class Mecanicien {
     DateTime? dateEmbauche,
     TypeContrat? typeContrat,
     Statut? statut,
-    double? salaire,
-    List<String>? services,
+    int? salaire,
+    List<Service>? services,
     String? experience,
     String? permisConduite,
   }) {
@@ -64,8 +96,8 @@ class Mecanicien {
       dateEmbauche: dateEmbauche ?? this.dateEmbauche,
       typeContrat: typeContrat ?? this.typeContrat,
       statut: statut ?? this.statut,
-      salaire: salaire ?? this.salaire,
-      services: services ?? List.from(this.services), 
+      salaire: salaire?.toInt() ?? this.salaire,
+      services: services ?? List.from(this.services),
       experience: experience ?? this.experience,
       permisConduite: permisConduite ?? this.permisConduite,
     );

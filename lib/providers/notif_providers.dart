@@ -20,10 +20,7 @@ final notifProvider = Provider<List<Client>>((ref) {
       telephone: '87654321',
       adresse: '5 avenue de Lyon, 69000 Lyon',
       categorie: Categorie.professionnel,
-      nomE: 'Laboratoire Curie',
-      telephoneE: '0987654321',
-      mailE: 'contact@curie-lab.com',
-      adresseE: '10 rue des Sciences, 69000 Lyon',
+     
       vehiculeIds: [], // pas encore de véhicule associé
     ),
   ];

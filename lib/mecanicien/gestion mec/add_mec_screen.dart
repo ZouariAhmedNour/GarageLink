@@ -31,7 +31,7 @@ class _AddMecScreenState extends ConsumerState<AddMecScreen>
   Poste? poste;
   TypeContrat? typeContrat;
   Statut? statut;
-  final Set<String> selectedServices = {};
+  final Set<Service> selectedServices = {};
   
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
@@ -42,10 +42,8 @@ class _AddMecScreenState extends ConsumerState<AddMecScreen>
   static const errorColor = Color(0xFFE53E3E);
   static const successColor = Color(0xFF38A169);
   
-  final allServices = [
-    'Entretien', 'Diagnostic', 'Révision', 'Dépannage', 
-    'Électricité', 'Carrosserie', 'Climatisation'
-  ];
+final allServices = Service.values;
+
 
   @override
   void initState() {
@@ -63,26 +61,26 @@ class _AddMecScreenState extends ConsumerState<AddMecScreen>
   }
 
   void _initializeData() {
-    if (widget.mecanicien != null) {
-      final m = widget.mecanicien!;
-      nomCtrl.text = m.nom;
-      telCtrl.text = m.telephone;
-      emailCtrl.text = m.email;
-      matriculeCtrl.text = m.matricule;
-      salaireCtrl.text = m.salaire.toString();
-      experienceCtrl.text = m.experience;
-      permisCtrl.text = m.permisConduite;
-      dateNaissance = m.dateNaissance;
-      dateEmbauche = m.dateEmbauche;
-      poste = m.poste;
-      typeContrat = m.typeContrat;
-      statut = m.statut;
-      selectedServices.addAll(m.services);
-    } else {
-      poste = Poste.mecanicien;
-      typeContrat = TypeContrat.cdi;
-      statut = Statut.actif;
-    }
+   if (widget.mecanicien != null) {
+  final m = widget.mecanicien!;
+  nomCtrl.text = m.nom;
+  telCtrl.text = m.telephone;
+  emailCtrl.text = m.email;
+  matriculeCtrl.text = m.matricule;
+  salaireCtrl.text = m.salaire.toString();
+  experienceCtrl.text = m.experience;
+  permisCtrl.text = m.permisConduite;
+  dateNaissance = m.dateNaissance;
+  dateEmbauche = m.dateEmbauche;
+  poste = m.poste;
+  typeContrat = m.typeContrat;
+  statut = m.statut;
+  selectedServices.addAll(m.services); 
+} else {
+  poste = Poste.mecanicien;
+  typeContrat = TypeContrat.cdi;
+  statut = Statut.actif;
+}
   }
 
   @override
@@ -139,12 +137,14 @@ class _AddMecScreenState extends ConsumerState<AddMecScreen>
     String? Function(String?)? validator,
     int maxLines = 1,
     String? suffix,
+    List<TextInputFormatter>? inputFormatters,
   }) {
     return TextFormField(
       controller: controller,
       keyboardType: keyboardType,
       maxLines: maxLines,
       validator: validator,
+      inputFormatters: inputFormatters,
       style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
       decoration: InputDecoration(
         labelText: label,
@@ -250,48 +250,54 @@ class _AddMecScreenState extends ConsumerState<AddMecScreen>
   }
 
   Widget _buildServicesSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            const Icon(Icons.build, color: primaryColor, size: 20),
-            const SizedBox(width: 8),
-            Text('Services', style: Theme.of(context).textTheme.titleMedium?.copyWith(
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Row(
+        children: [
+          const Icon(Icons.build, color: primaryColor, size: 20),
+          const SizedBox(width: 8),
+          Text(
+            'Services',
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
               fontWeight: FontWeight.w600,
               color: Colors.black87,
-            )),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: allServices.map((service) {
-            final selected = selectedServices.contains(service);
-            return FilterChip(
-              label: Text(service, style: TextStyle(
+            ),
+          ),
+        ],
+      ),
+      const SizedBox(height: 12),
+      Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: allServices.map((service) {
+          final selected = selectedServices.contains(service);
+          return FilterChip(
+            label: Text(
+              service.label,
+              style: TextStyle(
                 color: selected ? Colors.white : primaryColor,
                 fontWeight: FontWeight.w500,
-              )),
-              selected: selected,
-              selectedColor: primaryColor,
-              checkmarkColor: Colors.white,
-              backgroundColor: Colors.grey[100],
-              side: BorderSide(color: selected ? primaryColor : Colors.grey[300]!),
-              onSelected: (on) {
-                HapticFeedback.selectionClick();
-                setState(() {
-                  if (on) selectedServices.add(service);
-                  else selectedServices.remove(service);
-                });
-              },
-            );
-          }).toList(),
-        ),
-      ],
-    );
-  }
+              ),
+            ),
+            selected: selected,
+            selectedColor: primaryColor,
+            checkmarkColor: Colors.white,
+            backgroundColor: Colors.grey[100],
+            side: BorderSide(color: selected ? primaryColor : Colors.grey[300]!),
+            onSelected: (on) {
+              HapticFeedback.selectionClick();
+              setState(() {
+                if (on) selectedServices.add(service);
+                else selectedServices.remove(service);
+              });
+            },
+          );
+        }).toList(),
+      ),
+    ],
+  );
+}
 
   @override
   Widget build(BuildContext context) {
@@ -338,24 +344,34 @@ class _AddMecScreenState extends ConsumerState<AddMecScreen>
                         validator: (v) => (v?.isEmpty ?? true) ? 'Nom requis' : null,
                       ),
                       const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          Expanded(child: _buildTextField(
-                            controller: telCtrl,
-                            label: 'Téléphone',
-                            icon: Icons.phone,
-                            keyboardType: TextInputType.phone,
-                            validator: (v) => (v?.isEmpty ?? true) ? 'Téléphone requis' : null,
-                          )),
-                          const SizedBox(width: 12),
-                          Expanded(child: _buildTextField(
-                            controller: emailCtrl,
-                            label: 'Email',
-                            icon: Icons.email,
-                            keyboardType: TextInputType.emailAddress,
-                          )),
-                        ],
-                      ),
+                     _buildTextField(
+  controller: telCtrl,
+  label: 'Téléphone',
+  icon: Icons.phone,
+  keyboardType: TextInputType.phone,
+  validator: (v) {
+    if (v == null || v.isEmpty) return 'Téléphone requis';
+    final regex = RegExp(r'^\d{8}$'); 
+    if (!regex.hasMatch(v)) return 'Format valide: XXXXXXXX';
+    return null;
+  },
+),
+
+const SizedBox(height: 16),
+
+// Champ Email
+_buildTextField(
+  controller: emailCtrl,
+  label: 'Email',
+  icon: Icons.email,
+  keyboardType: TextInputType.emailAddress,
+  validator: (v) {
+    if (v == null || v.isEmpty) return null; // facultatif
+    final regex = RegExp(r'^[\w\.-]+@[\w\.-]+\.\w{2,4}$');
+    if (!regex.hasMatch(v)) return 'Email invalide';
+    return null;
+  },
+),
                       const SizedBox(height: 16),
                       _buildDateField('Date de naissance', Icons.cake, dateNaissance, true),
                     ],
@@ -386,12 +402,21 @@ class _AddMecScreenState extends ConsumerState<AddMecScreen>
                           )),
                           const SizedBox(width: 12),
                           Expanded(child: _buildTextField(
-                            controller: salaireCtrl,
-                            label: 'Salaire',
-                            icon: Icons.attach_money,
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                            suffix: 'DT',
-                          )),
+  controller: salaireCtrl,
+  label: 'Salaire',
+  icon: Icons.attach_money,
+  keyboardType: TextInputType.number,
+  inputFormatters: [
+    FilteringTextInputFormatter.digitsOnly, // uniquement chiffres
+  ],
+  validator: (v) {
+    if (v == null || v.isEmpty) return null;
+    if (int.tryParse(v) == null) return 'Salaire doit être un nombre entier';
+    return null;
+  },
+  suffix: 'DT',
+),
+                          ),
                         ],
                       ),
                       const SizedBox(height: 16),
@@ -492,7 +517,7 @@ void _save() {
   }
 
   final id = widget.mecanicien?.id ?? 'MEC-${DateTime.now().millisecondsSinceEpoch}';
-  final salaire = double.tryParse(salaireCtrl.text.replaceAll(',', '.')) ?? 0.0;
+  final salaire = int.tryParse(salaireCtrl.text) ?? 0;
 
   final mec = Mecanicien(
     id: id,
@@ -506,7 +531,7 @@ void _save() {
     typeContrat: typeContrat ?? TypeContrat.cdi,
     statut: statut ?? Statut.actif,
     salaire: salaire,
-    services: selectedServices.toList(),
+     services: selectedServices.toList(),
     experience: experienceCtrl.text.trim(),
     permisConduite: permisCtrl.text.trim(),
   );

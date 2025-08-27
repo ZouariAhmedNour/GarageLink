@@ -67,6 +67,8 @@ class _NumeroSerieInputState extends State<NumeroSerieInput> {
                   keyboardType: TextInputType.number,
                   decoration: const InputDecoration(
                     hintText: "ex '250' ",
+                     filled: true, 
+                     fillColor: Colors.white, 
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.only(
                         topLeft: Radius.circular(8),
@@ -83,10 +85,10 @@ class _NumeroSerieInputState extends State<NumeroSerieInput> {
               // TUN fixe
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
-                color: Colors.grey.shade200,
+                color: Colors.blue[900],
                 child: const Text(
                   "TUN",
-                  style: TextStyle(fontWeight: FontWeight.bold),
+                  style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
                 ),
               ),
               // Partie après TUN
@@ -95,6 +97,8 @@ class _NumeroSerieInputState extends State<NumeroSerieInput> {
                   keyboardType: TextInputType.number,
                   decoration: const InputDecoration(
                     hintText: "ex: '1999' ",
+                    filled: true, 
+                    fillColor: Colors.white, 
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.only(
                         topRight: Radius.circular(8),

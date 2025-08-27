@@ -1,5 +1,7 @@
 import 'dart:convert';
 
+enum Carburant { essence, diesel, electrique, hybride }
+
 class Vehicule {
   final String id;
   final String immatriculation;
@@ -10,12 +12,14 @@ class Vehicule {
   final String? picKm; // stocke le path/local file or url
   final DateTime? dateCirculation;
   final String? clientId; // id du client propriétaire
+  final Carburant carburant; // 👈 nouveau champ obligatoire
 
   Vehicule({
     required this.id,
     required this.immatriculation,
     required this.marque,
     required this.modele,
+    required this.carburant,
     this.annee,
     this.kilometrage,
     this.picKm,
@@ -33,6 +37,7 @@ class Vehicule {
     String? picKm,
     DateTime? dateCirculation,
     String? clientId,
+    Carburant? carburant,
   }) {
     return Vehicule(
       id: id ?? this.id,
@@ -44,6 +49,7 @@ class Vehicule {
       picKm: picKm ?? this.picKm,
       dateCirculation: dateCirculation ?? this.dateCirculation,
       clientId: clientId ?? this.clientId,
+      carburant: carburant ?? this.carburant,
     );
   }
 
@@ -58,6 +64,7 @@ class Vehicule {
       'picKm': picKm,
       'dateCirculation': dateCirculation?.toIso8601String(),
       'clientId': clientId,
+      'carburant': carburant.name, // 👈 enum -> string
     };
   }
 
@@ -74,6 +81,10 @@ class Vehicule {
           ? DateTime.parse(map['dateCirculation'])
           : null,
       clientId: map['clientId'],
+      carburant: Carburant.values.firstWhere(
+        (e) => e.name == map['carburant'],
+        orElse: () => Carburant.essence, // valeur par défaut
+      ),
     );
   }
 

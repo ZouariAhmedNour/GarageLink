@@ -2,7 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:garagelink/components/default_app_bar.dart';
-import 'package:garagelink/mecanicien/clients_liste/client_dash.dart';
+import 'package:garagelink/mecanicien/Gestion%20Clients/client_dash.dart';
 import 'package:garagelink/mecanicien/dashboard/screens/dash_board_screen.dart';
 import 'package:garagelink/mecanicien/devis/creation_devis.dart';
 import 'package:garagelink/mecanicien/edit_localisation.dart';

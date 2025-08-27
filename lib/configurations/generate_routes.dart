@@ -4,10 +4,11 @@ import 'package:garagelink/auth/signup.dart';
 import 'package:garagelink/complete_profile.dart';
 import 'package:garagelink/configurations/app_routes.dart';
 import 'package:garagelink/mecanicien/Facture/facture_screen.dart';
-import 'package:garagelink/mecanicien/clients_liste/add_client.dart';
-import 'package:garagelink/mecanicien/clients_liste/add_veh.dart';
-import 'package:garagelink/mecanicien/clients_liste/client_dash.dart';
-import 'package:garagelink/mecanicien/clients_liste/vehicule_info.dart';
+import 'package:garagelink/mecanicien/Gestion%20Clients/add_client.dart';
+import 'package:garagelink/mecanicien/Gestion%20Clients/add_veh.dart';
+import 'package:garagelink/mecanicien/Gestion%20Clients/client_dash.dart';
+import 'package:garagelink/mecanicien/Gestion%20Clients/edit_client.dart';
+import 'package:garagelink/mecanicien/Gestion%20Clients/vehicule_info.dart';
 import 'package:garagelink/mecanicien/dashboard/screens/dash_board_screen.dart';
 import 'package:garagelink/mecanicien/devis/creation_devis.dart';
 import 'package:garagelink/mecanicien/devis/devis_preview_page.dart';
@@ -23,6 +24,7 @@ import 'package:garagelink/mecanicien/work%20order/create_order_screen.dart';
 import 'package:garagelink/mecanicien/work%20order/notif_screen.dart';
 import 'package:garagelink/mecanicien/work%20order/rapport_screen.dart';
 import 'package:garagelink/mecanicien/work%20order/work_order_page.dart';
+import 'package:garagelink/models/client.dart';
 import 'package:garagelink/models/devis.dart';
 import 'package:garagelink/models/order.dart';
 import 'package:garagelink/splash_screen.dart';
@@ -87,5 +89,12 @@ class GenerateRoutes {
         return VehiculeInfoScreen(vehiculeId: vehiculeId);
       },
     ),
+    GetPage(
+  name: AppRoutes.editClientScreen,
+  page: () {
+    final client = Get.arguments as Client;
+    return EditClientScreen(client: client);
+  },
+),
   ];
 }

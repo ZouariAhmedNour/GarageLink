@@ -5,7 +5,6 @@ import 'package:garagelink/providers/client_provider.dart';
 import 'package:get/get.dart';
 import 'package:uuid/uuid.dart';
 
-
 class AddClientScreen extends ConsumerStatefulWidget {
   const AddClientScreen({Key? key}) : super(key: key);
 
@@ -22,11 +21,31 @@ class _AddClientScreenState extends ConsumerState<AddClientScreen> {
   Categorie _cat = Categorie.particulier;
 
   @override
+  void dispose() {
+    _nomCtrl.dispose();
+    _mailCtrl.dispose();
+    _telCtrl.dispose();
+    _adrCtrl.dispose();
+    super.dispose();
+  }
+
+  String? _emailValidator(String? v) {
+    if (v == null || v.isEmpty) return null; // email optionnel
+    final emailRegex = RegExp(r'^[^@]+@[^@]+\.[^@]+');
+    return emailRegex.hasMatch(v) ? null : 'Email invalide';
+  }
+
+  String? _requiredValidator(String? v) =>
+      v == null || v.isEmpty ? 'Obligatoire' : null;
+
+  @override
   Widget build(BuildContext context) {
     final primary = const Color(0xFF357ABD);
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Ajouter client'),
+        iconTheme: const IconThemeData(color: Colors.white),
+        title: const Text('Ajouter client', style: TextStyle(color: Colors.white)),
         backgroundColor: primary,
       ),
       body: Padding(
@@ -38,21 +57,24 @@ class _AddClientScreenState extends ConsumerState<AddClientScreen> {
               TextFormField(
                 controller: _nomCtrl,
                 decoration: const InputDecoration(labelText: 'Nom complet'),
-                validator: (v) => v == null || v.isEmpty ? 'Obligatoire' : null,
+                validator: _requiredValidator,
               ),
               TextFormField(
                 controller: _mailCtrl,
                 decoration: const InputDecoration(labelText: 'Email'),
                 keyboardType: TextInputType.emailAddress,
+                validator: _emailValidator,
               ),
               TextFormField(
                 controller: _telCtrl,
                 decoration: const InputDecoration(labelText: 'Téléphone'),
                 keyboardType: TextInputType.phone,
+                validator: _requiredValidator,
               ),
               TextFormField(
                 controller: _adrCtrl,
                 decoration: const InputDecoration(labelText: 'Adresse'),
+                validator: _requiredValidator,
               ),
               const SizedBox(height: 12),
               Row(
@@ -74,29 +96,6 @@ class _AddClientScreenState extends ConsumerState<AddClientScreen> {
                   ),
                 ],
               ),
-              if (_cat == Categorie.professionnel) ...[
-                const SizedBox(height: 8),
-                TextFormField(
-                  decoration: const InputDecoration(
-                    labelText: 'Nom entreprise',
-                  ),
-                ),
-                TextFormField(
-                  decoration: const InputDecoration(
-                    labelText: 'Téléphone entreprise',
-                  ),
-                ),
-                TextFormField(
-                  decoration: const InputDecoration(
-                    labelText: 'Email entreprise',
-                  ),
-                ),
-                TextFormField(
-                  decoration: const InputDecoration(
-                    labelText: 'Adresse entreprise',
-                  ),
-                ),
-              ],
               const SizedBox(height: 20),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(backgroundColor: primary),
@@ -105,10 +104,10 @@ class _AddClientScreenState extends ConsumerState<AddClientScreen> {
                     final id = const Uuid().v4();
                     final client = Client(
                       id: id,
-                      nomComplet: _nomCtrl.text,
-                      mail: _mailCtrl.text,
-                      telephone: _telCtrl.text,
-                      adresse: _adrCtrl.text,
+                      nomComplet: _nomCtrl.text.trim(),
+                      mail: _mailCtrl.text.trim(),
+                      telephone: _telCtrl.text.trim(),
+                      adresse: _adrCtrl.text.trim(),
                       categorie: _cat,
                     );
                     ref.read(clientsProvider.notifier).addClient(client);

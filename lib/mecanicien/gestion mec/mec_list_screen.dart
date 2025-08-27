@@ -6,7 +6,6 @@ import 'package:garagelink/providers/mecaniciens_provider.dart';
 import 'package:get/get.dart';
 import 'add_mec_screen.dart';
 import 'widgets/search_and_sort_row.dart';
-import 'widgets/filter_row.dart';
 import 'widgets/service_chips.dart';
 import 'widgets/mec_list_item.dart';
 import 'widgets/pagination_controls.dart';
@@ -43,7 +42,7 @@ class _MecListScreenState extends ConsumerState<MecListScreen>
   final Set<String> _expanded = {};
   
   // UI state
-  bool _isFilterExpanded = false;
+  
   bool _isLoading = false;
   int _page = 0;
   int _pageSize = 8;
@@ -165,6 +164,7 @@ _fabScaleAnimation = Tween<double>(begin: 0.0, end: 1.0)
     return Scaffold(
       backgroundColor: MecColors.surface,
       appBar: _buildAppBar(filteredSorted.length),
+      
       body: SlideTransition(
         position: _slideAnimation,
         child: FadeTransition(
@@ -189,6 +189,7 @@ _fabScaleAnimation = Tween<double>(begin: 0.0, end: 1.0)
 
   PreferredSizeWidget _buildAppBar(int count) {
     return AppBar(
+      iconTheme: const IconThemeData(color: Colors.white),
       elevation: 0,
       backgroundColor: MecColors.primary,
       foregroundColor: Colors.white,
@@ -213,11 +214,6 @@ _fabScaleAnimation = Tween<double>(begin: 0.0, end: 1.0)
           icon: const Icon(Icons.refresh, color: Colors.white,),
           onPressed: _refreshData,
           tooltip: 'Actualiser',
-        ),
-        IconButton(
-          icon: Icon(_isFilterExpanded ? Icons.filter_list_off : Icons.filter_list, color: Colors.white,),
-          onPressed: () => setState(() => _isFilterExpanded = !_isFilterExpanded),
-          tooltip: 'Filtres',
         ),
       ],
     );
@@ -292,53 +288,107 @@ _fabScaleAnimation = Tween<double>(begin: 0.0, end: 1.0)
       ),
     );
   }
+  int _selectedFilterIndex = 0; // 0=Poste, 1=Statut, 2=Contrat, 3=Ancienneté, 4=Compétences
+Widget _buildFiltersSection() {
+  return Container(
+    margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+    padding: const EdgeInsets.all(16),
+    decoration: _buildCardDecoration(),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildSectionHeader(Icons.search, 'Recherche et filtres'),
+        const SizedBox(height: 12),
 
-  Widget _buildFiltersSection() {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 300),
-      height: _isFilterExpanded ? null : 0,
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 16),
-        padding: const EdgeInsets.all(16),
-        decoration: _buildCardDecoration(),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildSectionHeader(Icons.search, 'Recherche et filtres'),
-            const SizedBox(height: 12),
-            SearchAndSortRow(
-              onSearchChanged: (v) => _updateFilter(() => _filterState.search = v),
-              onSortChanged: (v) => _updateFilter(() => _filterState.sortBy = v),
-              onSortDirectionChanged: (v) => _updateFilter(() => _filterState.sortAsc = v),
-              sortBy: _filterState.sortBy,
-              sortAsc: _filterState.sortAsc,
-            ),
-            const SizedBox(height: 12),
-            FilterRow(
-              onPosteChanged: (v) => _updateFilter(() => _filterState.posteFilter = v),
-              onStatutChanged: (v) => _updateFilter(() => _filterState.statutFilter = v),
-              onContratChanged: (v) => _updateFilter(() => _filterState.typeContratFilter = v),
-              onAncienneteChanged: (v) => _updateFilter(() => _filterState.ancienneteFilter = v),
-              posteFilter: _filterState.posteFilter,
-              statutFilter: _filterState.statutFilter,
-              typeContratFilter: _filterState.typeContratFilter,
-              ancienneteFilter: _filterState.ancienneteFilter,
-            ),
-            const SizedBox(height: 12),
-            _buildSectionHeader(Icons.psychology, 'Compétences :'),
-            const SizedBox(height: 8),
-            ServicesChips(
-              onServiceSelected: (c, on) => _updateFilter(() {
-                if (on) _filterState.servicesFilter.add(c);
-                else _filterState.servicesFilter.remove(c);
-              }),
-              servicesFilter: _filterState.servicesFilter,
-            ),
+        // 🔍 Recherche + tri
+        SearchAndSortRow(
+          onSearchChanged: (v) => _updateFilter(() => _filterState.search = v),
+          onSortChanged: (v) => _updateFilter(() => _filterState.sortBy = v),
+          onSortDirectionChanged: (v) => _updateFilter(() => _filterState.sortAsc = v),
+          sortBy: _filterState.sortBy,
+          sortAsc: _filterState.sortAsc,
+        ),
+
+        const SizedBox(height: 12),
+
+        // 🔹 ToggleButtons pour les filtres principaux
+        ToggleButtons(
+          isSelected: List.generate(4, (i) => i == _selectedFilterIndex),
+          borderRadius: BorderRadius.circular(8),
+          selectedColor: Colors.white,
+          fillColor: MecColors.primary,
+          onPressed: (index) {
+            setState(() => _selectedFilterIndex = index);
+          },
+          children: const [
+            Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: Text("Poste")),
+            Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: Text("Statut")),
+            Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: Text("Contrat")),
+            Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: Text("Services")),
           ],
         ),
-      ),
-    );
-  }
+
+        const SizedBox(height: 12),
+
+        // 🔹 Champ dynamique selon le filtre choisi
+        if (_selectedFilterIndex == 0) // Poste
+          DropdownButtonFormField<String>(
+            value: _filterState.posteFilter,
+            items: ['Tous', 'Chef', 'Technicien', 'Apprenti']
+                .map((p) => DropdownMenuItem(value: p, child: Text(p)))
+                .toList(),
+            onChanged: (v) => _updateFilter(() => _filterState.posteFilter = v ?? 'Tous'),
+            decoration: const InputDecoration(labelText: "Filtrer par poste"),
+          ),
+
+        if (_selectedFilterIndex == 1) // Statut
+          DropdownButtonFormField<String>(
+            value: _filterState.statutFilter,
+            items: ['Tous', 'Actif', 'Inactif']
+                .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                .toList(),
+            onChanged: (v) => _updateFilter(() => _filterState.statutFilter = v ?? 'Tous'),
+            decoration: const InputDecoration(labelText: "Filtrer par statut"),
+          ),
+
+        if (_selectedFilterIndex == 2) // Contrat
+          DropdownButtonFormField<String>(
+            value: _filterState.typeContratFilter,
+            items: ['Tous', 'CDI', 'CDD', 'Stage']
+                .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                .toList(),
+            onChanged: (v) => _updateFilter(() => _filterState.typeContratFilter = v ?? 'Tous'),
+            decoration: const InputDecoration(labelText: "Filtrer par type de contrat"),
+          ),
+
+        if (_selectedFilterIndex == 3) // Ancienneté
+          DropdownButtonFormField<String>(
+            value: _filterState.ancienneteFilter,
+            items: ['Tous', '<1', '1-3', '3-5', '5+']
+                .map((a) => DropdownMenuItem(value: a, child: Text(a)))
+                .toList(),
+            onChanged: (v) => _updateFilter(() => _filterState.ancienneteFilter = v ?? 'Tous'),
+            decoration: const InputDecoration(labelText: "Filtrer par ancienneté"),
+          ),
+
+        if (_selectedFilterIndex == 4) ...[
+          _buildSectionHeader(Icons.psychology, 'Compétences'),
+          const SizedBox(height: 8),
+          ServicesChips(
+            onServiceSelected: (c, on) => _updateFilter(() {
+              if (on) {
+                _filterState.servicesFilter.add(c);
+              } else {
+                _filterState.servicesFilter.remove(c);
+              }
+            }),
+            servicesFilter: _filterState.servicesFilter,
+          ),
+        ],
+      ],
+    ),
+  );
+}
 
   Widget _buildSectionHeader(IconData icon, String title) {
     return Row(
