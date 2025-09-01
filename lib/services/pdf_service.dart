@@ -1,3 +1,4 @@
+// lib/services/pdf_service.dart
 import 'dart:typed_data';
 
 import 'package:garagelink/models/devis.dart';
@@ -12,6 +13,10 @@ class PdfService {
 
     final tableHeaders = ['Article', 'Qté', 'PU', 'Total'];
 
+    // Calculs utiles
+    final double sousTotalBrut = devis.sousTotal; // avant remise
+    final double remiseAmount = (sousTotalBrut - devis.totalHt).clamp(0.0, double.infinity);
+
     doc.addPage(
       pw.MultiPage(
         pageFormat: PdfPageFormat.a4,
@@ -23,7 +28,7 @@ class PdfService {
             children: [
               pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.start, children: [
                 pw.Text('GarageLink', style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold)),
-                pw.Text(title, style: pw.TextStyle(fontSize: 16)), // <-- utilise title ici
+                pw.Text(title, style: pw.TextStyle(fontSize: 16)),
               ]),
               pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.end, children: [
                 pw.Text('Date: ${Fmt.date(devis.date)}'),
@@ -62,9 +67,25 @@ class PdfService {
               pw.Container(
                 width: 250,
                 child: pw.Column(crossAxisAlignment: pw.CrossAxisAlignment.stretch, children: [
-                  _line('Sous-total', Fmt.money(devis.sousTotal)),
-                  _line('TVA (${(devis.tva * 100).toStringAsFixed(0)}%)', Fmt.money(devis.montantTva)),
+                  // Afficher le Sous-total brut avant remise
+                  _line('Sous-total (HT brut)', Fmt.money(sousTotalBrut)),
+                   pw.SizedBox(height: 6),
+
+                  // Affiche la remise (en % et montant) seulement si > 0
+                  if (devis.remise > 0)
+                    pw.Column(children: [
+                      _line('Remise (${(devis.remise * 100).toStringAsFixed(0)}%)', '- ${Fmt.money(remiseAmount)}'),
+                      pw.SizedBox(height: 6),
+                    ]),
+
+                  // Total HT après remise
+                  _line('Total HT', Fmt.money(devis.totalHt)),
+                   pw.SizedBox(height: 6),
+
+                  // Montant TVA (appliquée sur le Total HT)
+                  _line('Montant TVA (${(devis.tva * 100).toStringAsFixed(0)}%)', Fmt.money(devis.montantTva)),
                   pw.Divider(),
+                  // Total TTC final
                   _line('Total TTC', Fmt.money(devis.totalTtc), bold: true),
                 ]),
               )
@@ -74,7 +95,6 @@ class PdfService {
           pw.Text('Durée estimée de travail: ${Fmt.duration(devis.dureeEstimee)}'),
           pw.SizedBox(height: 8),
 
-          // Conditions différentes si c'est une facture
           if (title.toLowerCase() == 'facture')
             pw.Column(children: [
               pw.Text('Facture émise. Paiement : selon conditions convenues.'),

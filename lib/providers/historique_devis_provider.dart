@@ -1,20 +1,20 @@
 // lib/providers/historique_devis_provider.dart
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:garagelink/models/devis.dart';
+import 'package:garagelink/models/facture.dart';
+import 'package:garagelink/providers/factures_provider.dart';
 
 class HistoriqueDevisNotifier extends StateNotifier<List<Devis>> {
   HistoriqueDevisNotifier() : super([]);
 
   void ajouterDevis(Devis devis) {
-    // si déjà présent (même id), on remplace
     final idx = state.indexWhere((d) => d.id == devis.id);
     if (idx != -1) {
       final copie = [...state];
       copie[idx] = devis;
       state = copie;
     } else {
-      // on préfixe la liste (les plus récents en haut)
-      state = [devis, ...state];
+      state = [devis, ...state]; // ajouter en tête
     }
   }
 
@@ -56,10 +56,26 @@ final historiqueDevisProvider =
   (ref) => HistoriqueDevisNotifier(),
 );
 
-// Search filter provider (conserver ton implementation)
+// ✅ Fonction utilitaire pour accepter un devis et générer une facture
+void onDevisAccepted(Devis devis, WidgetRef ref) {
+  final facture = Facture(
+    id: 'INV_${devis.id}', // logique ID simple
+    date: DateTime.now(),
+    montant: double.parse(devis.totalTtc.toStringAsFixed(2)),
+    clientName: devis.client,
+  );
+
+  // Ici on utilise facturesProvider (pas facturesNotifierProvider)
+  ref.read(facturesProvider.notifier).setFactures([
+    ...ref.read(facturesProvider).factures,
+    facture,
+  ]);
+}
+
+// 🔎 Provider pour la recherche
 final filtreProvider = StateProvider<String>((ref) => "");
 
-// filtered provider (conserver ton logic)
+// 🔎 Provider filtré
 final devisFiltresProvider = Provider<List<Devis>>((ref) {
   final filtre = ref.watch(filtreProvider).toLowerCase();
   final historique = ref.watch(historiqueDevisProvider);

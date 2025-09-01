@@ -3,6 +3,7 @@ import 'package:garagelink/auth/reset_password.dart';
 import 'package:garagelink/auth/signup.dart';
 import 'package:garagelink/complete_profile.dart';
 import 'package:garagelink/configurations/app_routes.dart';
+import 'package:garagelink/mecanicien/Facture/facture_detail_page.dart';
 import 'package:garagelink/mecanicien/Facture/facture_screen.dart';
 import 'package:garagelink/mecanicien/Gestion%20Clients/add_client.dart';
 import 'package:garagelink/mecanicien/Gestion%20Clients/add_veh.dart';
@@ -25,7 +26,7 @@ import 'package:garagelink/mecanicien/work%20order/notif_screen.dart';
 import 'package:garagelink/mecanicien/work%20order/rapport_screen.dart';
 import 'package:garagelink/mecanicien/work%20order/work_order_page.dart';
 import 'package:garagelink/models/client.dart';
-import 'package:garagelink/models/devis.dart';
+import 'package:garagelink/models/facture.dart';
 import 'package:garagelink/models/order.dart';
 import 'package:garagelink/splash_screen.dart';
 import 'package:get/get.dart';
@@ -43,10 +44,10 @@ class GenerateRoutes {
     GetPage(name: AppRoutes.dashboard, page: () => DashBoardScreen()),
     GetPage(name: AppRoutes.mecaServices, page: () => MecaServicesPage()),
     GetPage(name: AppRoutes.editLocalisation, page: () => EditLocalisation()),
-    GetPage(name: AppRoutes.creation_devis, page: () => CreationDevisPage()),
-    GetPage(name: AppRoutes.devis_preview_page, page: () => DevisPreviewPage()),
+    GetPage(name: AppRoutes.creationDevis, page: () => CreationDevisPage()),
+    GetPage(name: AppRoutes.devisPreviewPage, page: () => DevisPreviewPage()),
     GetPage(
-      name: AppRoutes.historique_devis,
+      name: AppRoutes.historiqueDevis,
       page: () => HistoriqueDevisPage(),
     ),
     GetPage(name: AppRoutes.workOrderPage, page: () => WorkOrderPage()),
@@ -64,14 +65,16 @@ class GenerateRoutes {
       page: () => AddEditServiceScreen(),
     ),
     GetPage(name: AppRoutes.stockDashboard, page: () => StockDashboard()),
-    GetPage(
-      name: AppRoutes.factureScreen,
-      page: () {
-        final devis = Get.arguments as Devis; // récupère l'objet envoyé
-        return FactureScreen(devis: devis);
-      },
-    ),
-    GetPage(name: AppRoutes.mec_list_screen, page: () => MecListScreen()),
+  GetPage(name: AppRoutes.factureScreen, page: () => const FactureScreen()),
+  GetPage(
+  name: AppRoutes.factureDetailPage,
+  page: () {
+    final facture = Get.arguments as Facture; // Récupération de l'argument
+    return FactureDetailPage(facture: facture);
+  },
+),
+      
+    GetPage(name: AppRoutes.mecListScreen, page: () => MecListScreen()),
     GetPage(name: AppRoutes.addMecScreen, page: () => AddMecScreen()),
     GetPage(name: AppRoutes.clientDash, page: () => ClientDash()),
     GetPage(name: AppRoutes.addClientScreen, page: () => AddClientScreen()),

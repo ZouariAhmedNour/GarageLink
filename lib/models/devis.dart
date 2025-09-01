@@ -1,3 +1,4 @@
+// lib/mecanicien/devis/models/devis.dart
 import 'package:garagelink/mecanicien/devis/models/piece.dart';
 import 'package:uuid/uuid.dart';
 
@@ -11,9 +12,9 @@ class Devis {
   final List<Piece> pieces;
   final double mainOeuvre;
   final Duration dureeEstimee;
-  final double tva;
+  final double tva;      // fraction: 0.19 pour 19%
+  final double remise;   // fraction: 0.10 pour 10%
   final DevisStatus status;
-  
 
   Devis({
     String? id,
@@ -24,14 +25,22 @@ class Devis {
     required this.mainOeuvre,
     required this.dureeEstimee,
     this.tva = 0.19,
-      this.status = DevisStatus.brouillon,
-  }) : id = id ?? const Uuid().v4(); // génère un id unique par défaut
-  
+    this.remise = 0.0,
+    this.status = DevisStatus.brouillon,
+  }) : id = id ?? const Uuid().v4();
 
+  // sous-total avant remise (HT brut)
   double get sousTotalPieces => pieces.fold(0.0, (s, p) => s + p.total);
   double get sousTotal => sousTotalPieces + mainOeuvre;
-  double get montantTva => sousTotal * tva;
-  double get totalTtc => sousTotal + montantTva;
+
+  // Total HT après application de la remise
+  double get totalHt => sousTotal * (1.0 - remise);
+
+  // Montant TVA = TVA appliquée sur le Total HT
+  double get montantTva => totalHt * tva;
+
+  // Total TTC final
+  double get totalTtc => totalHt + montantTva;
 
   Devis copyWith({
     String? id,
@@ -42,8 +51,10 @@ class Devis {
     double? mainOeuvre,
     Duration? dureeEstimee,
     double? tva,
-    DevisStatus? status
-  }) => Devis(
+    double? remise,
+    DevisStatus? status,
+  }) =>
+      Devis(
         id: id ?? this.id,
         client: client ?? this.client,
         numeroSerie: numeroSerie ?? this.numeroSerie,
@@ -52,6 +63,7 @@ class Devis {
         mainOeuvre: mainOeuvre ?? this.mainOeuvre,
         dureeEstimee: dureeEstimee ?? this.dureeEstimee,
         tva: tva ?? this.tva,
+        remise: remise ?? this.remise,
         status: status ?? this.status,
       );
 }

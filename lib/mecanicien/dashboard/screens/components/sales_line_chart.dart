@@ -1,3 +1,5 @@
+// lib/mecanicien/dashboard/screens/components/sales_line_chart.dart
+import 'dart:math';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 
@@ -25,19 +27,50 @@ class SalesLineChart extends StatelessWidget {
       elevation: 4,
       child: Padding(
         padding: const EdgeInsets.all(16),
-        child: SingleChildScrollView(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.6), // Limit to 60% of screen height
-            child: Column(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final maxAvailable = constraints.maxHeight.isFinite ? constraints.maxHeight : double.infinity;
+            final defaultChartHeight = 200.0;
+            double chartHeight;
+
+            if (maxAvailable.isFinite) {
+              chartHeight = max(100.0, min(defaultChartHeight, maxAvailable - 80.0));
+            } else {
+              chartHeight = defaultChartHeight;
+            }
+
+            return Column(
+              mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  "Chiffre d’affaires & Pièces vendues",
-                  style: Theme.of(context).textTheme.titleLarge,
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        "Chiffre d’affaires & Pièces vendues",
+                        style: Theme.of(context).textTheme.titleLarge,
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 2,
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.85),
+                        borderRadius: BorderRadius.circular(8),
+                        boxShadow: [
+                          BoxShadow(color: Colors.black12, blurRadius: 4),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 16),
+                // Chart : hauteur adaptative (évite overflow)
                 SizedBox(
-                  height: 200,
+                  height: chartHeight,
+                  width: double.infinity,
                   child: LineChart(
                     LineChartData(
                       lineBarsData: [
@@ -69,12 +102,14 @@ class SalesLineChart extends StatelessWidget {
                           },
                         ),
                       ),
+                      gridData: FlGridData(show: true),
+                      borderData: FlBorderData(show: false),
                     ),
                   ),
                 ),
               ],
-            ),
-          ),
+            );
+          },
         ),
       ),
     );

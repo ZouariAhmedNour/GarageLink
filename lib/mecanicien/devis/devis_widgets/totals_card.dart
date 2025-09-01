@@ -1,3 +1,4 @@
+// lib/mecanicien/devis/devis_widgets/totals_card.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:garagelink/providers/devis_provider.dart';
@@ -10,6 +11,8 @@ class TotalsCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final q = ref.watch(devisProvider);
+    final double remiseAmount = q.sousTotal - q.totalHt; // montant de la remise absolue
+
     return Card(
       color: Colors.white,
       shape: RoundedRectangleBorder(
@@ -23,13 +26,19 @@ class TotalsCard extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            _row('Sous-total (pièces + main-d’œuvre)', Fmt.money(q.sousTotal)),
+            // Ligne : Sous-total (pièces + main-d'oeuvre)
+            _row('Sous-total (HT brut)', Fmt.money(q.sousTotal)),
             const SizedBox(height: 6),
-            _row(
-              'TVA (${(q.tva * 100).toStringAsFixed(0)}%)',
-              Fmt.money(q.montantTva),
-            ),
+            // Remise en % et montant
+            _row('Remise (${(q.remise * 100).toStringAsFixed(0)}%)', '- ${Fmt.money(remiseAmount)}'),
             const Divider(height: 20),
+            // Total HT après remise
+            _row('Total HT', Fmt.money(q.totalHt), isBold: true),
+            const SizedBox(height: 6),
+            // Montant TVA
+            _row('TVA (${(q.tva * 100).toStringAsFixed(0)}%)', Fmt.money(q.montantTva)),
+            const Divider(height: 20),
+            // Total TTC
             _row('Total TTC', Fmt.money(q.totalTtc), isBold: true),
           ],
         ),
@@ -38,23 +47,22 @@ class TotalsCard extends ConsumerWidget {
   }
 
   Widget _row(String label, String value, {bool isBold = false}) => Row(
-    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-    children: [
-      Expanded(
-        child: Text(label,
-         style: const TextStyle(
-          color: Colors.black
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(color: Colors.black),
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
-            overflow: TextOverflow.ellipsis,
+          Text(
+            value,
+            style: TextStyle(
+              fontWeight: isBold ? FontWeight.w800 : FontWeight.w600,
+              color: Colors.black,
+            ),
           ),
-      ),
-      Text(
-        value,
-        style: TextStyle(
-          fontWeight: isBold ? FontWeight.w800 : FontWeight.w600,
-          color: Colors.black,
-        ),
-      ),
-    ],
-  );
+        ],
+      );
 }

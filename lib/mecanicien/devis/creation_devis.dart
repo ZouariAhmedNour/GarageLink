@@ -38,12 +38,16 @@ class _CreationDevisPageState extends ConsumerState<CreationDevisPage>
   final _qteCtrl = TextEditingController(text: '1');
   final _puCtrl = TextEditingController();
 
+    // Entrée TVA & Remise
+  final _tvaCtrl = TextEditingController(text: '19');
+  final _remiseCtrl = TextEditingController(text: '0'); // <-- ajouté
+
+
   // Entrée numéro de série
   final _numLocalCtrl = TextEditingController();
 
-  // Main d'œuvre & TVA & durée
+  // Main d'œuvre  & durée
   final _mainOeuvreCtrl = TextEditingController(text: '0');
-  final _tvaCtrl = TextEditingController(text: '19');
   Duration _duree = const Duration(hours: 1);
 
   late AnimationController _animationController;
@@ -74,6 +78,7 @@ class _CreationDevisPageState extends ConsumerState<CreationDevisPage>
     _mainOeuvreCtrl.dispose();
     _tvaCtrl.dispose();
     _numLocalCtrl.dispose();
+    _remiseCtrl.dispose();
 
     super.dispose();
   }
@@ -298,7 +303,7 @@ class _CreationDevisPageState extends ConsumerState<CreationDevisPage>
                               },
                             ),
                             const SizedBox(height: 16),
-                            TvaAndTotals(isTablet: isTablet, tvaCtrl: _tvaCtrl),
+                            TvaAndTotals(isTablet: isTablet, tvaCtrl: _tvaCtrl, remiseCtrl: _remiseCtrl),
                           ],
                         ),
                       ),

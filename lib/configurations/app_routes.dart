@@ -10,9 +10,9 @@ class AppRoutes {
   static const String dashboard = '/dashboard';
   static const String mecaServices = '/meca_services';
   static const String editLocalisation = '/editLocalisation';
-  static const String creation_devis = '/creationDevis';
-  static const String devis_preview_page = '/devisPreviewPage';
-  static const String historique_devis = '/historiqueDevis';
+  static const String creationDevis = '/creationDevis';
+  static const String devisPreviewPage = '/devisPreviewPage';
+  static const String historiqueDevis = '/historiqueDevis';
   static const String workOrderPage = '/workOrderPage';
   static const String notifScreen = '/notifScreen';
   static const String suiviScreen = '/suiviScreen';
@@ -21,7 +21,8 @@ class AppRoutes {
   static const String addEditServiceScreen = '/addEditServiceScreen';
   static const String stockDashboard = '/stockDashboard';
   static const String factureScreen = '/factureScreen';
-  static const String mec_list_screen= '/mecListScreen';
+  static const String factureDetailPage = '/FactureDetailPage';
+  static const String mecListScreen= '/mecListScreen';
   static const String addMecScreen = '/addMecScreen';
   static const String clientDash = '/clientDash';
   static const String addClientScreen = '/addClientScreen';

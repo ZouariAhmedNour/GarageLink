@@ -360,262 +360,335 @@ class _HistoriqueDevisPageState extends ConsumerState<HistoriqueDevisPage>
   }
 
   Widget _buildResultsList() {
-  final historique = ref.watch(devisFiltresProvider);
+    final historique = ref.watch(devisFiltresProvider);
 
-  if (historique.isEmpty) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: lightBlue,
-              shape: BoxShape.circle,
+    if (historique.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: lightBlue,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.search_off, size: 48, color: primaryBlue),
             ),
-            child: const Icon(Icons.search_off, size: 48, color: primaryBlue),
-          ),
-          const SizedBox(height: 16),
-          const Text(
-            'Aucun devis trouvé',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              color: darkGrey,
+            const SizedBox(height: 16),
+            const Text(
+              'Aucun devis trouvé',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+                color: darkGrey,
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Essayez de modifier vos critères de recherche',
-            style: TextStyle(color: darkGrey.withOpacity(0.7)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  return ListView.builder(
-    physics: const BouncingScrollPhysics(),
-    padding: const EdgeInsets.all(16),
-    itemCount: historique.length,
-    itemBuilder: (context, index) {
-      final devis = historique[index];
-
-      // --- Gestion statut ---
-      Color statusColor;
-      String statusLabel;
-      switch (devis.status) {
-        case DevisStatus.brouillon:
-          statusLabel = 'Brouillon';
-          statusColor = Colors.grey;
-          break;
-        case DevisStatus.envoye:
-        case DevisStatus.enAttente:
-          statusLabel = 'Envoyé';
-          statusColor = Colors.orange;
-          break;
-        case DevisStatus.accepte:
-          statusLabel = 'Accepté';
-          statusColor = Colors.green;
-          break;
-        case DevisStatus.refuse:
-          statusLabel = 'Refusé';
-          statusColor = Colors.red;
-          break;
-      }
-
-      // --- UI ---
-      return Container(
-        margin: const EdgeInsets.only(bottom: 12),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.05),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
+            const SizedBox(height: 8),
+            Text(
+              'Essayez de modifier vos critères de recherche',
+              style: TextStyle(color: darkGrey.withOpacity(0.7)),
             ),
           ],
         ),
-        child: ListTile(
-          contentPadding: const EdgeInsets.all(16),
-          leading: Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: lightBlue,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(
-              Icons.description,
-              color: primaryBlue,
-              size: 24,
-            ),
-          ),
-          title: Text(
-            devis.client,
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: darkGrey,
-            ),
-          ),
-          subtitle: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const SizedBox(height: 4),
-              Row(
-                children: [
-                  Icon(
-                    Icons.calendar_today,
-                    size: 14,
-                    color: darkGrey.withOpacity(0.6),
-                  ),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: Text(
-                      devis.date.toLocal().toString().split(" ")[0],
-                      style: TextStyle(color: darkGrey.withOpacity(0.7)),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
+      );
+    }
+
+    return ListView.builder(
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.all(16),
+      itemCount: historique.length,
+      itemBuilder: (context, index) {
+        final devis = historique[index];
+
+        // --- Gestion statut ---
+        Color statusColor;
+        String statusLabel;
+        switch (devis.status) {
+          case DevisStatus.brouillon:
+            statusLabel = 'Brouillon';
+            statusColor = Colors.grey;
+            break;
+          case DevisStatus.envoye:
+          case DevisStatus.enAttente:
+            statusLabel = 'Envoyé';
+            statusColor = Colors.orange;
+            break;
+          case DevisStatus.accepte:
+            statusLabel = 'Accepté';
+            statusColor = Colors.green;
+            break;
+          case DevisStatus.refuse:
+            statusLabel = 'Refusé';
+            statusColor = Colors.red;
+            break;
+        }
+
+        // --- UI ---
+        return Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
               ),
-              const SizedBox(height: 4),
-              Row(
+            ],
+          ),
+          child: ListTile(
+            contentPadding: const EdgeInsets.all(16),
+            leading: Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: lightBlue,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Icon(
+                Icons.description,
+                color: primaryBlue,
+                size: 24,
+              ),
+            ),
+            title: Text(
+              devis.client,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: darkGrey,
+              ),
+            ),
+            subtitle: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.calendar_today,
+                      size: 14,
+                      color: darkGrey.withOpacity(0.6),
+                    ),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        devis.date.toLocal().toString().split(" ")[0],
+                        style: TextStyle(color: darkGrey.withOpacity(0.7)),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.money,
+                      size: 14,
+                      color: darkGrey.withOpacity(0.6),
+                    ),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        '${devis.totalTtc.toStringAsFixed(2)}DT',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          color: primaryBlue,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            trailing: SizedBox(
+              width: 100, // Constrain trailing width
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  Icon(
-                    Icons.money,
-                    size: 14,
-                    color: darkGrey.withOpacity(0.6),
-                  ),
-                  const SizedBox(width: 4),
-                  Expanded(
+                  // Badge statut
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: statusColor.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                     child: Text(
-                      '${devis.totalTtc.toStringAsFixed(2)}DT',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w600,
-                        color: primaryBlue,
+                      statusLabel,
+                      style: TextStyle(
+                        color: statusColor,
+                        fontWeight: FontWeight.bold,
                       ),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                ],
-              ),
-            ],
-          ),
-          trailing: SizedBox(
-            width: 100, // Constrain trailing width
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                // Badge statut
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: statusColor.withOpacity(0.12),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    statusLabel,
-                    style: TextStyle(color: statusColor, fontWeight: FontWeight.bold),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                const SizedBox(height: 4), // Reduced from 8 to 4
-                // Actions
-                Expanded(
-                  child: SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Wrap(
-                      spacing: 4,
-                      runSpacing: 4,
-                      alignment: WrapAlignment.end,
-                      crossAxisAlignment: WrapCrossAlignment.center,
-                      children: [
-                        if (devis.status == DevisStatus.brouillon) ...[
-                          IconButton(
-                            icon: const Icon(Icons.send, color: Colors.orange, size: 18),
-                            tooltip: 'Envoyer par e-mail',
-                            onPressed: () async {
-                              await generateAndSendDevis(ref, context, devisToSend: devis);
-                            },
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.check, color: Colors.green, size: 18),
-                            tooltip: 'Accepter (local)',
-                            onPressed: () {
-                              ref.read(historiqueDevisProvider.notifier).updateStatusById(devis.id, DevisStatus.accepte);
-                            },
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.close, color: Colors.red, size: 18),
-                            tooltip: 'Refuser',
-                            onPressed: () {
-                              ref.read(historiqueDevisProvider.notifier).updateStatusById(devis.id, DevisStatus.refuse);
-                            },
-                          ),
-                        ] else if (devis.status == DevisStatus.envoye || devis.status == DevisStatus.enAttente) ...[
-                          IconButton(
-                            icon: const Icon(Icons.check, color: Colors.green, size: 18),
-                            tooltip: 'Accepter',
-                            onPressed: () {
-                              ref.read(historiqueDevisProvider.notifier).updateStatusById(devis.id, DevisStatus.accepte);
-                            },
-                          ),
-                          IconButton(
-                            icon: const Icon(Icons.close, color: Colors.red, size: 18),
-                            tooltip: 'Refuser',
-                            onPressed: () {
-                              ref.read(historiqueDevisProvider.notifier).updateStatusById(devis.id, DevisStatus.refuse);
-                            },
-                          ),
-                        ] else if (devis.status == DevisStatus.accepte) ...[
-                          IconButton(
-                            icon: const Icon(Icons.receipt_long, color: Colors.blue, size: 18),
-                            tooltip: 'Télécharger la facture (PDF)',
-                            onPressed: () async {
-                              try {
-                               final bytes = await PdfService.buildDevisPdf(devis, title: 'Facture');
-await Printing.sharePdf(bytes: bytes, filename: 'facture_${devis.id}.pdf');
-
-                              } catch (e) {
-                                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur génération facture : $e')));
-                              }
-                            },
-                          ),
-                         IconButton(
-  icon: const Icon(Icons.visibility, color: primaryBlue, size: 18),
-  tooltip: 'Voir la facture',
-  onPressed: () {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (_) => DevisPreviewPage(devis: devis)),
-    );
-  },
-),
+                  const SizedBox(height: 4), // Reduced from 8 to 4
+                  // Actions
+                  Expanded(
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Wrap(
+                        spacing: 4,
+                        runSpacing: 4,
+                        alignment: WrapAlignment.end,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          if (devis.status == DevisStatus.brouillon) ...[
+                            IconButton(
+                              icon: const Icon(
+                                Icons.send,
+                                color: Colors.orange,
+                                size: 18,
+                              ),
+                              tooltip: 'Envoyer par e-mail',
+                              onPressed: () async {
+                                await generateAndSendDevis(
+                                  ref,
+                                  context,
+                                  devisToSend: devis,
+                                );
+                              },
+                            ),
+                            IconButton(
+                              icon: const Icon(
+                                Icons.check,
+                                color: Colors.green,
+                                size: 18,
+                              ),
+                              tooltip: 'Accepter (local)',
+                              onPressed: () {
+                                ref
+                                    .read(historiqueDevisProvider.notifier)
+                                    .updateStatusById(
+                                      devis.id,
+                                      DevisStatus.accepte,
+                                    );
+                              },
+                            ),
+                            IconButton(
+                              icon: const Icon(
+                                Icons.close,
+                                color: Colors.red,
+                                size: 18,
+                              ),
+                              tooltip: 'Refuser',
+                              onPressed: () {
+                                ref
+                                    .read(historiqueDevisProvider.notifier)
+                                    .updateStatusById(
+                                      devis.id,
+                                      DevisStatus.refuse,
+                                    );
+                              },
+                            ),
+                          ] else if (devis.status == DevisStatus.envoye ||
+                              devis.status == DevisStatus.enAttente) ...[
+                            IconButton(
+                              icon: const Icon(
+                                Icons.check,
+                                color: Colors.green,
+                                size: 18,
+                              ),
+                              tooltip: 'Accepter',
+                              onPressed: () {
+                                ref
+                                    .read(historiqueDevisProvider.notifier)
+                                    .updateStatusById(
+                                      devis.id,
+                                      DevisStatus.accepte,
+                                    );
+                              },
+                            ),
+                            IconButton(
+                              icon: const Icon(
+                                Icons.close,
+                                color: Colors.red,
+                                size: 18,
+                              ),
+                              tooltip: 'Refuser',
+                              onPressed: () {
+                                ref
+                                    .read(historiqueDevisProvider.notifier)
+                                    .updateStatusById(
+                                      devis.id,
+                                      DevisStatus.refuse,
+                                    );
+                              },
+                            ),
+                          ] else if (devis.status == DevisStatus.accepte) ...[
+                            IconButton(
+                              icon: const Icon(
+                                Icons.receipt_long,
+                                color: Colors.blue,
+                                size: 18,
+                              ),
+                              tooltip: 'Télécharger la facture (PDF)',
+                              onPressed: () async {
+                                try {
+                                  final bytes = await PdfService.buildDevisPdf(
+                                    devis,
+                                    title: 'Facture',
+                                  );
+                                  await Printing.sharePdf(
+                                    bytes: bytes,
+                                    filename: 'facture_${devis.id}.pdf',
+                                  );
+                                } catch (e) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        'Erreur génération facture : $e',
+                                      ),
+                                    ),
+                                  );
+                                }
+                              },
+                            ),
+                            IconButton(
+                              icon: const Icon(
+                                Icons.visibility,
+                                color: primaryBlue,
+                                size: 18,
+                              ),
+                              tooltip: 'Voir la facture',
+                              onPressed: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) =>
+                                        DevisPreviewPage(devis: devis),
+                                  ),
+                                );
+                              },
+                            ),
+                          ],
                         ],
-                      ],
+                      ),
                     ),
                   ),
-                ),
-              ],
-            ),
-          ),
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => DevisPreviewPage(devis: devis),
+                ],
               ),
-            );
-          },
-        ),
-      );
-    },
-  );
-}
+            ),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => DevisPreviewPage(devis: devis),
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {

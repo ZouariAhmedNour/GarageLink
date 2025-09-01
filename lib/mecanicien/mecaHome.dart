@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:garagelink/components/default_app_bar.dart';
+import 'package:garagelink/mecanicien/Facture/facture_screen.dart';
 import 'package:garagelink/mecanicien/Gestion%20Clients/client_dash.dart';
 import 'package:garagelink/mecanicien/dashboard/screens/dash_board_screen.dart';
 import 'package:garagelink/mecanicien/devis/creation_devis.dart';
@@ -307,6 +308,13 @@ class MecaHomePage extends ConsumerWidget {
               description: 'Création et gestion des clients',
               color: const Color.fromARGB(255, 134, 64, 6),
               onTap: () => Get.to(() => ClientDash ()),
+            ),
+            buildMenuCard(
+              icon: Icons.fact_check,
+              title: 'Factures',
+              description: 'Création et gestion des factures',
+              color: const Color.fromARGB(255, 11, 131, 187),
+              onTap: () => Get.to(() => FactureScreen ()),
             ),
 
             // 🚀 FUTURES FONCTIONNALITÉS

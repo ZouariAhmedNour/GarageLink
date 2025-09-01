@@ -1,13 +1,14 @@
+// lib/mecanicien/work order/reports_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:garagelink/mecanicien/dashboard/screens/components/sales_line_chart.dart';
+import 'package:garagelink/models/facture.dart';
 import 'package:garagelink/providers/factures_provider.dart';
 import 'package:garagelink/providers/interventions_provider.dart';
 import 'package:garagelink/services/reports_service.dart';
 import 'package:garagelink/utils/export_utils.dart';
 
-// Palette de couleurs unifiée pour les rapports
 class ReportsColors {
   static const Color primary = Color(0xFF357ABD);
   static const Color primaryLight = Color(0xFF5A9BD8);
@@ -29,11 +30,11 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
     with TickerProviderStateMixin {
   final GlobalKey chartKey = GlobalKey();
   final ReportsService service = ReportsService();
-  
+
   late AnimationController _animationController;
   late Animation<double> _slideAnimation;
   late Animation<double> _fadeAnimation;
-  
+
   bool _isExporting = false;
   String? _exportMessage;
 
@@ -139,10 +140,16 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
 
   @override
   Widget build(BuildContext context) {
-    final factures = ref.watch(facturesProvider);
+    // watch the state so the widget rebuilds on changes (filters, list, ...)
+    final facturesState = ref.watch(facturesProvider);
+
+    // get the filtered list from the notifier (so exports & KPI use the same filtered set)
+    final List facturesList = ref.read(facturesProvider.notifier).filtered();
+
     final interventions = ref.watch(interventionsProvider);
 
-    final ca = service.chiffreAffaires(factures);
+    // calculate KPIs from the filtered list
+    final ca = service.chiffreAffaires(facturesList.cast<Facture>());
     final nbItv = service.nombreInterventions(interventions);
     final tempsMoyen = service.tempsMoyenAtelier(interventions);
     final margeEstimee = ca * 0.25; // Estimation marge brute 25%
@@ -187,52 +194,58 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
   }
 
   PreferredSizeWidget _buildAppBar() {
-  return AppBar(
-    elevation: 0,
-    backgroundColor: ReportsColors.primary,
-    foregroundColor: Colors.white,
-    title: SizedBox(
-      width: 150, // Adjusted to fit content, can be tuned based on screen size
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(6), // Reduced from 8 to 6
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(8),
+    return AppBar(
+      iconTheme: const IconThemeData(color: Colors.white),
+      elevation: 0,
+      backgroundColor: ReportsColors.primary,
+      foregroundColor: Colors.white,
+      title: SizedBox(
+        width: 150,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.analytics, size: 18, color: Colors.white,),
             ),
-            child: const Icon(Icons.analytics, size: 18, color: Colors.white,), // Reduced from 20 to 18
-          ),
-          const SizedBox(width: 8), // Reduced from 12 to 8
-          const Text(
-            'Rapports', // Shortened from 'Rapports & Analytics'
-            style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
-          ),
-        ],
+            const SizedBox(width: 8),
+            const Text(
+              'Rapports',
+              style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
+            ),
+          ],
+        ),
       ),
-    ),
-    actions: [
-      IconButton(
-        icon: const Icon(Icons.refresh, size: 20, color: Colors.white),
-        onPressed: _refreshData,
-        tooltip: 'Actualiser',
-      ),
-      _buildExportMenu(),
-    ],
-  );
-}
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.refresh, size: 20, color: Colors.white),
+          onPressed: _refreshData,
+          tooltip: 'Actualiser',
+        ),
+        _buildExportMenu(),
+      ],
+    );
+  }
 
   Widget _buildExportMenu() {
     return PopupMenuButton<String>(
-      icon: _isExporting 
-        ? SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-        : const Icon(Icons.download, color: Colors.white),
+      icon: _isExporting
+          ? SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+          : const Icon(Icons.download, color: Colors.white),
       enabled: !_isExporting,
       tooltip: 'Exporter les données',
-      onSelected: (val) => _export(val, ref.read(facturesProvider), ref.read(interventionsProvider), 
-                                  service.chiffreAffaires(ref.read(facturesProvider)),
-                                  service.nombreInterventions(ref.read(interventionsProvider))),
+      onSelected: (val) => _export(
+        val,
+        // passe la liste filtrée de factures
+        ref.read(facturesProvider.notifier).filtered(),
+        ref.read(interventionsProvider),
+        service.chiffreAffaires(ref.read(facturesProvider.notifier).filtered()),
+        service.nombreInterventions(ref.read(interventionsProvider))
+      ),
       itemBuilder: (context) => [
         _buildExportMenuItem(Icons.table_chart, "Exporter CSV", "csv"),
         _buildExportMenuItem(Icons.grid_on, "Exporter Excel", "excel"),
@@ -340,7 +353,7 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
       builder: (context, constraints) {
         final isWide = constraints.maxWidth > 600;
         final cardWidth = isWide ? (constraints.maxWidth - 36) / 4 : (constraints.maxWidth - 12) / 2;
-        
+
         return Wrap(
           spacing: 12,
           runSpacing: 12,
@@ -383,68 +396,68 @@ class _ReportsScreenState extends ConsumerState<ReportsScreen>
   }
 
   Widget _buildChartSection() {
-  return Container(
-    padding: const EdgeInsets.all(20),
-    decoration: BoxDecoration(
-      color: ReportsColors.cardBg,
-      borderRadius: BorderRadius.circular(16),
-      boxShadow: [
-        BoxShadow(
-          color: Colors.black.withOpacity(0.05),
-          blurRadius: 10,
-          offset: const Offset(0, 2),
-        ),
-      ],
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: double.infinity, // Constrain to container width
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.show_chart, color: ReportsColors.primary, size: 20),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Évolution du chiffre d\'affaires',
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                  overflow: TextOverflow.ellipsis, // Handle overflow with ellipsis
-                ),
-              ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), // Reduced padding
-                decoration: BoxDecoration(
-                  color: ReportsColors.success.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  'En croissance',
-                  style: TextStyle(
-                    color: ReportsColors.success,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: ReportsColors.cardBg,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: double.infinity,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.show_chart, color: ReportsColors.primary, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Évolution du chiffre d\'affaires',
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  overflow: TextOverflow.ellipsis, // Handle overflow
                 ),
-              ),
-            ],
+                const SizedBox(width: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: ReportsColors.success.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(
+                    'En croissance',
+                    style: TextStyle(
+                      color: ReportsColors.success,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
           ),
-        ),
-        const SizedBox(height: 16),
-        RepaintBoundary(
-          key: chartKey,
-          child: SizedBox(
-            height: 240,
-            child: SalesLineChart(),
+          const SizedBox(height: 16),
+          RepaintBoundary(
+            key: chartKey,
+            child: SizedBox(
+              height: 240,
+              child: SalesLineChart(),
+            ),
           ),
-        ),
-      ],
-    ),
-  );
-}
+        ],
+      ),
+    );
+  }
 
   Widget _buildInsightsSection(double ca, int nbItv, Duration tempsMoyen) {
     return Container(

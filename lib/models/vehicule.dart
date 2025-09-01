@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-enum Carburant { essence, diesel, electrique, hybride }
+enum Carburant { essence, diesel, gpl, electrique, hybride }
 
 class Vehicule {
   final String id;
@@ -69,6 +69,13 @@ class Vehicule {
   }
 
   factory Vehicule.fromMap(Map<String, dynamic> map) {
+    // safe, case-insensitive matching of enum name
+    final carburantStr = (map['carburant'] ?? '').toString().toLowerCase();
+    final carburant = Carburant.values.firstWhere(
+      (e) => e.name.toLowerCase() == carburantStr,
+      orElse: () => Carburant.essence, // valeur par défaut si absent/inconnue
+    );
+
     return Vehicule(
       id: map['id'] ?? '',
       immatriculation: map['immatriculation'] ?? '',
@@ -81,10 +88,7 @@ class Vehicule {
           ? DateTime.parse(map['dateCirculation'])
           : null,
       clientId: map['clientId'],
-      carburant: Carburant.values.firstWhere(
-        (e) => e.name == map['carburant'],
-        orElse: () => Carburant.essence, // valeur par défaut
-      ),
+      carburant: carburant,
     );
   }
 

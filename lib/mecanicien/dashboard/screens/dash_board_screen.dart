@@ -4,7 +4,6 @@ import 'package:garagelink/mecanicien/dashboard/constants/constants.dart';
 import 'package:garagelink/mecanicien/dashboard/constants/responsive.dart';
 import 'package:garagelink/mecanicien/dashboard/controllers/controller.dart';
 import 'package:garagelink/mecanicien/dashboard/screens/components/dashboard_content.dart';
-import 'package:garagelink/mecanicien/dashboard/screens/components/drawer_menu.dart';
 import 'package:garagelink/mecanicien/mecaHome.dart';
 
 class DashBoardScreen extends ConsumerWidget {
@@ -16,7 +15,7 @@ class DashBoardScreen extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: bgColor,
-      drawer: const DrawerMenu(),
+
       key: controller.scaffoldKey,
      appBar: AppBar(
   leading: IconButton(
@@ -44,19 +43,19 @@ class DashBoardScreen extends ConsumerWidget {
     fontWeight: FontWeight.w600,
   ), // Ensures title text is white
 ),
-      body: SafeArea(
-        child: Row(
+     body: SafeArea(
+  child: Responsive.isDesktop(context)
+      ? Row(
           crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (Responsive.isDesktop(context))
-              const Expanded(child: DrawerMenu()),
-            const Expanded(
+          children: const [
+            Expanded(
               flex: 5,
               child: DashboardContent(),
             ),
           ],
-        ),
-      ),
+        )
+      : const DashboardContent(), 
+),
     );
   }
 }
