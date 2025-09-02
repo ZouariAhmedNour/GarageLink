@@ -342,19 +342,25 @@ class _ClientCardState extends ConsumerState<ClientCard> with SingleTickerProvid
     super.dispose();
   }
 
+  // Bouton d'action compact et contraint
   Widget _buildActionButton(IconData icon, Color color, VoidCallback onPressed, {String? tooltip}) {
-    return Container(
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: IconButton(
-        icon: Icon(icon, color: color, size: 20),
-        onPressed: () {
-          HapticFeedback.lightImpact();
-          onPressed();
-        },
-        tooltip: tooltip,
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minWidth: 36, minHeight: 36, maxWidth: 44),
+      child: Container(
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: IconButton(
+          padding: const EdgeInsets.all(6),
+          iconSize: 18,
+          icon: Icon(icon, color: color, size: 18),
+          onPressed: () {
+            HapticFeedback.lightImpact();
+            onPressed();
+          },
+          tooltip: tooltip,
+        ),
       ),
     );
   }
@@ -388,8 +394,14 @@ class _ClientCardState extends ConsumerState<ClientCard> with SingleTickerProvid
                   size: 24,
                 ),
               ),
-              title: Text(widget.client.nomComplet, 
-                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+              // Title: ellipsis si trop long
+              title: Text(
+                widget.client.nomComplet,
+                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              // Subtitle : téléphone + nb véhicules (texte flexible)
               subtitle: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -397,45 +409,69 @@ class _ClientCardState extends ConsumerState<ClientCard> with SingleTickerProvid
                   Row(
                     children: [
                       Icon(Icons.phone, size: 14, color: Colors.grey[600]),
-                      const SizedBox(width: 4),
-                      Text(widget.client.telephone, style: TextStyle(color: Colors.grey[600])),
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: Text(
+                          widget.client.telephone,
+                          style: TextStyle(color: Colors.grey[600]),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
                     ],
                   ),
                   if (widget.vehicules.isNotEmpty) ...[
-                    const SizedBox(height: 2),
+                    const SizedBox(height: 6),
                     Row(
                       children: [
                         Icon(Icons.directions_car, size: 14, color: Colors.grey[600]),
-                        const SizedBox(width: 4),
-                        Text('${widget.vehicules.length} véhicule${widget.vehicules.length > 1 ? 's' : ''}',
-                          style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                            '${widget.vehicules.length} véhicule${widget.vehicules.length > 1 ? 's' : ''}',
+                            style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
                       ],
                     ),
                   ],
                 ],
               ),
-              trailing: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  _buildActionButton(Icons.edit, primaryColor, 
-                    () => Get.toNamed(AppRoutes.editClientScreen, arguments: widget.client), 
-                    tooltip: 'Modifier'),
-                  const SizedBox(width: 4),
-                  _buildActionButton(Icons.delete, errorColor, _showDeleteDialog, tooltip: 'Supprimer'),
-                  const SizedBox(width: 4),
-                  _buildActionButton(
-                    expanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
-                    Colors.grey[600]!,
-                    () {
-                      setState(() => expanded = !expanded);
-                      if (expanded) _expandController.forward();
-                      else _expandController.reverse();
-                    },
-                    tooltip: expanded ? 'Réduire' : 'Développer',
-                  ),
-                ],
+              // Trailing : FittedBox pour éviter overflow horizontal
+              trailing: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    _buildActionButton(
+                      Icons.edit, primaryColor,
+                      () => Get.toNamed(AppRoutes.editClientScreen, arguments: widget.client),
+                      tooltip: 'Modifier',
+                    ),
+                    const SizedBox(width: 6),
+                    _buildActionButton(
+                      Icons.delete, errorColor,
+                      _showDeleteDialog,
+                      tooltip: 'Supprimer',
+                    ),
+                    const SizedBox(width: 6),
+                    _buildActionButton(
+                      expanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                      Colors.grey[600]!,
+                      () {
+                        setState(() => expanded = !expanded);
+                        if (expanded) _expandController.forward();
+                        else _expandController.reverse();
+                      },
+                      tooltip: expanded ? 'Réduire' : 'Développer',
+                    ),
+                  ],
+                ),
               ),
             ),
+
             AnimatedCrossFade(
               duration: const Duration(milliseconds: 300),
               crossFadeState: expanded ? CrossFadeState.showSecond : CrossFadeState.showFirst,
@@ -453,9 +489,15 @@ class _ClientCardState extends ConsumerState<ClientCard> with SingleTickerProvid
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('Véhicules', style: TextStyle(fontWeight: FontWeight.w600, color: primaryColor, fontSize: 16)),
-                        _buildActionButton(Icons.add, primaryColor, 
-                          () => Get.to(() => AddVehScreen(clientId: widget.client.id)), tooltip: 'Ajouter véhicule'),
+                        Text(
+                          'Véhicules',
+                          style: TextStyle(fontWeight: FontWeight.w600, color: primaryColor, fontSize: 16),
+                        ),
+                        _buildActionButton(
+                          Icons.add, primaryColor,
+                          () => Get.to(() => AddVehScreen(clientId: widget.client.id)),
+                          tooltip: 'Ajouter véhicule',
+                        ),
                       ],
                     ),
                     const SizedBox(height: 8),
@@ -478,7 +520,8 @@ class _ClientCardState extends ConsumerState<ClientCard> with SingleTickerProvid
                                   borderRadius: BorderRadius.circular(8),
                                   border: Border.all(color: Colors.grey[300]!),
                                 ),
-                                child: Text('${v.marque} ${v.modele}\n${v.immatriculation}',
+                                child: Text(
+                                  '${v.marque} ${v.modele}\n${v.immatriculation}',
                                   style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
                                   textAlign: TextAlign.center,
                                 ),
@@ -502,38 +545,100 @@ class _ClientCardState extends ConsumerState<ClientCard> with SingleTickerProvid
         Icon(icon, size: 16, color: Colors.grey[600]),
         const SizedBox(width: 8),
         Text('$label: ', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.grey[700])),
-        Expanded(child: Text(value, style: TextStyle(color: Colors.grey[600]))),
+        Expanded(child: Text(value, style: TextStyle(color: Colors.grey[600]), maxLines: 2, overflow: TextOverflow.ellipsis)),
       ],
     );
   }
 
-  void _showDeleteDialog() {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(
-          children: [
-            Icon(Icons.warning_amber_rounded, color: Color(0xFFF56500), size: 28),
-            SizedBox(width: 8),
-            Text('Confirmer la suppression'),
-          ],
-        ),
-        content: Text('Voulez-vous vraiment supprimer le client "${widget.client.nomComplet}" ?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: Text('Annuler', style: TextStyle(color: Colors.grey[600], fontWeight: FontWeight.w600)),
+ void _showDeleteDialog() {
+  showDialog(
+    context: context,
+    barrierDismissible: true,
+    builder: (ctx) => AlertDialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      titlePadding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
+      contentPadding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+      actionsPadding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+      // TITRE avec icône stylée + texte flexible pour éviter overflow
+      title: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: const Color(0xFFF56500).withOpacity(0.12),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(Icons.warning_amber_rounded, color: Color(0xFFF56500), size: 28),
           ),
-          ElevatedButton(
-            onPressed: () => _deleteClient(ctx),
-            style: ElevatedButton.styleFrom(backgroundColor: errorColor),
-            child: const Text('Supprimer', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white)),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'Confirmer la suppression',
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
-    );
-  }
+      // CONTENU scrollable (préserve l'affichage sur petits écrans)
+      content: SingleChildScrollView(
+        child: Text.rich(
+          TextSpan(
+            children: [
+              const TextSpan(
+                text: 'Voulez-vous vraiment supprimer le client ',
+                style: TextStyle(fontSize: 14, color: Colors.black87),
+              ),
+              TextSpan(
+                text: '"${widget.client.nomComplet}"',
+                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Colors.black87),
+              ),
+              const TextSpan(
+                text: ' ?',
+                style: TextStyle(fontSize: 14, color: Colors.black87),
+              ),
+            ],
+          ),
+        ),
+      ),
+      // ACTIONS : deux boutons larges et adaptatifs
+      actions: [
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.grey.shade800,
+                  side: BorderSide(color: Colors.grey.shade300),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: const Text('Annuler', style: TextStyle(fontWeight: FontWeight.w600)),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: ElevatedButton(
+                onPressed: () => _deleteClient(ctx),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: errorColor,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: const Text('Supprimer', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+              ),
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
+}
 
   void _deleteClient(BuildContext dialogContext) async {
     Navigator.pop(dialogContext);

@@ -85,13 +85,10 @@ class GenerateRoutes {
         return AddVehScreen(clientId: clientId);
       },
     ),
-    GetPage(
-      name: AppRoutes.vehiculeInfoScreen,
-      page: () {
-        final vehiculeId = Get.arguments as String;
-        return VehiculeInfoScreen(vehiculeId: vehiculeId);
-      },
-    ),
+   GetPage(
+  name: AppRoutes.vehiculeInfoScreen,
+  page: () => VehiculeInfoScreen(vehiculeId: Get.arguments as String),
+),
     GetPage(
   name: AppRoutes.editClientScreen,
   page: () {

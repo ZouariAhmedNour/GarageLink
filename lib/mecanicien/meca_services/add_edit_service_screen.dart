@@ -92,7 +92,9 @@ class _AddEditServiceScreenState extends ConsumerState<AddEditServiceScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
       appBar: AppBar(
-        title: Text(widget.service == null ? 'Nouveau service' : 'Modifier service'),
+        iconTheme: const IconThemeData(color: Colors.white),
+        title: Text(widget.service == null ? 'Nouveau service' : 'Modifier service', 
+            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
         backgroundColor: const Color(0xFF357ABD),
       ),
       body: ListView(
@@ -141,7 +143,7 @@ class _AddEditServiceScreenState extends ConsumerState<AddEditServiceScreen> {
                     child: ElevatedButton(
                       onPressed: _isLoading ? null : _saveService,
                       style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF357ABD)),
-                      child: _isLoading ? const CircularProgressIndicator(color: Colors.white) : Text(widget.service == null ? 'Créer le service' : 'Sauvegarder'),
+                      child: _isLoading ? const CircularProgressIndicator(color: Colors.white) : Text(widget.service == null ? 'Créer le service' : 'Sauvegarder', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white)),
                     ),
                   ),
                 ],

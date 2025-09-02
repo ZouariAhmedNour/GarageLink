@@ -119,6 +119,7 @@ class _EditLocalisationState extends ConsumerState<EditLocalisation> with Ticker
       body: CustomScrollView(
         slivers: [
           SliverAppBar(
+            iconTheme: const IconThemeData(color: Colors.white),
             expandedHeight: 120,
             floating: false,
             pinned: true,
