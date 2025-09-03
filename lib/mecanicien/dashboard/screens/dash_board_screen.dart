@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:garagelink/components/default_app_bar.dart';
 import 'package:garagelink/mecanicien/dashboard/constants/constants.dart';
 import 'package:garagelink/mecanicien/dashboard/constants/responsive.dart';
 import 'package:garagelink/mecanicien/dashboard/controllers/controller.dart';
@@ -17,7 +18,9 @@ class DashBoardScreen extends ConsumerWidget {
       backgroundColor: bgColor,
 
       key: controller.scaffoldKey,
-     appBar: AppBar(
+    appBar: CustomAppBar(
+  title: 'Tableau de bord',
+  backgroundColor: const Color(0xFF357ABD),
   leading: IconButton(
     icon: const Icon(Icons.arrow_back, color: Colors.white),
     onPressed: () {
@@ -28,20 +31,6 @@ class DashBoardScreen extends ConsumerWidget {
     },
     tooltip: 'Retour à MecaHome',
   ),
-  title: const Text(
-    'Tableau de bord',
-    style: TextStyle(
-      color: Colors.white,
-      fontWeight: FontWeight.w600,
-    ),
-  ),
-  backgroundColor: const Color(0xFF357ABD),
-  elevation: 0,
-  iconTheme: const IconThemeData(color: Colors.white), // Ensures all icons are white
-  titleTextStyle: const TextStyle(
-    color: Colors.white,
-    fontWeight: FontWeight.w600,
-  ), // Ensures title text is white
 ),
      body: SafeArea(
   child: Responsive.isDesktop(context)

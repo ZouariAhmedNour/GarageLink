@@ -9,7 +9,6 @@ import 'package:garagelink/providers/mouvement_provider.dart';
 import 'package:garagelink/providers/piece_provider.dart';
 import 'package:garagelink/providers/stock_provider.dart';
 
-
 // Palette de couleurs unifiée
 class StockColors {
   static const Color primary = Color(0xFF357ABD);
@@ -21,7 +20,6 @@ class StockColors {
   static const Color cardBg = Colors.white;
 }
 
-
 class StockDashboard extends ConsumerStatefulWidget {
   const StockDashboard({super.key});
 
@@ -29,7 +27,8 @@ class StockDashboard extends ConsumerStatefulWidget {
   ConsumerState<StockDashboard> createState() => _StockDashboardState();
 }
 
-class _StockDashboardState extends ConsumerState<StockDashboard> with TickerProviderStateMixin {
+class _StockDashboardState extends ConsumerState<StockDashboard>
+    with TickerProviderStateMixin {
   late AnimationController _animationController;
   late Animation<double> _slideAnimation;
 
@@ -69,10 +68,7 @@ class _StockDashboardState extends ConsumerState<StockDashboard> with TickerProv
         builder: (context, child) {
           return Transform.translate(
             offset: Offset(0, 50 * (1 - _slideAnimation.value)),
-            child: Opacity(
-              opacity: _slideAnimation.value,
-              child: child,
-            ),
+            child: Opacity(opacity: _slideAnimation.value, child: child),
           );
         },
         child: LayoutBuilder(

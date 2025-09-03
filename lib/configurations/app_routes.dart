@@ -29,5 +29,6 @@ class AppRoutes {
   static const String addVehiculeScreen = '/addVehiculeScreen';
   static const String vehiculeInfoScreen = '/vehiculeInfoScreen';
   static const String editClientScreen = '/editClientScreen';
+  static const String entretienScreen = '/entretienScreen';
 
 }

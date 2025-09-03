@@ -40,9 +40,9 @@ class _MecListScreenState extends ConsumerState<MecListScreen>
   // État des filtres
   final _filterState = _FilterState();
   final Set<String> _expanded = {};
-  
+
   // UI state
-  
+
   bool _isLoading = false;
   int _page = 0;
   int _pageSize = 8;
@@ -63,22 +63,26 @@ class _MecListScreenState extends ConsumerState<MecListScreen>
       vsync: this,
     );
 
-   _slideAnimation = Tween<Offset>(
-  begin: const Offset(0, 0.3),
-  end: Offset.zero,
-).chain(CurveTween(curve: Curves.easeOutCubic))
- .animate(_slideController);
-    
-   _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0)
-    .chain(CurveTween(curve: Curves.easeInOut))
-    .animate(_slideController);
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(0, 0.3),
+      end: Offset.zero,
+    ).chain(CurveTween(curve: Curves.easeOutCubic)).animate(_slideController);
 
-_fabScaleAnimation = Tween<double>(begin: 0.0, end: 1.0)
-    .chain(CurveTween(curve: Curves.elasticOut))
-    .animate(_fabController);
+    _fadeAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).chain(CurveTween(curve: Curves.easeInOut)).animate(_slideController);
+
+    _fabScaleAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).chain(CurveTween(curve: Curves.elasticOut)).animate(_fabController);
 
     _slideController.forward();
-    Future.delayed(const Duration(milliseconds: 200), () => _fabController.forward());
+    Future.delayed(
+      const Duration(milliseconds: 200),
+      () => _fabController.forward(),
+    );
   }
 
   @override
@@ -92,14 +96,17 @@ _fabScaleAnimation = Tween<double>(begin: 0.0, end: 1.0)
     if (date == null) return 0;
     final now = DateTime.now();
     int years = now.year - date.year;
-    if (now.month < date.month || (now.month == date.month && now.day < date.day)) {
+    if (now.month < date.month ||
+        (now.month == date.month && now.day < date.day)) {
       years--;
     }
     return years;
   }
 
   List<Mecanicien> _applyFiltersAndSort(List<Mecanicien> list) {
-    final filtered = list.where((m) => _filterState.matches(m, _computeAncienneteYears)).toList();
+    final filtered = list
+        .where((m) => _filterState.matches(m, _computeAncienneteYears))
+        .toList();
     _filterState.sortList(filtered, _computeAncienneteYears);
     return filtered;
   }
@@ -113,9 +120,9 @@ _fabScaleAnimation = Tween<double>(begin: 0.0, end: 1.0)
   Future<void> _refreshData() async {
     setState(() => _isLoading = true);
     HapticFeedback.mediumImpact();
-    
+
     await Future.delayed(const Duration(milliseconds: 800));
-    
+
     if (mounted) {
       setState(() => _isLoading = false);
       _showSnackBar('Liste actualisée', Icons.refresh, MecColors.success);
@@ -164,7 +171,7 @@ _fabScaleAnimation = Tween<double>(begin: 0.0, end: 1.0)
     return Scaffold(
       backgroundColor: MecColors.surface,
       appBar: _buildAppBar(filteredSorted.length),
-      
+
       body: SlideTransition(
         position: _slideAnimation,
         child: FadeTransition(
@@ -195,15 +202,24 @@ _fabScaleAnimation = Tween<double>(begin: 0.0, end: 1.0)
       foregroundColor: Colors.white,
       title: Row(
         children: [
-          _buildIconContainer(Icons.engineering, ),
+          _buildIconContainer(Icons.engineering),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Équipe', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.white)),
-                Text('$count mécanicien${count > 1 ? 's' : ''}',
-                     style: const TextStyle(fontSize: 12, color: Colors.white70)),
+                const Text(
+                  'Équipe',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.white,
+                  ),
+                ),
+                Text(
+                  '$count mécanicien${count > 1 ? 's' : ''}',
+                  style: const TextStyle(fontSize: 12, color: Colors.white70),
+                ),
               ],
             ),
           ),
@@ -211,7 +227,7 @@ _fabScaleAnimation = Tween<double>(begin: 0.0, end: 1.0)
       ),
       actions: [
         IconButton(
-          icon: const Icon(Icons.refresh, color: Colors.white,),
+          icon: const Icon(Icons.refresh, color: Colors.white),
           onPressed: _refreshData,
           tooltip: 'Actualiser',
         ),
@@ -222,7 +238,7 @@ _fabScaleAnimation = Tween<double>(begin: 0.0, end: 1.0)
   Widget _buildIconContainer(IconData icon) {
     return Container(
       padding: const EdgeInsets.all(8),
-      
+
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.2),
         borderRadius: BorderRadius.circular(8),
@@ -260,7 +276,11 @@ _fabScaleAnimation = Tween<double>(begin: 0.0, end: 1.0)
               children: [
                 const Text(
                   'Gestion de l\'équipe',
-                  style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
                 const SizedBox(height: 4),
                 Text(
@@ -270,8 +290,7 @@ _fabScaleAnimation = Tween<double>(begin: 0.0, end: 1.0)
               ],
             ),
           ),
-          if (_filterState.hasActiveFilters())
-            _buildResetButton(),
+          if (_filterState.hasActiveFilters()) _buildResetButton(),
         ],
       ),
     );
@@ -281,114 +300,157 @@ _fabScaleAnimation = Tween<double>(begin: 0.0, end: 1.0)
     return TextButton.icon(
       onPressed: _clearAllFilters,
       icon: const Icon(Icons.clear_all, color: Colors.white, size: 16),
-      label: const Text('Reset', style: TextStyle(color: Colors.white, fontSize: 12)),
+      label: const Text(
+        'Reset',
+        style: TextStyle(color: Colors.white, fontSize: 12),
+      ),
       style: TextButton.styleFrom(
         backgroundColor: Colors.white.withOpacity(0.2),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
     );
   }
-  int _selectedFilterIndex = 0; // 0=Poste, 1=Statut, 2=Contrat, 3=Ancienneté, 4=Compétences
-Widget _buildFiltersSection() {
-  return Container(
-    margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-    padding: const EdgeInsets.all(16),
-    decoration: _buildCardDecoration(),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildSectionHeader(Icons.search, 'Recherche et filtres'),
-        const SizedBox(height: 12),
 
-        // 🔍 Recherche + tri
-        SearchAndSortRow(
-          onSearchChanged: (v) => _updateFilter(() => _filterState.search = v),
-          onSortChanged: (v) => _updateFilter(() => _filterState.sortBy = v),
-          onSortDirectionChanged: (v) => _updateFilter(() => _filterState.sortAsc = v),
-          sortBy: _filterState.sortBy,
-          sortAsc: _filterState.sortAsc,
-        ),
+  int _selectedFilterIndex =
+      0; // 0=Poste, 1=Statut, 2=Contrat, 3=Ancienneté, 4=Compétences
+  Widget _buildFiltersSection() {
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.all(16),
+      decoration: _buildCardDecoration(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildSectionHeader(Icons.search, 'Recherche et filtres'),
+          const SizedBox(height: 12),
 
-        const SizedBox(height: 12),
+          // 🔍 Recherche + tri
+          SearchAndSortRow(
+            onSearchChanged: (v) =>
+                _updateFilter(() => _filterState.search = v),
+            onSortChanged: (v) => _updateFilter(() => _filterState.sortBy = v),
+            onSortDirectionChanged: (v) =>
+                _updateFilter(() => _filterState.sortAsc = v),
+            sortBy: _filterState.sortBy,
+            sortAsc: _filterState.sortAsc,
+          ),
 
-        // 🔹 ToggleButtons pour les filtres principaux
-        ToggleButtons(
-          isSelected: List.generate(4, (i) => i == _selectedFilterIndex),
-          borderRadius: BorderRadius.circular(8),
-          selectedColor: Colors.white,
-          fillColor: MecColors.primary,
-          onPressed: (index) {
-            setState(() => _selectedFilterIndex = index);
-          },
-          children: const [
-            Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: Text("Poste")),
-            Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: Text("Statut")),
-            Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: Text("Contrat")),
-            Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: Text("Services")),
+          const SizedBox(height: 12),
+
+          // 🔹 ToggleButtons pour les filtres principaux
+          ToggleButtons(
+            isSelected: List.generate(4, (i) => i == _selectedFilterIndex),
+            borderRadius: BorderRadius.circular(8),
+            selectedColor: Colors.white,
+            fillColor: MecColors.primary,
+            onPressed: (index) {
+              setState(() => _selectedFilterIndex = index);
+            },
+            children: const [
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: 12),
+                child: Text("Poste"),
+              ),
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: 12),
+                child: Text("Statut"),
+              ),
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: 12),
+                child: Text("Contrat"),
+              ),
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: 12),
+                child: Text("Services"),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 12),
+
+          // 🔹 Champ dynamique selon le filtre choisi
+          if (_selectedFilterIndex == 0) // Poste
+            DropdownButtonFormField<String>(
+              value: _filterState.posteFilter,
+              items: [
+                'Tous',
+                'Chef',
+                'Technicien',
+                'Apprenti',
+              ].map((p) => DropdownMenuItem(value: p, child: Text(p))).toList(),
+              onChanged: (v) =>
+                  _updateFilter(() => _filterState.posteFilter = v ?? 'Tous'),
+              decoration: const InputDecoration(labelText: "Filtrer par poste"),
+            ),
+
+          if (_selectedFilterIndex == 1) // Statut
+            DropdownButtonFormField<String>(
+              value: _filterState.statutFilter,
+              items: [
+                'Tous',
+                'Actif',
+                'Inactif',
+              ].map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
+              onChanged: (v) =>
+                  _updateFilter(() => _filterState.statutFilter = v ?? 'Tous'),
+              decoration: const InputDecoration(
+                labelText: "Filtrer par statut",
+              ),
+            ),
+
+          if (_selectedFilterIndex == 2) // Contrat
+            DropdownButtonFormField<String>(
+              value: _filterState.typeContratFilter,
+              items: [
+                'Tous',
+                'CDI',
+                'CDD',
+                'Stage',
+              ].map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+              onChanged: (v) => _updateFilter(
+                () => _filterState.typeContratFilter = v ?? 'Tous',
+              ),
+              decoration: const InputDecoration(
+                labelText: "Filtrer par type de contrat",
+              ),
+            ),
+
+          if (_selectedFilterIndex == 3) // Ancienneté
+            DropdownButtonFormField<String>(
+              value: _filterState.ancienneteFilter,
+              items: [
+                'Tous',
+                '<1',
+                '1-3',
+                '3-5',
+                '5+',
+              ].map((a) => DropdownMenuItem(value: a, child: Text(a))).toList(),
+              onChanged: (v) => _updateFilter(
+                () => _filterState.ancienneteFilter = v ?? 'Tous',
+              ),
+              decoration: const InputDecoration(
+                labelText: "Filtrer par ancienneté",
+              ),
+            ),
+
+          if (_selectedFilterIndex == 4) ...[
+            _buildSectionHeader(Icons.psychology, 'Compétences'),
+            const SizedBox(height: 8),
+            ServicesChips(
+              onServiceSelected: (c, on) => _updateFilter(() {
+                if (on) {
+                  _filterState.servicesFilter.add(c);
+                } else {
+                  _filterState.servicesFilter.remove(c);
+                }
+              }),
+              servicesFilter: _filterState.servicesFilter,
+            ),
           ],
-        ),
-
-        const SizedBox(height: 12),
-
-        // 🔹 Champ dynamique selon le filtre choisi
-        if (_selectedFilterIndex == 0) // Poste
-          DropdownButtonFormField<String>(
-            value: _filterState.posteFilter,
-            items: ['Tous', 'Chef', 'Technicien', 'Apprenti']
-                .map((p) => DropdownMenuItem(value: p, child: Text(p)))
-                .toList(),
-            onChanged: (v) => _updateFilter(() => _filterState.posteFilter = v ?? 'Tous'),
-            decoration: const InputDecoration(labelText: "Filtrer par poste"),
-          ),
-
-        if (_selectedFilterIndex == 1) // Statut
-          DropdownButtonFormField<String>(
-            value: _filterState.statutFilter,
-            items: ['Tous', 'Actif', 'Inactif']
-                .map((s) => DropdownMenuItem(value: s, child: Text(s)))
-                .toList(),
-            onChanged: (v) => _updateFilter(() => _filterState.statutFilter = v ?? 'Tous'),
-            decoration: const InputDecoration(labelText: "Filtrer par statut"),
-          ),
-
-        if (_selectedFilterIndex == 2) // Contrat
-          DropdownButtonFormField<String>(
-            value: _filterState.typeContratFilter,
-            items: ['Tous', 'CDI', 'CDD', 'Stage']
-                .map((c) => DropdownMenuItem(value: c, child: Text(c)))
-                .toList(),
-            onChanged: (v) => _updateFilter(() => _filterState.typeContratFilter = v ?? 'Tous'),
-            decoration: const InputDecoration(labelText: "Filtrer par type de contrat"),
-          ),
-
-        if (_selectedFilterIndex == 3) // Ancienneté
-          DropdownButtonFormField<String>(
-            value: _filterState.ancienneteFilter,
-            items: ['Tous', '<1', '1-3', '3-5', '5+']
-                .map((a) => DropdownMenuItem(value: a, child: Text(a)))
-                .toList(),
-            onChanged: (v) => _updateFilter(() => _filterState.ancienneteFilter = v ?? 'Tous'),
-            decoration: const InputDecoration(labelText: "Filtrer par ancienneté"),
-          ),
-
-        if (_selectedFilterIndex == 4) ...[
-          _buildSectionHeader(Icons.psychology, 'Compétences'),
-          const SizedBox(height: 8),
-          ServicesChips(
-            onServiceSelected: (c, on) => _updateFilter(() {
-              if (on) {
-                _filterState.servicesFilter.add(c);
-              } else {
-                _filterState.servicesFilter.remove(c);
-              }
-            }),
-            servicesFilter: _filterState.servicesFilter,
-          ),
         ],
-      ],
-    ),
-  );
-}
+      ),
+    );
+  }
 
   Widget _buildSectionHeader(IconData icon, String title) {
     return Row(
@@ -400,9 +462,14 @@ Widget _buildFiltersSection() {
     );
   }
 
-  Widget _buildContent(List<Mecanicien> pageItems, List<Mecanicien> allFiltered) {
+  Widget _buildContent(
+    List<Mecanicien> pageItems,
+    List<Mecanicien> allFiltered,
+  ) {
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator(color: MecColors.primary));
+      return const Center(
+        child: CircularProgressIndicator(color: MecColors.primary),
+      );
     }
 
     if (pageItems.isEmpty) {
@@ -418,20 +485,20 @@ Widget _buildFiltersSection() {
           return Container(
             decoration: _buildCardDecoration(),
             child: MecListItem(
-  mec: pageItems[index],
-  onDelete: (id) => ref.read(mecaniciensProvider.notifier).removeMec(id),
-  expanded: _expanded,
-  onToggle: (id) {
-    setState(() {
-      if (_expanded.contains(id)) {
-        _expanded.remove(id);
-      } else {
-        _expanded.add(id);
-      }
-    });
-  },
-),
-
+              mec: pageItems[index],
+              onDelete: (id) =>
+                  ref.read(mecaniciensProvider.notifier).removeMec(id),
+              expanded: _expanded,
+              onToggle: (id) {
+                setState(() {
+                  if (_expanded.contains(id)) {
+                    _expanded.remove(id);
+                  } else {
+                    _expanded.add(id);
+                  }
+                });
+              },
+            ),
           );
         },
       ),
@@ -451,12 +518,21 @@ Widget _buildFiltersSection() {
           const SizedBox(height: 16),
           Text(
             noResults ? 'Aucun mécanicien trouvé' : 'Aucune page disponible',
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: MecColors.textSecondary),
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w600,
+              color: MecColors.textSecondary,
+            ),
           ),
           const SizedBox(height: 8),
           Text(
-            noResults ? 'Essayez de modifier vos critères' : 'Naviguez vers une autre page',
-            style: const TextStyle(fontSize: 14, color: MecColors.textSecondary),
+            noResults
+                ? 'Essayez de modifier vos critères'
+                : 'Naviguez vers une autre page',
+            style: const TextStyle(
+              fontSize: 14,
+              color: MecColors.textSecondary,
+            ),
             textAlign: TextAlign.center,
           ),
           if (noResults && _filterState.hasActiveFilters()) ...[
@@ -468,7 +544,9 @@ Widget _buildFiltersSection() {
               style: ElevatedButton.styleFrom(
                 backgroundColor: MecColors.primary,
                 foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
               ),
             ),
           ],
@@ -479,7 +557,7 @@ Widget _buildFiltersSection() {
 
   Widget _buildPagination(int pageCount) {
     if (pageCount <= 1) return const SizedBox.shrink();
-    
+
     return Container(
       margin: const EdgeInsets.all(16),
       padding: const EdgeInsets.all(16),
@@ -490,7 +568,10 @@ Widget _buildFiltersSection() {
         pageSize: _pageSize,
         onPrevPage: () => setState(() => _page--),
         onNextPage: () => setState(() => _page++),
-        onPageSizeChanged: (v) => setState(() { _pageSize = v; _page = 0; }),
+        onPageSizeChanged: (v) => setState(() {
+          _pageSize = v;
+          _page = 0;
+        }),
       ),
     );
   }
@@ -522,7 +603,10 @@ Widget _buildFiltersSection() {
           backgroundColor: Colors.transparent,
           elevation: 0,
           icon: const Icon(Icons.person_add, color: Colors.white),
-          label: const Text('Nouveau', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+          label: const Text(
+            'Nouveau',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+          ),
         ),
       ),
     );
@@ -555,18 +639,25 @@ class _FilterState {
   bool sortAsc = true;
 
   bool matches(Mecanicien m, int Function(DateTime?) computeYears) {
-    final matchesSearch = search.isEmpty ||
+    final matchesSearch =
+        search.isEmpty ||
         m.nom.toLowerCase().contains(search.toLowerCase()) ||
         m.id.toLowerCase().contains(search.toLowerCase());
 
-    final matchesPoste = posteFilter == 'Tous' || 
-        m.poste.toString().split('.').last.toLowerCase() == posteFilter.toLowerCase();
+    final matchesPoste =
+        posteFilter == 'Tous' ||
+        m.poste.toString().split('.').last.toLowerCase() ==
+            posteFilter.toLowerCase();
 
-    final matchesStatut = statutFilter == 'Tous' || 
-        m.statut.toString().split('.').last.toLowerCase() == statutFilter.toLowerCase();
+    final matchesStatut =
+        statutFilter == 'Tous' ||
+        m.statut.toString().split('.').last.toLowerCase() ==
+            statutFilter.toLowerCase();
 
-    final matchesContrat = typeContratFilter == 'Tous' || 
-        m.typeContrat.toString().split('.').last.toLowerCase() == typeContratFilter.toLowerCase();
+    final matchesContrat =
+        typeContratFilter == 'Tous' ||
+        m.typeContrat.toString().split('.').last.toLowerCase() ==
+            typeContratFilter.toLowerCase();
 
     final years = computeYears(m.dateEmbauche);
     final matchesAnciennete = switch (ancienneteFilter) {
@@ -577,18 +668,25 @@ class _FilterState {
       _ => true,
     };
 
-    final matchesCompetences = servicesFilter.isEmpty || 
+    final matchesCompetences =
+        servicesFilter.isEmpty ||
         servicesFilter.every((c) => m.services.contains(c));
 
-    return matchesSearch && matchesPoste && matchesStatut && 
-           matchesContrat && matchesAnciennete && matchesCompetences;
+    return matchesSearch &&
+        matchesPoste &&
+        matchesStatut &&
+        matchesContrat &&
+        matchesAnciennete &&
+        matchesCompetences;
   }
 
   void sortList(List<Mecanicien> list, int Function(DateTime?) computeYears) {
     list.sort((a, b) {
       final cmp = switch (sortBy) {
         'salaire' => a.salaire.compareTo(b.salaire),
-        'anciennete' => computeYears(a.dateEmbauche).compareTo(computeYears(b.dateEmbauche)),
+        'anciennete' => computeYears(
+          a.dateEmbauche,
+        ).compareTo(computeYears(b.dateEmbauche)),
         _ => a.nom.toLowerCase().compareTo(b.nom.toLowerCase()),
       };
       return sortAsc ? cmp : -cmp;
@@ -597,11 +695,11 @@ class _FilterState {
 
   bool hasActiveFilters() {
     return search.isNotEmpty ||
-           posteFilter != 'Tous' ||
-           statutFilter != 'Tous' ||
-           typeContratFilter != 'Tous' ||
-           ancienneteFilter != 'Tous' ||
-           servicesFilter.isNotEmpty;
+        posteFilter != 'Tous' ||
+        statutFilter != 'Tous' ||
+        typeContratFilter != 'Tous' ||
+        ancienneteFilter != 'Tous' ||
+        servicesFilter.isNotEmpty;
   }
 
   void reset() {

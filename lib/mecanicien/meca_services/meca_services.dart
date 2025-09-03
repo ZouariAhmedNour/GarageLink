@@ -1,6 +1,7 @@
 // mecanicien/meca_services/meca_services.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:garagelink/components/default_app_bar.dart';
 import 'package:garagelink/models/service.dart';
 import 'package:garagelink/providers/service_provider.dart';
 import 'package:garagelink/mecanicien/meca_services/service_card.dart';
@@ -67,12 +68,10 @@ class _MecaServicesPageState extends ConsumerState<MecaServicesPage>
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
-      appBar: AppBar(
-        iconTheme: const IconThemeData(color: Colors.white),
-        title: const Text('Gestion Services',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-        backgroundColor: const Color(0xFF357ABD),
-      ),
+      appBar: CustomAppBar(
+  title: 'Gestion des services',
+  backgroundColor: const Color(0xFF357ABD), // ou la couleur que tu veux
+),
       body: CustomScrollView(
         slivers: [
           SliverToBoxAdapter(

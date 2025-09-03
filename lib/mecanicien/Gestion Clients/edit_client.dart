@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:garagelink/components/default_app_bar.dart';
 import 'package:garagelink/models/client.dart';
 import 'package:garagelink/providers/client_provider.dart';
 import 'package:get/get.dart';
@@ -336,37 +337,12 @@ Animation<double>? _fadeAnimation;
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: backgroundColor,
-      appBar: AppBar(
-        elevation: 0,
-        backgroundColor: primaryColor,
-        foregroundColor: Colors.white,
-        centerTitle: true,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
-          onPressed: () {
-            HapticFeedback.lightImpact();
-            Get.back();
-          },
-        ),
-        title: const Text(
-          'Modifier le client',
-          style: TextStyle(
-            fontWeight: FontWeight.w600,
-            fontSize: 20,
-            letterSpacing: 0.3,
-            color: Colors.white,
-          ),
-        ),
-        flexibleSpace: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [primaryColor, primaryLight],
-            ),
-          ),
-        ),
-      ),
+      appBar: CustomAppBar(
+  title: 'Modifier le client',
+  centerTitle: true,
+  backgroundColor: primaryColor, // fallback si gradient null
+  gradient: const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [primaryColor, primaryLight]),
+),
       body: SafeArea(
         child: SingleChildScrollView(
           physics: const BouncingScrollPhysics(),

@@ -1,15 +1,16 @@
 import 'package:garagelink/auth/login.dart';
 import 'package:garagelink/auth/reset_password.dart';
 import 'package:garagelink/auth/signup.dart';
+import 'package:garagelink/carnet%20Entretien/entretien_screen.dart';
 import 'package:garagelink/complete_profile.dart';
 import 'package:garagelink/configurations/app_routes.dart';
 import 'package:garagelink/mecanicien/Facture/facture_detail_page.dart';
 import 'package:garagelink/mecanicien/Facture/facture_screen.dart';
 import 'package:garagelink/mecanicien/Gestion%20Clients/add_client.dart';
-import 'package:garagelink/mecanicien/Gestion%20Clients/add_veh.dart';
+import 'package:garagelink/vehicules/add_veh.dart';
 import 'package:garagelink/mecanicien/Gestion%20Clients/client_dash.dart';
 import 'package:garagelink/mecanicien/Gestion%20Clients/edit_client.dart';
-import 'package:garagelink/mecanicien/Gestion%20Clients/vehicule_info.dart';
+import 'package:garagelink/vehicules/vehicule_info.dart';
 import 'package:garagelink/mecanicien/dashboard/screens/dash_board_screen.dart';
 import 'package:garagelink/mecanicien/devis/creation_devis.dart';
 import 'package:garagelink/mecanicien/devis/devis_preview_page.dart';
@@ -96,5 +97,9 @@ class GenerateRoutes {
     return EditClientScreen(client: client);
   },
 ),
+    GetPage(name: AppRoutes.entretienScreen, page: () {
+      final vehiculeId = Get.arguments as String;
+      return EntretienScreen(vehiculeId: vehiculeId);
+    }),
   ];
 }

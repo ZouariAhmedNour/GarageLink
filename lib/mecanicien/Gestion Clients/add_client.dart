@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:garagelink/components/default_app_bar.dart';
 import 'package:garagelink/models/client.dart';
 import 'package:garagelink/providers/client_provider.dart';
+import 'package:garagelink/vehicules/car%20widgets/ui_constants.dart';
 import 'package:get/get.dart';
 import 'package:uuid/uuid.dart';
 
@@ -320,23 +322,11 @@ class _AddClientScreenState extends ConsumerState<AddClientScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.grey.shade50,
-      appBar: AppBar(
-        iconTheme: const IconThemeData(color: Colors.white),
-        elevation: 0,
-        backgroundColor: _primaryBlue,
-        foregroundColor: Colors.white,
-        title: const Text(
-          'Nouveau client',
-          style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
-        ),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios),
-          onPressed: () {
-            HapticFeedback.lightImpact();
-            Get.back();
-          },
-        ),
-      ),
+      appBar: CustomAppBar(
+  title: 'Nouveau client',
+  backgroundColor: primaryBlue,
+
+),
       body: FadeTransition(
         opacity: _fadeAnimation!,
         child: SafeArea(

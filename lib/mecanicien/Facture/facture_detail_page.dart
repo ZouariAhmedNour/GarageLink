@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:garagelink/components/default_app_bar.dart';
 import 'package:garagelink/models/facture.dart';
 import 'package:garagelink/services/share_email_service.dart';
+import 'package:garagelink/vehicules/car%20widgets/ui_constants.dart';
 
 class FactureDetailPage extends ConsumerWidget {
   final Facture facture;
@@ -10,7 +12,10 @@ class FactureDetailPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return Scaffold(
-      appBar: AppBar(title: Text('Facture ${facture.id}')),
+     appBar: CustomAppBar(
+  title: 'Facture ${facture.id}',
+  backgroundColor: primaryBlue, // ou la couleur de ton choix
+),
       body: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(

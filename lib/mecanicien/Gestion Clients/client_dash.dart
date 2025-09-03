@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:garagelink/components/default_app_bar.dart';
 import 'package:garagelink/configurations/app_routes.dart';
 import 'package:garagelink/mecanicien/Gestion%20Clients/add_client.dart';
-import 'package:garagelink/mecanicien/Gestion%20Clients/add_veh.dart';
-import 'package:garagelink/mecanicien/Gestion%20Clients/vehicule_info.dart';
+import 'package:garagelink/vehicules/add_veh.dart';
+import 'package:garagelink/vehicules/vehicule_info.dart';
 import 'package:garagelink/mecanicien/devis/devis_widgets/num_serie_input.dart';
 import 'package:garagelink/models/client.dart';
 import 'package:garagelink/models/vehicule.dart';
@@ -146,12 +147,10 @@ Animation<Offset>? _slideAnimation;
 
     return Scaffold(
       backgroundColor: backgroundColor,
-      appBar: AppBar(
-        title: const Text('Clients', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white)),
-        backgroundColor: primaryColor,
-        elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.white),
-      ),
+    appBar: CustomAppBar(
+  title: 'Clients',
+  backgroundColor: primaryColor,
+),
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: primaryColor,
         onPressed: () {

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:garagelink/components/default_app_bar.dart';
 import 'package:garagelink/mecanicien/Facture/facture_detail_page.dart';
 import 'package:garagelink/mecanicien/devis/devis_widgets/num_serie_input.dart';
 import 'package:garagelink/providers/factures_provider.dart';
@@ -246,15 +247,11 @@ class _FacturesScreenState extends ConsumerState<FactureScreen>
 
     return Scaffold(
       backgroundColor: backgroundColor,
-      appBar: AppBar(
-        title: const Text('Factures', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white)),
-        backgroundColor: primaryColor,
-        elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.white),
-        actions: [
-          
-        ],
-      ),
+     appBar: CustomAppBar(
+  title: 'Factures',
+  backgroundColor: primaryColor, // utilise ta couleur existante
+  elevation: 0,
+),
       body: FadeTransition(
         opacity: fadeAnim,
         child: SlideTransition(

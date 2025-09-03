@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:garagelink/components/default_app_bar.dart';
 import 'package:garagelink/mecanicien/gestion%20mec/mec_list_screen.dart';
 import 'package:garagelink/models/mecanicien.dart';
 import 'package:garagelink/providers/mecaniciens_provider.dart';
@@ -304,15 +305,10 @@ final allServices = Service.values;
     final isEdit = widget.mecanicien != null;
     return Scaffold(
       backgroundColor: backgroundColor,
-      appBar: AppBar(
-        title: Text(
-          isEdit ? 'Modifier mécanicien' : 'Ajouter mécanicien',
-          style: const TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
-        ),
-        backgroundColor: primaryColor,
-        elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.white),
-      ),
+     appBar: CustomAppBar(
+  title: isEdit ? 'Modifier mécanicien' : 'Ajouter mécanicien',
+  backgroundColor: primaryColor,
+),
       body: FadeTransition(
         opacity: _fadeAnimation,
         child: SingleChildScrollView(

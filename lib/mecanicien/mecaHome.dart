@@ -146,7 +146,10 @@ class MecaHomePage extends ConsumerWidget {
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
-      appBar: DefaultAppBar(title: 'Bienvenue, $userName'),
+      appBar: CustomAppBar(
+  title: 'Bienvenue, $userName',
+  backgroundColor: const Color(0xFF357ABD), // ou laisse par défaut
+),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(

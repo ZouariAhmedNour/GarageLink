@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:garagelink/components/default_app_bar.dart';
 import 'package:garagelink/mecanicien/devis/devis_widgets/num_serie_input.dart';
 import 'package:garagelink/models/vehicule.dart';
 import 'package:garagelink/providers/vehicule_provider.dart';
@@ -397,9 +398,7 @@ Animation<Offset>? _slideAnimation;
         return 'Électrique';
       case Carburant.hybride:
         return 'Hybride';
-      default:
-        return carburant.toString().split('.').last;
-    }
+      }
   }
 
   IconData _getCarburantIcon(Carburant carburant) {
@@ -414,9 +413,7 @@ Animation<Offset>? _slideAnimation;
         return Icons.electric_bolt;
       case Carburant.hybride:
         return Icons.battery_charging_full;
-      default:
-        return Icons.local_gas_station;
-    }
+      }
   }
 
   Widget _buildPhotoSection() {
@@ -647,23 +644,10 @@ Animation<Offset>? _slideAnimation;
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.grey.shade50,
-      appBar: AppBar(
-        iconTheme: const IconThemeData(color: Colors.white),
-        elevation: 0,
-        backgroundColor: _primaryBlue,
-        foregroundColor: Colors.white,
-        title: const Text(
-          'Nouveau véhicule',
-          style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white),
-        ),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios),
-          onPressed: () {
-            HapticFeedback.lightImpact();
-            Get.back();
-          },
-        ),
-      ),
+      appBar: CustomAppBar(
+  title: 'Nouveau véhicule',
+  backgroundColor: _primaryBlue, // ou primaryBlue si tu utilises ui_constants
+),
      body: FadeTransition(
   // si _fadeAnimation est null, on utilise un AlwaysStoppedAnimation (opacité = 1.0)
   opacity: _fadeAnimation ?? const AlwaysStoppedAnimation<double>(1.0),
