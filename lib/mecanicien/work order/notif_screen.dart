@@ -37,6 +37,7 @@ class _NotifScreenState extends ConsumerState<NotifScreen>
   String _filterVin = '';
   bool _isLoading = false;
   String? _errorMessage;
+  int _selectedFilterIndex = 0; // 0 = Nom client, 1 = Immatriculation
 
   @override
   void initState() {
@@ -87,7 +88,7 @@ class _NotifScreenState extends ConsumerState<NotifScreen>
 
   PreferredSizeWidget _buildAppBar() {
     return AppBar(
-
+      iconTheme: const IconThemeData(color: Colors.white),
       elevation: 0,
       backgroundColor: AppColors.primary,
       foregroundColor: Colors.white,
@@ -124,46 +125,78 @@ class _NotifScreenState extends ConsumerState<NotifScreen>
   }
 
   Widget _buildFilterSection() {
-    return Container(
-      margin: const EdgeInsets.all(16),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.filter_list, color: AppColors.primary, size: 20),
-              const SizedBox(width: 8),
-              Text(
-                'Filtres de recherche',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textPrimary,
-                ),
+  return Container(
+    margin: const EdgeInsets.all(16),
+    padding: const EdgeInsets.all(20),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withOpacity(0.05),
+          blurRadius: 10,
+          offset: const Offset(0, 2),
+        ),
+      ],
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(Icons.filter_list, color: AppColors.primary, size: 20),
+            const SizedBox(width: 8),
+            Text(
+              'Filtres de recherche',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: AppColors.textPrimary,
               ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          _buildNomFilter(),
-          const SizedBox(height: 12),
-          _buildVinFilter(),
-          if (_errorMessage != null) _buildErrorMessage(),
-        ],
-      ),
-    );
-  }
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        // 🔹 ToggleButtons
+        ToggleButtons(
+          isSelected: List.generate(2, (i) => i == _selectedFilterIndex),
+          borderRadius: BorderRadius.circular(12),
+          selectedColor: Colors.white,
+          fillColor: AppColors.primary,
+          onPressed: (index) {
+            setState(() {
+              _selectedFilterIndex = index;
+              _filterNom = '';
+              _filterVin = '';
+              _nomCtrl.clear();
+              _vinCtrl.clear();
+              _numClientCtrl.clear();
+            });
+          },
+          children: const [
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: 12),
+              child: Text("Nom client"),
+            ),
+            Padding(
+              padding: EdgeInsets.symmetric(horizontal: 12),
+              child: Text("Immatriculation"),
+            ),
+          ],
+        ),
+
+        const SizedBox(height: 16),
+
+        // 🔹 Champ dynamique selon sélection
+        if (_selectedFilterIndex == 0) _buildNomFilter(),
+        if (_selectedFilterIndex == 1) _buildVinFilter(),
+
+        if (_errorMessage != null) _buildErrorMessage(),
+      ],
+    ),
+  );
+}
 
   Widget _buildNomFilter() {
     return TextField(

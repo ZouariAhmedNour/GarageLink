@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:garagelink/components/default_app_bar.dart';
 import 'package:garagelink/mecanicien/Facture/facture_screen.dart';
 import 'package:garagelink/mecanicien/Gestion%20Clients/client_dash.dart';
+import 'package:garagelink/mecanicien/R%C3%A9servations/reservation_screen.dart';
 import 'package:garagelink/mecanicien/dashboard/screens/dash_board_screen.dart';
 import 'package:garagelink/mecanicien/devis/creation_devis.dart';
 import 'package:garagelink/mecanicien/edit_localisation.dart';
@@ -230,7 +231,7 @@ class MecaHomePage extends ConsumerWidget {
                       const SizedBox(width: 20),
                       buildQuickStat('Clients', '48', Icons.people),
                       const SizedBox(width: 20),
-                      buildQuickStat('CA', '15K€', Icons.euro),
+                      buildQuickStat('CA', '15KDT', Icons.money),
                     ],
                   ),
                 ],
@@ -255,6 +256,13 @@ class MecaHomePage extends ConsumerWidget {
               description: 'Vue d\'ensemble de votre activité',
               color: const Color(0xFF4A90E2),
               onTap: () => Get.to(() => const DashBoardScreen()),
+            ),
+            buildMenuCard(
+              icon: Icons.event,
+              title: 'Réservations',
+              description: 'Gérer vos réservations',
+              color: const Color(0xFF4A90E2),
+              onTap: () => Get.to(() => const ReservationScreen()),
             ),
             buildMenuCard(
               icon: Icons.build,

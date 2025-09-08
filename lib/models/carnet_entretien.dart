@@ -7,6 +7,7 @@ class CarnetEntretien {
   final String tache;
   final double coutTotal;
   final String? notes;
+  final int? kilometrage;
 
   CarnetEntretien({
     String? idOperation,
@@ -15,6 +16,7 @@ class CarnetEntretien {
     required this.tache,
     required this.coutTotal,
     this.notes,
+    this.kilometrage, 
   }) : idOperation = idOperation ?? const Uuid().v4();
 
   CarnetEntretien copyWith({
@@ -24,6 +26,7 @@ class CarnetEntretien {
     String? tache,
     double? coutTotal,
     String? notes,
+    int? kilometrage,
   }) {
     return CarnetEntretien(
       idOperation: idOperation ?? this.idOperation,
@@ -32,6 +35,7 @@ class CarnetEntretien {
       tache: tache ?? this.tache,
       coutTotal: coutTotal ?? this.coutTotal,
       notes: notes ?? this.notes,
+      kilometrage: kilometrage ?? this.kilometrage,
     );
   }
 
@@ -43,6 +47,7 @@ class CarnetEntretien {
       'tache': tache,
       'coutTotal': coutTotal,
       'notes': notes,
+      'kilometrage': kilometrage, 
     };
   }
 
@@ -53,6 +58,9 @@ class CarnetEntretien {
       service: (m['service'] as String?) ?? 'entretien',
       tache: (m['tache'] as String?) ?? '',
       coutTotal: (m['coutTotal'] is num) ? (m['coutTotal'] as num).toDouble() : double.parse((m['coutTotal'] ?? '0').toString()),
+      kilometrage: (m['kilometrage'] is int)
+          ? m['kilometrage'] as int
+          : int.tryParse(m['kilometrage']?.toString() ?? ''),
       notes: m['notes'] as String?,
     );
   }

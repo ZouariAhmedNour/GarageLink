@@ -26,6 +26,7 @@ class _EntretienScreenState extends ConsumerState<EntretienScreen>
   late TextEditingController _tacheCtrl;
   late TextEditingController _coutCtrl;
   late TextEditingController _serviceCtrl;
+  late TextEditingController _kmCtrl;
   late AnimationController _fadeController;
   late AnimationController _scaleController;
   late Animation<double> _fadeAnimation;
@@ -34,6 +35,7 @@ class _EntretienScreenState extends ConsumerState<EntretienScreen>
   DateTime _date = DateTime.now();
   bool _isLoading = false;
   String? _errorMessage;
+  
 
   // Palette de couleurs unifiée
   static const Color primaryBlue = Color(0xFF357ABD);
@@ -56,6 +58,9 @@ class _EntretienScreenState extends ConsumerState<EntretienScreen>
         text: init != null ? init.coutTotal.toStringAsFixed(2) : '');
     _serviceCtrl = TextEditingController(text: init?.service ?? 'Entretien général');
     _date = init?.dateOperation ?? DateTime.now();
+    _kmCtrl = TextEditingController(
+  text: init?.kilometrage?.toString() ?? ''
+);
   }
 
   void _setupAnimations() {
@@ -86,6 +91,8 @@ class _EntretienScreenState extends ConsumerState<EntretienScreen>
     _serviceCtrl.dispose();
     _fadeController.dispose();
     _scaleController.dispose();
+    _kmCtrl.dispose();
+
     super.dispose();
   }
 
@@ -419,8 +426,16 @@ class _EntretienScreenState extends ConsumerState<EntretienScreen>
               children: [
                 _buildDateCard(),
                 const SizedBox(height: 20),
-                
                 _buildInputCard(
+                 title: 'Kilométrage',
+                 controller: _kmCtrl,
+                 icon: Icons.speed,
+                 hint: 'Ex: 120000',
+                 keyboardType: TextInputType.number,
+                 suffix: 'km',
+               ),
+               const SizedBox(height: 20),
+                 _buildInputCard(
                   title: 'Type de service',
                   controller: _serviceCtrl,
                   icon: Icons.build_circle_outlined,
@@ -440,10 +455,10 @@ class _EntretienScreenState extends ConsumerState<EntretienScreen>
                 _buildInputCard(
                   title: 'Coût total',
                   controller: _coutCtrl,
-                  icon: Icons.euro_outlined,
+                  icon: Icons.monetization_on_outlined,
                   hint: '0.00',
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  suffix: '€',
+                  suffix: 'DT',
                 ),
                 const SizedBox(height: 32),
 

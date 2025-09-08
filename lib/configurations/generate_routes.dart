@@ -7,6 +7,7 @@ import 'package:garagelink/configurations/app_routes.dart';
 import 'package:garagelink/mecanicien/Facture/facture_detail_page.dart';
 import 'package:garagelink/mecanicien/Facture/facture_screen.dart';
 import 'package:garagelink/mecanicien/Gestion%20Clients/add_client.dart';
+import 'package:garagelink/mecanicien/R%C3%A9servations/reservation_screen.dart';
 import 'package:garagelink/vehicules/add_veh.dart';
 import 'package:garagelink/mecanicien/Gestion%20Clients/client_dash.dart';
 import 'package:garagelink/mecanicien/Gestion%20Clients/edit_client.dart';
@@ -101,5 +102,6 @@ class GenerateRoutes {
       final vehiculeId = Get.arguments as String;
       return EntretienScreen(vehiculeId: vehiculeId);
     }),
+    GetPage(name: AppRoutes.reservationScreen, page: () => const ReservationScreen()),
   ];
 }

@@ -130,70 +130,112 @@ class _HistoryCarnetSectionState extends ConsumerState<HistoryCarnetSection> {
   }
 
   Widget _buildCarnetList() {
-    final map = ref.watch(carnetProvider);
-    final entries = map[widget.veh.id] ?? [];
-    if (entries.isEmpty) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(vertical: 20),
-        child: Column(children: [
-          Icon(Icons.receipt_long, size: 56, color: Colors.grey[400]),
-          const SizedBox(height: 12),
-          Text('Aucune intervention enregistrée dans le carnet', style: TextStyle(color: Colors.grey[600])),
-        ]),
-      );
-    }
-
-    return ListView.separated(
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      itemCount: entries.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 12),
-      itemBuilder: (context, i) {
-        final e = entries[i];
-        return Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(color: surfaceColor, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade200)),
-          child: Row(children: [
-            Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(e.tache, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
-                const SizedBox(height: 6),
-                Text('${DateFormat.yMd().format(e.dateOperation)} • ${e.service}', style: TextStyle(color: Colors.grey.shade600)),
-              ]),
-            ),
-            Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-              Text('${e.coutTotal.toStringAsFixed(2)} DT', style: const TextStyle(fontWeight: FontWeight.w700)),
-              Row(children: [
-                IconButton(
-                  icon: const Icon(Icons.edit, size: 18),
-                  onPressed: () {
-                    Get.to(() => EntretienScreen(vehiculeId: widget.veh.id, initial: e));
-                  },
-                ),
-                IconButton(
-                  icon: const Icon(Icons.delete_outline, size: 18),
-                  onPressed: () async {
-                    final ok = await showDialog<bool>(
-                      context: context,
-                      builder: (ctx) => AlertDialog(
-                        title: Row(children: const [Icon(Icons.warning, color: errorRed), SizedBox(width: 12), Text('Supprimer ?')]),
-                        content: const Text('Confirmez la suppression de cette intervention.'),
-                        actions: [
-                          TextButton(onPressed: () => Navigator.of(ctx).pop(false), child: const Text('Annuler')),
-                          ElevatedButton(onPressed: () => Navigator.of(ctx).pop(true), child: const Text('Supprimer')),
-                        ],
-                      ),
-                    );
-                    if (ok == true) {
-                      ref.read(carnetProvider.notifier).removeEntry(widget.veh.id, e.idOperation);
-                    }
-                  },
-                ),
-              ])
-            ])
-          ]),
-        );
-      },
+  final map = ref.watch(carnetProvider);
+  final entries = map[widget.veh.id] ?? [];
+  const primaryBlue = Color(0xFF357ABD);
+  
+  if (entries.isEmpty) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 32),
+      child: Column(children: [
+        Container(
+          width: 80,
+          height: 80,
+          decoration: const BoxDecoration(
+            color: primaryBlue,
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(Icons.receipt_long, size: 36, color: Colors.white),
+        ),
+        const SizedBox(height: 16),
+        Text('Aucune intervention enregistrée', 
+             style: TextStyle(color: Colors.grey[600], fontSize: 16)),
+      ]),
     );
   }
+
+  return ListView.separated(
+    shrinkWrap: true,
+    physics: const NeverScrollableScrollPhysics(),
+    itemCount: entries.length,
+    separatorBuilder: (_, __) => const SizedBox(height: 12),
+    itemBuilder: (context, i) {
+      final e = entries[i];
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey.shade200),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.grey.withOpacity(0.1),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Row(children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: primaryBlue,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Icon(Icons.build, color: Colors.white, size: 24),
+          ),
+          const SizedBox(width: 16),
+          Expanded( 
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(e.tache, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
+              const SizedBox(height: 4),
+              Text('${DateFormat.yMd().format(e.dateOperation)} • ${e.service}', 
+                   style: TextStyle(color: Colors.grey.shade600, fontSize: 14)),
+            ]),
+          ),
+          Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+            Text('${e.coutTotal.toStringAsFixed(2)} DT', 
+                 style: const TextStyle(fontWeight: FontWeight.w700, color: primaryBlue, fontSize: 16)),
+            const SizedBox(height: 8),
+            Row(children: [
+              IconButton(
+                icon: const Icon(Icons.edit, size: 20, color: primaryBlue),
+                onPressed: () => Get.to(() => EntretienScreen(vehiculeId: widget.veh.id, initial: e)),
+              ),
+              IconButton(
+                icon: const Icon(Icons.delete_outline, size: 20, color: Colors.red),
+                onPressed: () async {
+                  final ok = await showDialog<bool>(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      title: const Row(children: [
+                        Icon(Icons.warning, color: Colors.red),
+                        SizedBox(width: 12),
+                        Text('Supprimer ?')
+                      ]),
+                      content: const Text('Confirmez la suppression de cette intervention.'),
+                      actions: [
+                        TextButton(onPressed: () => Navigator.of(ctx).pop(false), 
+                                 child: const Text('Annuler')),
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+                          onPressed: () => Navigator.of(ctx).pop(true),
+                          child: const Text('Supprimer', style: TextStyle(color: Colors.white)),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (ok == true) {
+                    ref.read(carnetProvider.notifier).removeEntry(widget.veh.id, e.idOperation);
+                  }
+                },
+              ),
+            ])
+          ])
+        ]),
+      );
+    },
+  );
+}
 }

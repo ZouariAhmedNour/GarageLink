@@ -169,29 +169,36 @@ class _MecListScreenState extends ConsumerState<MecListScreen>
     final pageItems = _paginate(filteredSorted);
 
     return Scaffold(
-      backgroundColor: MecColors.surface,
-      appBar: _buildAppBar(filteredSorted.length),
+  backgroundColor: MecColors.surface,
+  appBar: _buildAppBar(filteredSorted.length),
 
-      body: SlideTransition(
-        position: _slideAnimation,
-        child: FadeTransition(
-          opacity: _fadeAnimation,
-          child: RefreshIndicator(
-            onRefresh: _refreshData,
-            color: MecColors.primary,
-            child: Column(
-              children: [
-                _buildHeader(filteredSorted.length),
-                _buildFiltersSection(),
-                Expanded(child: _buildContent(pageItems, filteredSorted)),
-                _buildPagination(pageCount),
-              ],
-            ),
+  body: SlideTransition(
+    position: _slideAnimation,
+    child: FadeTransition(
+      opacity: _fadeAnimation,
+      child: RefreshIndicator(
+        onRefresh: _refreshData,
+        color: MecColors.primary,
+        child: SingleChildScrollView(   // ✅ au lieu de Column
+          physics: const AlwaysScrollableScrollPhysics(),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildHeader(filteredSorted.length),
+              _buildFiltersSection(),
+              SizedBox(
+                height: MediaQuery.of(context).size.height * 0.5,
+                child: _buildContent(pageItems, filteredSorted),
+              ),
+              _buildPagination(pageCount),
+            ],
           ),
         ),
       ),
-      floatingActionButton: _buildFab(),
-    );
+    ),
+  ),
+  floatingActionButton: _buildFab(),
+);
   }
 
   PreferredSizeWidget _buildAppBar(int count) {
@@ -312,7 +319,7 @@ class _MecListScreenState extends ConsumerState<MecListScreen>
   }
 
   int _selectedFilterIndex =
-      0; // 0=Poste, 1=Statut, 2=Contrat, 3=Ancienneté, 4=Compétences
+      0; // 0=Poste, 1=Statut, 2=Contrat, 3=Services, 4=Ancienneté
   Widget _buildFiltersSection() {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -337,38 +344,45 @@ class _MecListScreenState extends ConsumerState<MecListScreen>
 
           const SizedBox(height: 12),
 
-          // 🔹 ToggleButtons pour les filtres principaux
-          ToggleButtons(
-            isSelected: List.generate(4, (i) => i == _selectedFilterIndex),
-            borderRadius: BorderRadius.circular(8),
-            selectedColor: Colors.white,
-            fillColor: MecColors.primary,
-            onPressed: (index) {
-              setState(() => _selectedFilterIndex = index);
-            },
-            children: const [
-              Padding(
-                padding: EdgeInsets.symmetric(horizontal: 12),
-                child: Text("Poste"),
-              ),
-              Padding(
-                padding: EdgeInsets.symmetric(horizontal: 12),
-                child: Text("Statut"),
-              ),
-              Padding(
-                padding: EdgeInsets.symmetric(horizontal: 12),
-                child: Text("Contrat"),
-              ),
-              Padding(
-                padding: EdgeInsets.symmetric(horizontal: 12),
-                child: Text("Services"),
-              ),
-            ],
+          // 🔹 Onglets filtres (5 boutons)
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: ToggleButtons(
+              isSelected: List.generate(5, (i) => i == _selectedFilterIndex),
+              borderRadius: BorderRadius.circular(8),
+              selectedColor: Colors.white,
+              fillColor: MecColors.primary,
+              onPressed: (index) {
+                setState(() => _selectedFilterIndex = index);
+              },
+              children: const [
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 12),
+                  child: Text("Poste"),
+                ),
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 12),
+                  child: Text("Statut"),
+                ),
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 12),
+                  child: Text("Contrat"),
+                ),
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 12),
+                  child: Text("Services"),
+                ),
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 12),
+                  child: Text("Ancienneté"),
+                ),
+              ],
+            ),
           ),
 
           const SizedBox(height: 12),
 
-          // 🔹 Champ dynamique selon le filtre choisi
+          // 🔹 Contenu dynamique
           if (_selectedFilterIndex == 0) // Poste
             DropdownButtonFormField<String>(
               value: _filterState.posteFilter,
@@ -415,7 +429,23 @@ class _MecListScreenState extends ConsumerState<MecListScreen>
               ),
             ),
 
-          if (_selectedFilterIndex == 3) // Ancienneté
+          if (_selectedFilterIndex == 3) ...[
+            // Services
+            _buildSectionHeader(Icons.home_repair_service, 'Services'),
+            const SizedBox(height: 8),
+            ServicesChips(
+              onServiceSelected: (c, on) => _updateFilter(() {
+                if (on) {
+                  _filterState.servicesFilter.add(c);
+                } else {
+                  _filterState.servicesFilter.remove(c);
+                }
+              }),
+              servicesFilter: _filterState.servicesFilter,
+            ),
+          ],
+
+          if (_selectedFilterIndex == 4) // Ancienneté
             DropdownButtonFormField<String>(
               value: _filterState.ancienneteFilter,
               items: [
@@ -432,21 +462,6 @@ class _MecListScreenState extends ConsumerState<MecListScreen>
                 labelText: "Filtrer par ancienneté",
               ),
             ),
-
-          if (_selectedFilterIndex == 4) ...[
-            _buildSectionHeader(Icons.psychology, 'Compétences'),
-            const SizedBox(height: 8),
-            ServicesChips(
-              onServiceSelected: (c, on) => _updateFilter(() {
-                if (on) {
-                  _filterState.servicesFilter.add(c);
-                } else {
-                  _filterState.servicesFilter.remove(c);
-                }
-              }),
-              servicesFilter: _filterState.servicesFilter,
-            ),
-          ],
         ],
       ),
     );
