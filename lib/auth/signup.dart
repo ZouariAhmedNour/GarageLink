@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -5,13 +6,10 @@ import 'package:garagelink/auth/login.dart';
 import 'package:garagelink/components/custom_button.dart';
 import 'package:garagelink/components/custom_text_form.dart';
 import 'package:garagelink/providers/signup_providers.dart';
+import 'package:garagelink/services/api_client.dart';
+import 'package:garagelink/services/user_service_api.dart';
 import 'package:garagelink/utils/input_formatters.dart';
 import 'package:get/get.dart';
-
-// 📱 PAGE D'INSCRIPTION - GARAGELINK ERP
-// =====================================
-// Page moderne avec toggle animé entre inscription Email et Téléphone
-// Design cohérent avec la page de connexion
 
 class SignUpPage extends ConsumerStatefulWidget {
   const SignUpPage({super.key});
@@ -20,24 +18,25 @@ class SignUpPage extends ConsumerStatefulWidget {
   ConsumerState<SignUpPage> createState() => _SignUpPageState();
 }
 
-class _SignUpPageState extends ConsumerState<SignUpPage> with TickerProviderStateMixin {
+class _SignUpPageState extends ConsumerState<SignUpPage>
+    with TickerProviderStateMixin {
   // 🔧 CONFIGURATION ET VALIDATION
   // ===============================
-  final RegExp tunisianPhoneRegExp = RegExp(r'^\+216\d{8}$');
-  
+  final RegExp tunisianPhoneRegExp = RegExp(r'^\+216\d{8}\$');
+
   // 📊 ÉTATS DE L'INTERFACE
   // =======================
-  bool _usePhoneSignup = false;  // Mode téléphone vs email
-  bool _codeSent = false;        // État d'envoi du code SMS
-  bool _isLoading = false;       // État de chargement
-  
+  bool _usePhoneSignup = false; // Mode téléphone vs email
+  bool _codeSent = false; // État d'envoi du code SMS
+  bool _isLoading = false; // État de chargement
+
   // 🎬 CONTRÔLEURS D'ANIMATION
   // ==========================
-  late AnimationController _toggleController;  // Animation du toggle
-  late AnimationController _slideController;    // Animation des slides
-  late Animation<Offset> _emailSlideAnimation;  // Slide formulaire email
-  late Animation<Offset> _phoneSlideAnimation;  // Slide formulaire téléphone
-  
+  late AnimationController _toggleController; // Animation du toggle
+  late AnimationController _slideController; // Animation des slides
+  late Animation<Offset> _emailSlideAnimation; // Slide formulaire email
+  late Animation<Offset> _phoneSlideAnimation; // Slide formulaire téléphone
+
   // 📝 CONTRÔLEUR DE SAISIE
   // ========================
   final TextEditingController otpController = TextEditingController();
@@ -45,30 +44,30 @@ class _SignUpPageState extends ConsumerState<SignUpPage> with TickerProviderStat
   @override
   void initState() {
     super.initState();
-    
+
     // 🎯 INITIALISATION DES ANIMATIONS
     // =================================
     _toggleController = AnimationController(
       duration: const Duration(milliseconds: 300),
       vsync: this,
     );
-    
+
     _slideController = AnimationController(
       duration: const Duration(milliseconds: 400),
       vsync: this,
     );
-    
+
     // 📐 CONFIGURATION DES TRANSITIONS
     // ================================
-    _emailSlideAnimation = Tween<Offset>(
-      begin: Offset.zero,
-      end: const Offset(-1.0, 0.0),
-    ).animate(CurvedAnimation(parent: _slideController, curve: Curves.easeInOut));
-    
-    _phoneSlideAnimation = Tween<Offset>(
-      begin: const Offset(1.0, 0.0),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(parent: _slideController, curve: Curves.easeInOut));
+    _emailSlideAnimation =
+        Tween<Offset>(begin: Offset.zero, end: const Offset(-1.0, 0.0)).animate(
+      CurvedAnimation(parent: _slideController, curve: Curves.easeInOut),
+    );
+
+    _phoneSlideAnimation =
+        Tween<Offset>(begin: const Offset(1.0, 0.0), end: Offset.zero).animate(
+      CurvedAnimation(parent: _slideController, curve: Curves.easeInOut),
+    );
   }
 
   @override
@@ -88,7 +87,7 @@ class _SignUpPageState extends ConsumerState<SignUpPage> with TickerProviderStat
       _usePhoneSignup = !_usePhoneSignup;
       _codeSent = false;
       otpController.clear();
-      
+
       if (_usePhoneSignup) {
         // 📱 Passage au mode téléphone
         _toggleController.forward();
@@ -119,6 +118,29 @@ class _SignUpPageState extends ConsumerState<SignUpPage> with TickerProviderStat
     );
   }
 
+  /// Handle response maps from UserService and show SnackBar + debug print
+  void _handleApiResult(Map<String, dynamic> res,
+      {bool successIsError = false, VoidCallback? onSuccess}) {
+    // Affiche un message utilisateur via SnackBar (champ 'message' retourné par UserService)
+    final msg = (res['message'] as String?) ?? 'Une erreur est survenue.';
+    final isError = !(res['success'] == true) || successIsError;
+
+    _showSnackBar(msg, isError: isError);
+
+    // Si succès et callback fourni -> appelle le callback
+    if (res['success'] == true && onSuccess != null) {
+      onSuccess();
+    }
+
+    // Log détaillé pour dev/admin (seulement en debug)
+    if (kDebugMode) {
+      print('[API DEBUG] message: $msg');
+      if (res.containsKey('devMessage')) print('[API DEBUG] devMessage: ${res['devMessage']}');
+      if (res.containsKey('statusCode')) print('[API DEBUG] statusCode: ${res['statusCode']}');
+      if (res.containsKey('body')) print('[API DEBUG] body: ${res['body']}');
+    }
+  }
+
   // 🎚️ WIDGET TOGGLE ANIMÉ
   // =======================
   Widget _buildToggleButton() {
@@ -139,7 +161,7 @@ class _SignUpPageState extends ConsumerState<SignUpPage> with TickerProviderStat
       child: Stack(
         children: [
           // 🎯 INDICATEUR ANIMÉ
-           AnimatedBuilder(
+          AnimatedBuilder(
             animation: _toggleController,
             builder: (context, child) {
               return AnimatedPositioned(
@@ -179,14 +201,18 @@ class _SignUpPageState extends ConsumerState<SignUpPage> with TickerProviderStat
                       children: [
                         Icon(
                           Icons.email_outlined,
-                          color: !_usePhoneSignup ? Colors.white : Colors.grey[600],
+                          color: !_usePhoneSignup
+                              ? Colors.white
+                              : Colors.grey[600],
                           size: 20,
                         ),
                         const SizedBox(width: 8),
                         Text(
                           'Email',
                           style: TextStyle(
-                            color: !_usePhoneSignup ? Colors.white : Colors.grey[600],
+                            color: !_usePhoneSignup
+                                ? Colors.white
+                                : Colors.grey[600],
                             fontWeight: FontWeight.w600,
                             fontSize: 16,
                           ),
@@ -208,14 +234,18 @@ class _SignUpPageState extends ConsumerState<SignUpPage> with TickerProviderStat
                       children: [
                         Icon(
                           Icons.phone_android,
-                          color: _usePhoneSignup ? Colors.white : Colors.grey[600],
+                          color: _usePhoneSignup
+                              ? Colors.white
+                              : Colors.grey[600],
                           size: 20,
                         ),
                         const SizedBox(width: 8),
                         Text(
                           'Téléphone',
                           style: TextStyle(
-                            color: _usePhoneSignup ? Colors.white : Colors.grey[600],
+                            color: _usePhoneSignup
+                                ? Colors.white
+                                : Colors.grey[600],
                             fontWeight: FontWeight.w600,
                             fontSize: 16,
                           ),
@@ -239,7 +269,9 @@ class _SignUpPageState extends ConsumerState<SignUpPage> with TickerProviderStat
     final emailController = ref.watch(emailControllerProvider);
     final phoneController = ref.watch(numberControllerProvider);
     final passwordController = ref.watch(passwordControllerProvider);
-    final confirmPasswordController = ref.watch(confirmPasswordControllerProvider);
+    final confirmPasswordController = ref.watch(
+      confirmPasswordControllerProvider,
+    );
 
     return SlideTransition(
       position: _emailSlideAnimation,
@@ -321,8 +353,8 @@ class _SignUpPageState extends ConsumerState<SignUpPage> with TickerProviderStat
           const SizedBox(height: 30),
           // 📤 BOUTON D'ACTION
           CustomButton(
-            text: _isLoading 
-                ? (_codeSent ? 'Vérification...' : 'Envoi...') 
+            text: _isLoading
+                ? (_codeSent ? 'Vérification...' : 'Envoi...')
                 : (_codeSent ? 'Vérifier le code' : 'Envoyer le code'),
             backgroundColor: const Color(0xFF4A90E2),
             onPressed: _isLoading ? () {} : () => _handlePhoneSignup(),
@@ -334,60 +366,78 @@ class _SignUpPageState extends ConsumerState<SignUpPage> with TickerProviderStat
 
   // 📧 GESTION INSCRIPTION EMAIL
   // =============================
-  Future<void> _handleEmailSignup() async {
-    final fullNameController = ref.read(fullNameControllerProvider);
-    final emailController = ref.read(emailControllerProvider);
-    final passwordController = ref.read(passwordControllerProvider);
-    final confirmPasswordController = ref.read(confirmPasswordControllerProvider);
+Future<void> _handleEmailSignup() async {
+  final fullNameController = ref.read(fullNameControllerProvider);
+  final emailController = ref.read(emailControllerProvider);
+  final phoneController = ref.read(numberControllerProvider);
+  final passwordController = ref.read(passwordControllerProvider);
+  final confirmPasswordController = ref.read(confirmPasswordControllerProvider);
 
-    // ✅ VALIDATION DES CHAMPS
-    if (fullNameController.text.isEmpty || 
-        emailController.text.isEmpty || 
-        passwordController.text.isEmpty || 
-        confirmPasswordController.text.isEmpty) {
-      _showSnackBar('Veuillez remplir tous les champs');
-      return;
-    }
-
-    // 🔐 VALIDATION DES MOTS DE PASSE
-    if (passwordController.text != confirmPasswordController.text) {
-      _showSnackBar('Les mots de passe ne correspondent pas');
-      return;
-    }
-
-    setState(() => _isLoading = true);
-
-    try {
-      // 🔥 CRÉATION DU COMPTE FIREBASE
-      final credential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
-        email: emailController.text,
-        password: passwordController.text,
-      );
-
-      // 📧 ENVOI EMAIL DE VÉRIFICATION
-      await credential.user?.sendEmailVerification();
-      _showSnackBar('Email de vérification envoyé.', isError: false);
-      
-      // ⏱️ ATTENTE AVANT NAVIGATION
-      await Future.delayed(const Duration(seconds: 1));
-      Get.off(() => LoginPage());
-    } on FirebaseAuthException catch (e) {
-      // 🚨 GESTION DES ERREURS FIREBASE
-      String message = e.code == 'email-already-in-use'
-          ? 'Cette adresse email est déjà utilisée'
-          : 'Échec de l\'inscription';
-      _showSnackBar(message);
-    } catch (e) {
-      // 🚨 ERREURS GÉNÉRIQUES
-      _showSnackBar('Une erreur inattendue s\'est produite');
-    } finally {
-      // 🧹 NETTOYAGE DE L'ÉTAT
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
-    }
+  if (fullNameController.text.isEmpty ||
+      emailController.text.isEmpty ||
+      passwordController.text.isEmpty ||
+      confirmPasswordController.text.isEmpty) {
+    _showSnackBar('Veuillez remplir tous les champs');
+    return;
   }
 
+  if (passwordController.text != confirmPasswordController.text) {
+    _showSnackBar('Les mots de passe ne correspondent pas');
+    return;
+  }
+
+  setState(() => _isLoading = true);
+
+  try {
+    // ----- REMARQUE : Firebase signup/commenté -----
+    // On ne crée plus d'utilisateur Firebase ici (temporairement).
+    // final credential = await FirebaseAuth.instance
+    //     .createUserWithEmailAndPassword(
+    //       email: emailController.text.trim(),
+    //       password: passwordController.text.trim(),
+    //     );
+    // await credential.user?.sendEmailVerification();
+
+    // 🌐 Backend API signup (utiliser uniquement le backend)
+    final userService = UserService();
+    final res = await userService.register(
+      username: fullNameController.text.trim(),
+      garagenom: "Mon Garage", // placeholder si nécessaire
+      matriculefiscal: "123456", // placeholder
+      email: emailController.text.trim(),
+      password: passwordController.text.trim(),
+      phone: phoneController.text.trim(),
+    );
+
+    // Gérer la réponse : si le backend renvoie un token, le sauvegarder puis naviguer
+    if (res['success'] == true) {
+      // Si le backend renvoie un champ token (ex: res['token'] ou res['data']['token'])
+      String? token;
+      if (res.containsKey('token')) {
+        token = res['token'] as String?;
+      } else if (res.containsKey('data') && res['data'] is Map && res['data'].containsKey('token')) {
+        token = (res['data'] as Map)['token'] as String?;
+      }
+
+      if (token != null) {
+        // Sauvegarder le token pour les requêtes futures
+        await ApiClient().saveToken(token);
+      }
+
+      _handleApiResult(res, onSuccess: () {
+        // navigation : vers la page login (ou completeProfile selon ton backend)
+        Get.off(() => LoginPage());
+      });
+    } else {
+      // afficher l'erreur renvoyée par le backend
+      _handleApiResult(res);
+    }
+  } on Exception catch (e) {
+    _showSnackBar("Erreur: $e");
+  } finally {
+    if (mounted) setState(() => _isLoading = false);
+  }
+}
   // 📱 GESTION INSCRIPTION TÉLÉPHONE
   // =================================
   Future<void> _handlePhoneSignup() async {
@@ -400,9 +450,9 @@ class _SignUpPageState extends ConsumerState<SignUpPage> with TickerProviderStat
         _showSnackBar('Veuillez entrer votre numéro de téléphone');
         return;
       }
-      
+
       setState(() => _isLoading = true);
-      
+
       authService.signUpWithPhone(
         phoneController.text,
         context,
@@ -427,9 +477,30 @@ class _SignUpPageState extends ConsumerState<SignUpPage> with TickerProviderStat
       // 🔢 VÉRIFICATION DU CODE
       setState(() => _isLoading = true);
       authService.verifySmsCode(
-        otpController.text.trim(), 
-        context, 
-        isSignup: true
+        otpController.text.trim(),
+        context,
+        isSignup: true,
+        onSuccess: (User? firebaseUser) async {
+          if (firebaseUser != null) {
+            final phoneController = ref.read(numberControllerProvider);
+            final userService = UserService();
+            final res = await userService.register(
+              username: "Utilisateur ${phoneController.text}",
+              garagenom: "Mon Garage",
+              matriculefiscal: "123456",
+              email: "${phoneController.text}@dummy.com", // fake email si obligatoire
+              password: "firebase", // mot de passe placeholder
+              phone: phoneController.text,
+            );
+
+            _handleApiResult(res, onSuccess: () {
+              // navigation only
+              Get.off(() => LoginPage());
+            });
+          } else {
+            _showSnackBar('Échec de l\'authentification.', isError: true);
+          }
+        },
       );
       if (mounted) {
         setState(() => _isLoading = false);
@@ -447,7 +518,7 @@ class _SignUpPageState extends ConsumerState<SignUpPage> with TickerProviderStat
           child: Column(
             children: [
               const SizedBox(height: 30),
-              
+
               // 🔙 HEADER AVEC NAVIGATION
               // =========================
               Row(
@@ -463,7 +534,7 @@ class _SignUpPageState extends ConsumerState<SignUpPage> with TickerProviderStat
                 ],
               ),
               const SizedBox(height: 20),
-              
+
               // 🏢 LOGO DE L'APPLICATION
               // ========================
               Container(
@@ -486,7 +557,7 @@ class _SignUpPageState extends ConsumerState<SignUpPage> with TickerProviderStat
                 ),
               ),
               const SizedBox(height: 25),
-              
+
               // 📝 TITRE ET SOUS-TITRE
               // =======================
               const Text(
@@ -507,17 +578,18 @@ class _SignUpPageState extends ConsumerState<SignUpPage> with TickerProviderStat
                 ),
               ),
               const SizedBox(height: 40),
-              
+
               // 🎚️ TOGGLE ENTRE MODES
               // ======================
               _buildToggleButton(),
               const SizedBox(height: 35),
-              
+
               // 📋 FORMULAIRES DYNAMIQUES
               // ==========================
               SizedBox(
-                height: _usePhoneSignup ? 
-                  (_codeSent ? 250 : 180) : 450, // Hauteur adaptative
+                height: _usePhoneSignup
+                    ? (_codeSent ? 250 : 180)
+                    : 450, // Hauteur adaptative
                 child: Stack(
                   children: [
                     if (!_usePhoneSignup) _buildEmailForm(),
@@ -525,9 +597,9 @@ class _SignUpPageState extends ConsumerState<SignUpPage> with TickerProviderStat
                   ],
                 ),
               ),
-              
+
               const SizedBox(height: 25),
-              
+
               // 🔗 LIEN VERS CONNEXION
               // =======================
               TextButton(

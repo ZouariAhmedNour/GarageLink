@@ -1,5 +1,5 @@
 // lib/mecanicien/devis/models/devis.dart
-import 'package:garagelink/mecanicien/devis/models/piece.dart';
+import 'package:garagelink/MecanicienScreens/devis/models/piece.dart';
 import 'package:uuid/uuid.dart';
 
 enum DevisStatus { brouillon, envoye, enAttente, accepte, refuse }

@@ -3,7 +3,7 @@ class AppRoutes {
   static const String signup = '/signup';
   static const String mecaHome = '/mecaHome';
   static const String adminHome = '/adminHome';
-  static const String userHome = '/userHome';
+  static const String clientHome = '/clientHome';
   static const String completeProfile = '/completeProfile';
   static const String resetPassword = '/resetPassword';
   static const String splashScreen = '/splashScreen';
@@ -31,5 +31,7 @@ class AppRoutes {
   static const String editClientScreen = '/editClientScreen';
   static const String entretienScreen = '/entretienScreen';
   static const String reservationScreen = '/reservationScreen';
+  static const String clientVehiclesScreen = '/clientVehiclesScreen';
+  static const String clientMapScreen = '/clientMapScreen';
 
 }

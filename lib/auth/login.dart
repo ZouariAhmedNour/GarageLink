@@ -1,5 +1,6 @@
 import 'package:awesome_dialog/awesome_dialog.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:garagelink/auth/signup.dart';
@@ -18,9 +19,10 @@ class LoginPage extends ConsumerStatefulWidget {
   _LoginPageState createState() => _LoginPageState();
 }
 
-class _LoginPageState extends ConsumerState<LoginPage> with TickerProviderStateMixin {
+class _LoginPageState extends ConsumerState<LoginPage>
+    with TickerProviderStateMixin {
   final RegExp tunisianPhoneRegExp = RegExp(r'^\+216\d{8}$');
-  
+
   bool _usePhoneLogin = false;
   bool _codeSent = false;
   bool _isLoading = false;
@@ -29,7 +31,7 @@ class _LoginPageState extends ConsumerState<LoginPage> with TickerProviderStateM
   late AnimationController _slideController;
   late Animation<Offset> _emailSlideAnimation;
   late Animation<Offset> _phoneSlideAnimation;
-  
+
   late final TextEditingController phoneController;
   late final TextEditingController otpController;
   late final TextEditingController emailController;
@@ -38,26 +40,26 @@ class _LoginPageState extends ConsumerState<LoginPage> with TickerProviderStateM
   @override
   void initState() {
     super.initState();
-    
+
     _toggleController = AnimationController(
       duration: const Duration(milliseconds: 300),
       vsync: this,
     );
-    
+
     _slideController = AnimationController(
       duration: const Duration(milliseconds: 400),
       vsync: this,
     );
-    
-    _emailSlideAnimation = Tween<Offset>(
-      begin: Offset.zero,
-      end: const Offset(-1.0, 0.0),
-    ).animate(CurvedAnimation(parent: _slideController, curve: Curves.easeInOut));
-    
-    _phoneSlideAnimation = Tween<Offset>(
-      begin: const Offset(1.0, 0.0),
-      end: Offset.zero,
-    ).animate(CurvedAnimation(parent: _slideController, curve: Curves.easeInOut));
+
+    _emailSlideAnimation =
+        Tween<Offset>(begin: Offset.zero, end: const Offset(-1.0, 0.0)).animate(
+      CurvedAnimation(parent: _slideController, curve: Curves.easeInOut),
+    );
+
+    _phoneSlideAnimation =
+        Tween<Offset>(begin: const Offset(1.0, 0.0), end: Offset.zero).animate(
+      CurvedAnimation(parent: _slideController, curve: Curves.easeInOut),
+    );
 
     emailController = ref.read(loginEmailControllerProvider);
     passwordController = ref.read(loginPasswordControllerProvider);
@@ -94,7 +96,7 @@ class _LoginPageState extends ConsumerState<LoginPage> with TickerProviderStateM
       _codeSent = false;
       phoneController.clear();
       otpController.clear();
-      
+
       if (_usePhoneLogin) {
         _toggleController.forward();
         _slideController.forward();
@@ -109,30 +111,6 @@ class _LoginPageState extends ConsumerState<LoginPage> with TickerProviderStateM
     });
   }
 
-  void _showVerificationDialog(BuildContext context, User user) {
-    AwesomeDialog(
-      context: context,
-      dialogType: DialogType.warning,
-      title: 'Email non vérifié',
-      desc: 'Votre compte n\'est pas encore vérifié. Voulez-vous renvoyer un email de vérification ?',
-      btnCancelText: 'Annuler',
-      btnOkText: 'Envoyer',
-      btnCancelOnPress: () {},
-      btnOkOnPress: () async {
-        try {
-          await user.sendEmailVerification();
-          if (context.mounted) {
-            _showSnackBar('Un email de vérification a été envoyé.', isError: false);
-          }
-        } catch (e) {
-          if (context.mounted) {
-            _showSnackBar('Erreur : ${e.toString()}');
-          }
-        }
-      },
-    ).show();
-  }
-
   void _showSnackBar(String message, {bool isError = true}) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -142,6 +120,34 @@ class _LoginPageState extends ConsumerState<LoginPage> with TickerProviderStateM
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
     );
+  }
+
+  /// Handle response maps from UserService and show SnackBar + debug print
+  void _handleApiResult(
+    Map<String, dynamic> res, {
+    bool successIsError = false,
+    VoidCallback? onSuccess,
+  }) {
+    // Affiche un message utilisateur via SnackBar (champ 'message' retourné par UserService)
+    final msg = (res['message'] as String?) ?? 'Une erreur est survenue.';
+    final isError = !(res['success'] == true) || successIsError;
+
+    _showSnackBar(msg, isError: isError);
+
+    // Si succès et callback fourni -> appelle le callback
+    if (res['success'] == true && onSuccess != null) {
+      onSuccess();
+    }
+
+    // Log détaillé pour dev/admin (seulement en debug)
+    if (kDebugMode) {
+      print('[API DEBUG] message: $msg');
+      if (res.containsKey('devMessage'))
+        print('[API DEBUG] devMessage: ${res['devMessage']}');
+      if (res.containsKey('statusCode'))
+        print('[API DEBUG] statusCode: ${res['statusCode']}');
+      if (res.containsKey('body')) print('[API DEBUG] body: ${res['body']}');
+    }
   }
 
   Widget _buildToggleButton() {
@@ -199,14 +205,18 @@ class _LoginPageState extends ConsumerState<LoginPage> with TickerProviderStateM
                       children: [
                         Icon(
                           Icons.email_outlined,
-                          color: !_usePhoneLogin ? Colors.white : Colors.grey[600],
+                          color: !_usePhoneLogin
+                              ? Colors.white
+                              : Colors.grey[600],
                           size: 20,
                         ),
                         const SizedBox(width: 8),
                         Text(
                           'Email',
                           style: TextStyle(
-                            color: !_usePhoneLogin ? Colors.white : Colors.grey[600],
+                            color: !_usePhoneLogin
+                                ? Colors.white
+                                : Colors.grey[600],
                             fontWeight: FontWeight.w600,
                             fontSize: 16,
                           ),
@@ -227,14 +237,18 @@ class _LoginPageState extends ConsumerState<LoginPage> with TickerProviderStateM
                       children: [
                         Icon(
                           Icons.phone_android,
-                          color: _usePhoneLogin ? Colors.white : Colors.grey[600],
+                          color: _usePhoneLogin
+                              ? Colors.white
+                              : Colors.grey[600],
                           size: 20,
                         ),
                         const SizedBox(width: 8),
                         Text(
                           'Téléphone',
                           style: TextStyle(
-                            color: _usePhoneLogin ? Colors.white : Colors.grey[600],
+                            color: _usePhoneLogin
+                                ? Colors.white
+                                : Colors.grey[600],
                             fontWeight: FontWeight.w600,
                             fontSize: 16,
                           ),
@@ -258,7 +272,8 @@ class _LoginPageState extends ConsumerState<LoginPage> with TickerProviderStateM
         children: [
           CustomButton(
             text: 'Connexion avec Google',
-            onPressed: () => ref.read(authServiceProvider).signInWithGoogle(context),
+            onPressed: () =>
+                ref.read(authServiceProvider).signInWithGoogle(context),
             icon: Icons.g_mobiledata,
             backgroundColor: const Color(0xFFDB4437),
           ),
@@ -268,7 +283,13 @@ class _LoginPageState extends ConsumerState<LoginPage> with TickerProviderStateM
               Expanded(child: Divider(color: Colors.grey)),
               Padding(
                 padding: EdgeInsets.symmetric(horizontal: 16),
-                child: Text('OU', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.w500)),
+                child: Text(
+                  'OU',
+                  style: TextStyle(
+                    color: Colors.grey,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
               ),
               Expanded(child: Divider(color: Colors.grey)),
             ],
@@ -308,6 +329,86 @@ class _LoginPageState extends ConsumerState<LoginPage> with TickerProviderStateM
       ),
     );
   }
+  void _showVerificationDialogWithCheck(BuildContext context, User user) {
+  AwesomeDialog(
+    context: context,
+    dialogType: DialogType.warning,
+    title: 'Email non vérifié',
+    desc: 'Votre compte n\'est pas encore vérifié. Voulez-vous renvoyer un email de vérification ?',
+    btnCancelText: 'Annuler',
+    btnOkText: 'Renvoyer',
+    btnCancelOnPress: () async {
+      // Optionnel : déconnecter l'utilisateur si il annule explicitement
+      try {
+        await FirebaseAuth.instance.signOut();
+        _handleApiResult({
+          'success': true,
+          'message': 'Déconnecté.',
+          'devMessage': 'User signed out after cancelling verification dialog',
+        });
+      } catch (e) {
+        if (kDebugMode) print('[LOGIN DEBUG] signOut error: $e');
+      }
+    },
+    btnOkOnPress: () async {
+      try {
+        await user.sendEmailVerification();
+        if (context.mounted) {
+          _handleApiResult({
+            'success': true,
+            'message': 'Email de vérification renvoyé.',
+            'devMessage': 'Email verification sent via Firebase',
+          }, onSuccess: null);
+        }
+      } catch (e) {
+        if (context.mounted) {
+          _handleApiResult({
+            'success': false,
+            'message': 'Erreur lors de l\'envoi de l\'email: ${e.toString()}',
+            'devMessage': e.toString(),
+          });
+        }
+      }
+    },
+  ).show();
+
+  // SnackBar avec action "J'ai vérifié" — permet de relire l'état et rediriger
+  ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: const Text('Après avoir cliqué sur le lien, appuyez sur "Vérifier".'),
+      action: SnackBarAction(
+        label: 'Vérifier',
+        onPressed: () async {
+          try {
+            // reload du user courant et vérification
+            await FirebaseAuth.instance.currentUser?.reload();
+            final reloaded = FirebaseAuth.instance.currentUser;
+            if (kDebugMode) {
+              print('[LOGIN DEBUG] after manual reload: emailVerified=${reloaded?.emailVerified}');
+            }
+            if (reloaded != null && reloaded.emailVerified) {
+              // Rediriger vers home
+              Get.offAllNamed(AppRoutes.mecaHome);
+            } else {
+              _handleApiResult({
+                'success': false,
+                'message': 'Email toujours non vérifié. Vérifiez le lien dans votre boite mail.',
+                'devMessage': 'emailVerified still false after reload',
+              });
+            }
+          } catch (e) {
+            _handleApiResult({
+              'success': false,
+              'message': 'Erreur lors de la vérification: ${e.toString()}',
+              'devMessage': e.toString(),
+            });
+          }
+        },
+      ),
+      duration: const Duration(seconds: 10),
+    ),
+  );
+}
 
   Widget _buildPhoneForm() {
     return SlideTransition(
@@ -337,8 +438,8 @@ class _LoginPageState extends ConsumerState<LoginPage> with TickerProviderStateM
           ],
           const SizedBox(height: 30),
           CustomButton(
-            text: _isLoading 
-                ? (_codeSent ? 'Vérification...' : 'Envoi...') 
+            text: _isLoading
+                ? (_codeSent ? 'Vérification...' : 'Envoi...')
                 : (_codeSent ? 'Vérifier le code' : 'Envoyer le code'),
             onPressed: _isLoading ? () {} : _handlePhoneAuth,
             icon: Icons.phone_android,
@@ -348,74 +449,122 @@ class _LoginPageState extends ConsumerState<LoginPage> with TickerProviderStateM
       ),
     );
   }
+Future<void> _handleEmailLogin() async {
+  if (emailController.text.isEmpty || passwordController.text.isEmpty) {
+    _handleApiResult({
+      'success': false,
+      'message': 'Veuillez remplir tous les champs',
+      'devMessage': 'Missing email or password in login form',
+    });
+    return;
+  }
 
-  Future<void> _handleEmailLogin() async {
-    if (emailController.text.isEmpty || passwordController.text.isEmpty) {
-      _showSnackBar('Veuillez remplir tous les champs');
+  setState(() => _isLoading = true);
+
+  try {
+    final credential = await FirebaseAuth.instance.signInWithEmailAndPassword(
+      email: emailController.text.trim(),
+      password: passwordController.text,
+    );
+
+    // Récupérer le user et forcer un reload pour obtenir un emailVerified à jour
+    User? user = credential.user ?? FirebaseAuth.instance.currentUser;
+    if (user != null) {
+      await user.reload();
+      user = FirebaseAuth.instance.currentUser;
+    }
+
+    if (kDebugMode) {
+      print('[LOGIN DEBUG] user after signIn: uid=${user?.uid} emailVerified=${user?.emailVerified}');
+    }
+
+    if (user != null && !user.emailVerified) {
+      // Afficher dialog de vérification sans déconnecter immédiatement
+      if (mounted) _showVerificationDialogWithCheck(context, user);
       return;
     }
 
-    setState(() => _isLoading = true);
-    
-    try {
-      await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: emailController.text,
-        password: passwordController.text,
-      );
+    // Si tout est ok -> navigation vers la page principale
+    Get.offAllNamed(AppRoutes.mecaHome);
 
-      final user = FirebaseAuth.instance.currentUser;
-      if (user != null && !user.emailVerified) {
-        await FirebaseAuth.instance.signOut();
-        _showVerificationDialog(context, user);
-        return;
-      }
 
-      Get.offAllNamed(AppRoutes.mecaHome);
-    } on FirebaseAuthException catch (e) {
-      String message = 'Erreur inconnue';
-      if (e.code == 'user-not-found') {
-        message = 'Aucun utilisateur trouvé pour cet email.';
-      } else if (e.code == 'wrong-password' || e.code == 'invalid-credential') {
-        message = 'Mot de passe incorrect.';
-      } else {
-        message = 'Erreur: ${e.message}';
-      }
-      _showSnackBar(message);
-    } catch (e) {
-      _showSnackBar('Une erreur inattendue s\'est produite');
-    } finally {
-      setState(() => _isLoading = false);
+  } on FirebaseAuthException catch (e) {
+    String message = 'Erreur inconnue';
+    if (e.code == 'user-not-found') {
+      message = 'Aucun utilisateur trouvé pour cet email.';
+    } else if (e.code == 'wrong-password' || e.code == 'invalid-credential') {
+      message = 'Mot de passe incorrect.';
+    } else {
+      message = 'Erreur: ${e.message}';
     }
+    _handleApiResult({
+      'success': false,
+      'message': message,
+      'devMessage': e.toString(),
+    });
+  } catch (e) {
+    _handleApiResult({
+      'success': false,
+      'message': 'Une erreur inattendue s\'est produite',
+      'devMessage': e.toString(),
+    });
+  } finally {
+    if (mounted) setState(() => _isLoading = false);
   }
+}
 
   void _handlePhoneAuth() {
     if (!_codeSent) {
       if (phoneController.text.isEmpty) {
-        _showSnackBar('Veuillez entrer votre numéro de téléphone');
+        _handleApiResult({
+          'success': false,
+          'message': 'Veuillez entrer votre numéro de téléphone',
+          'devMessage': 'Phone input empty in phone auth',
+        });
         return;
       }
       setState(() => _isLoading = true);
-      ref.read(authServiceProvider).signInWithPhone(
-        phoneController.text,
-        context,
-        () {
-          setState(() {
-            _codeSent = true;
-            _isLoading = false;
-          });
-        },
-        (error) {
-          setState(() => _isLoading = false);
-          _showSnackBar(error);
-        },
-      );
+      ref
+          .read(authServiceProvider)
+          .signInWithPhone(
+            phoneController.text,
+            context,
+            () {
+              setState(() {
+                _codeSent = true;
+                _isLoading = false;
+              });
+            },
+            (error) {
+              setState(() => _isLoading = false);
+              _handleApiResult({
+                'success': false,
+                'message': error,
+                'devMessage': error,
+              });
+            },
+          );
     } else {
       setState(() => _isLoading = true);
-      ref.read(authServiceProvider).verifySmsCode(
-        otpController.text.trim(), 
-        context, 
-        isSignup: false
-      );
+      ref
+          .read(authServiceProvider)
+          .verifySmsCode(
+            otpController.text.trim(),
+            context,
+            isSignup: false,
+            onSuccess: (User? firebaseUser) async {
+              if (firebaseUser != null) {
+                // Utilisateur Firebase connecté avec succès -> navigation vers l'app
+                Get.offAllNamed(AppRoutes.mecaHome);
+              } else {
+                _handleApiResult({
+                  'success': false,
+                  'message': 'Échec de l\'authentification.',
+                  'devMessage': 'verifySmsCode returned null user',
+                });
+              }
+            },
+          );
       setState(() => _isLoading = false);
     }
   }
@@ -469,11 +618,11 @@ class _LoginPageState extends ConsumerState<LoginPage> with TickerProviderStateM
                 ),
               ),
               const SizedBox(height: 50),
-              
+
               // Toggle Button
               _buildToggleButton(),
               const SizedBox(height: 40),
-              
+
               // Forms
               SizedBox(
                 height: 400,
@@ -484,7 +633,7 @@ class _LoginPageState extends ConsumerState<LoginPage> with TickerProviderStateM
                   ],
                 ),
               ),
-              
+
               const SizedBox(height: 20),
               TextButton(
                 onPressed: () => Get.to(() => SignUpPage()),

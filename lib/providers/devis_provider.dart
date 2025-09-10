@@ -1,7 +1,7 @@
 // lib/providers/devis_provider.dart
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:garagelink/models/devis.dart';
-import 'package:garagelink/mecanicien/devis/models/piece.dart';
+import 'package:garagelink/MecanicienScreens/devis/models/piece.dart';
 
 class DevisProvider {
   final String client;

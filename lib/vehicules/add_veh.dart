@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:garagelink/components/default_app_bar.dart';
-import 'package:garagelink/mecanicien/devis/devis_widgets/num_serie_input.dart';
+import 'package:garagelink/MecanicienScreens/devis/devis_widgets/num_serie_input.dart';
 import 'package:garagelink/models/vehicule.dart';
 import 'package:garagelink/providers/vehicule_provider.dart';
 import 'package:get/get.dart';

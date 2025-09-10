@@ -162,7 +162,7 @@ class AuthService {
     );
   }
 
-  Future<void> verifySmsCode(String smsCode, BuildContext context, {required bool isSignup}) async {
+  Future<void> verifySmsCode(String smsCode, BuildContext context, {required bool isSignup, required Future<Null> Function(User? firebaseUser) onSuccess}) async {
   if (_verificationId == null) {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('ID de vérification non trouvé.')),
