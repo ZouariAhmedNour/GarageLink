@@ -1,6 +1,6 @@
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:get/get.dart';
 import 'package:garagelink/components/default_app_bar.dart';
 import 'package:garagelink/MecanicienScreens/Facture/facture_screen.dart';
 import 'package:garagelink/MecanicienScreens/Gestion%20Clients/client_dash.dart';
@@ -13,144 +13,216 @@ import 'package:garagelink/MecanicienScreens/meca_services/meca_services.dart';
 import 'package:garagelink/MecanicienScreens/stock/stock_dashboard.dart';
 import 'package:garagelink/MecanicienScreens/work%20order/notif_screen.dart';
 import 'package:garagelink/MecanicienScreens/work%20order/work_order_page.dart';
-import 'package:get/get.dart';
 import 'package:garagelink/configurations/app_routes.dart';
 
-class MecaHomePage extends ConsumerWidget {
+// imports pour token & profil
+import 'package:garagelink/services/api_client.dart';
+import 'package:garagelink/services/user_service_api.dart';
+
+class MecaHomePage extends ConsumerStatefulWidget {
   const MecaHomePage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) {
-      Get.offAllNamed(AppRoutes.login);
-      return const SizedBox();
-    }
+  ConsumerState<MecaHomePage> createState() => _MecaHomePageState();
+}
 
-    final userName = user.displayName ?? user.email?.split('@')[0] ?? 'User';
+class _MecaHomePageState extends ConsumerState<MecaHomePage> {
+  final ApiClient _apiClient = ApiClient();
+  bool _checkingAuth = true;
+  String _userName = 'Utilisateur';
 
-    // 📌 Widget pour les cartes de menu
-    Widget buildMenuCard({
-      required IconData icon,
-      required String title,
-      required String description,
-      required Color color,
-      required VoidCallback onTap,
-    }) {
-      return AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        margin: const EdgeInsets.only(bottom: 20),
-        child: Material(
-          color: Colors.transparent,
-          child: InkWell(
-            onTap: onTap,
-            borderRadius: BorderRadius.circular(20),
-            child: Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color: color.withOpacity(0.15),
-                    blurRadius: 15,
-                    offset: const Offset(0, 8),
-                  ),
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 10,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-                border: Border.all(
-                  color: color.withOpacity(0.1),
-                  width: 1,
+  @override
+  void initState() {
+    super.initState();
+    // démarre la vérification d'auth après la première frame
+    WidgetsBinding.instance.addPostFrameCallback((_) => _initAuth());
+  }
+
+  Future<void> _initAuth() async {
+    try {
+      final token = await _apiClient.getToken();
+      if (token == null || token.isEmpty) {
+        // pas de token -> redirection vers login
+        if (mounted) Get.offAllNamed(AppRoutes.login);
+        return;
+      }
+
+      // token présent -> tenter de récupérer le profil
+      try {
+        final profile = await UserService().getProfile(token);
+        if (profile != null) {
+          setState(() {
+            // adapte selon les champs de ton UserModel
+            _userName = (profile.username.isNotEmpty) ? profile.username : (profile.email);
+          });
+        } else {
+          setState(() => _userName = 'Utilisateur');
+        }
+      } catch (e) {
+        if (mounted) setState(() => _userName = 'Utilisateur');
+      }
+
+      // afficher message si on vient d'un login
+      final args = Get.arguments;
+      if (args != null && args is Map && args['justLoggedIn'] == true) {
+        final message = (args['message'] as String?) ?? 'Connecté avec succès.';
+        if (mounted) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(message),
+                  behavior: SnackBarBehavior.floating,
                 ),
+              );
+            }
+          });
+        }
+      }
+    } finally {
+      if (mounted) setState(() => _checkingAuth = false);
+    }
+  }
+
+  Future<void> _handleLogout() async {
+    await _apiClient.deleteToken();
+    if (mounted) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) Get.offAllNamed(AppRoutes.login);
+      });
+    }
+  }
+
+  // Widgets auxiliaires (repris de ton code)
+  Widget buildMenuCard({
+    required IconData icon,
+    required String title,
+    required String description,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 200),
+      margin: const EdgeInsets.only(bottom: 20),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(20),
+          child: Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              boxShadow: [
+                BoxShadow(
+                  color: color.withOpacity(0.15),
+                  blurRadius: 15,
+                  offset: const Offset(0, 8),
+                ),
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+              border: Border.all(
+                color: color.withOpacity(0.1),
+                width: 1,
               ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 60,
-                    height: 60,
-                    decoration: BoxDecoration(
-                      color: color.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(15),
-                    ),
-                    child: Icon(icon, color: color, size: 30),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 60,
+                  height: 60,
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(15),
                   ),
-                  const SizedBox(width: 20),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          title,
-                          style: const TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                            color: Color(0xFF2C3E50),
-                          ),
+                  child: Icon(icon, color: color, size: 30),
+                ),
+                const SizedBox(width: 20),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Color(0xFF2C3E50),
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          description,
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey[600],
-                          ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        description,
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey[600],
                         ),
-                      ],
-                    ),
+                      ),
+                    ],
                   ),
-                  Icon(Icons.arrow_forward_ios, color: color, size: 20),
-                ],
-              ),
+                ),
+                Icon(Icons.arrow_forward_ios, color: color, size: 20),
+              ],
             ),
           ),
         ),
-      );
-    }
+      ),
+    );
+  }
 
-    // 📌 Widget pour les stats rapides
-    Widget buildQuickStat(String label, String value, IconData icon) {
-      return Expanded(
-        child: Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.15),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Column(
-            children: [
-              Icon(icon, color: Colors.white, size: 20),
-              const SizedBox(height: 4),
-              Text(
-                value,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: Colors.white,
-                ),
-              ),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.white.withOpacity(0.8),
-                ),
-              ),
-            ],
-          ),
+  Widget buildQuickStat(String label, String value, IconData icon) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.15),
+          borderRadius: BorderRadius.circular(12),
         ),
+        child: Column(
+          children: [
+            Icon(icon, color: Colors.white, size: 20),
+            const SizedBox(height: 4),
+            Text(
+              value,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.white.withOpacity(0.8),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // tant que l'auth est vérifiée, affiche loader
+    if (_checkingAuth) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
       );
     }
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
       appBar: CustomAppBar(
-  title: 'Bienvenue, $userName',
-  backgroundColor: const Color(0xFF357ABD), // ou laisse par défaut
-),
+        title: 'Bienvenue, $_userName',
+        backgroundColor: const Color(0xFF357ABD),
+      ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -199,10 +271,7 @@ class MecaHomePage extends ConsumerWidget {
                       ),
                       const Spacer(),
                       IconButton(
-                        onPressed: () async {
-                          await FirebaseAuth.instance.signOut();
-                          Get.offAllNamed(AppRoutes.login);
-                        },
+                        onPressed: _handleLogout,
                         icon: const Icon(Icons.logout, color: Colors.white),
                       ),
                     ],
@@ -283,49 +352,49 @@ class MecaHomePage extends ConsumerWidget {
               title: 'Devis',
               description: 'Création et gestion des devis',
               color: const Color.fromARGB(255, 243, 228, 20),
-              onTap: () => Get.to(() => CreationDevisPage ()),
+              onTap: () => Get.to(() => CreationDevisPage()),
             ),
             buildMenuCard(
               icon: Icons.assignment,
               title: 'Ordres de Travail',
               description: 'Création et gestion des ordres de travail',
               color: const Color.fromARGB(255, 0, 173, 72),
-              onTap: () => Get.to(() => WorkOrderPage ()),
+              onTap: () => Get.to(() => WorkOrderPage()),
             ),
             buildMenuCard(
               icon: Icons.notification_important,
               title: 'Notifications',
               description: 'Création et gestion des Norifications',
               color: const Color.fromARGB(255, 250, 26, 201),
-              onTap: () => Get.to(() => NotifScreen ()),
+              onTap: () => Get.to(() => NotifScreen()),
             ),
             buildMenuCard(
               icon: Icons.inventory,
               title: 'Stock',
               description: 'Création et gestion du stock',
               color: const Color.fromARGB(255, 3, 8, 22),
-              onTap: () => Get.to(() => StockDashboard ()),
+              onTap: () => Get.to(() => StockDashboard()),
             ),
             buildMenuCard(
               icon: Icons.assignment_ind_sharp,
               title: 'Mécaniciens',
               description: 'Création et gestion des mécaniciens',
               color: const Color.fromARGB(255, 17, 50, 141),
-              onTap: () => Get.to(() => MecListScreen ()),
+              onTap: () => Get.to(() => MecListScreen()),
             ),
             buildMenuCard(
               icon: Icons.person,
               title: 'Clients',
               description: 'Création et gestion des clients',
               color: const Color.fromARGB(255, 134, 64, 6),
-              onTap: () => Get.to(() => ClientDash ()),
+              onTap: () => Get.to(() => ClientDash()),
             ),
             buildMenuCard(
               icon: Icons.fact_check,
               title: 'Factures',
               description: 'Création et gestion des factures',
               color: const Color.fromARGB(255, 11, 131, 187),
-              onTap: () => Get.to(() => FactureScreen ()),
+              onTap: () => Get.to(() => FactureScreen()),
             ),
 
             // 🚀 FUTURES FONCTIONNALITÉS

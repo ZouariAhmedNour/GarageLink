@@ -22,7 +22,7 @@ class _SplashScreenState extends State<SplashScreen> {
       final user = FirebaseAuth.instance.currentUser;
 
       if (user != null && user.emailVerified) {
-        Get.offAllNamed(AppRoutes.clientHome);
+        Get.offAllNamed(AppRoutes.mecaHome);
       } else {
         Get.offAllNamed(AppRoutes.login);
       }

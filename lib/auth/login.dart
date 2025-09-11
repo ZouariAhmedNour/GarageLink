@@ -8,7 +8,9 @@ import 'package:garagelink/components/custom_button.dart';
 import 'package:garagelink/components/custom_text_form.dart';
 import 'package:garagelink/configurations/app_routes.dart';
 import 'package:garagelink/providers/login_providers.dart';
+import 'package:garagelink/services/api_client.dart';
 import 'package:garagelink/services/auth_service.dart';
+import 'package:garagelink/services/user_service_api.dart';
 import 'package:garagelink/utils/input_formatters.dart';
 import 'package:get/get.dart';
 
@@ -128,24 +130,21 @@ class _LoginPageState extends ConsumerState<LoginPage>
     bool successIsError = false,
     VoidCallback? onSuccess,
   }) {
-    // Affiche un message utilisateur via SnackBar (champ 'message' retourné par UserService)
     final msg = (res['message'] as String?) ?? 'Une erreur est survenue.';
     final isError = !(res['success'] == true) || successIsError;
 
+    // ATTENTION : n'appelle pas _showSnackBar avant une navigation; la fonction
+    // reste utile pour afficher des erreurs côté courant.
     _showSnackBar(msg, isError: isError);
 
-    // Si succès et callback fourni -> appelle le callback
     if (res['success'] == true && onSuccess != null) {
       onSuccess();
     }
 
-    // Log détaillé pour dev/admin (seulement en debug)
     if (kDebugMode) {
       print('[API DEBUG] message: $msg');
-      if (res.containsKey('devMessage'))
-        print('[API DEBUG] devMessage: ${res['devMessage']}');
-      if (res.containsKey('statusCode'))
-        print('[API DEBUG] statusCode: ${res['statusCode']}');
+      if (res.containsKey('devMessage')) print('[API DEBUG] devMessage: ${res['devMessage']}');
+      if (res.containsKey('statusCode')) print('[API DEBUG] statusCode: ${res['statusCode']}');
       if (res.containsKey('body')) print('[API DEBUG] body: ${res['body']}');
     }
   }
@@ -205,18 +204,14 @@ class _LoginPageState extends ConsumerState<LoginPage>
                       children: [
                         Icon(
                           Icons.email_outlined,
-                          color: !_usePhoneLogin
-                              ? Colors.white
-                              : Colors.grey[600],
+                          color: !_usePhoneLogin ? Colors.white : Colors.grey[600],
                           size: 20,
                         ),
                         const SizedBox(width: 8),
                         Text(
                           'Email',
                           style: TextStyle(
-                            color: !_usePhoneLogin
-                                ? Colors.white
-                                : Colors.grey[600],
+                            color: !_usePhoneLogin ? Colors.white : Colors.grey[600],
                             fontWeight: FontWeight.w600,
                             fontSize: 16,
                           ),
@@ -237,18 +232,14 @@ class _LoginPageState extends ConsumerState<LoginPage>
                       children: [
                         Icon(
                           Icons.phone_android,
-                          color: _usePhoneLogin
-                              ? Colors.white
-                              : Colors.grey[600],
+                          color: _usePhoneLogin ? Colors.white : Colors.grey[600],
                           size: 20,
                         ),
                         const SizedBox(width: 8),
                         Text(
                           'Téléphone',
                           style: TextStyle(
-                            color: _usePhoneLogin
-                                ? Colors.white
-                                : Colors.grey[600],
+                            color: _usePhoneLogin ? Colors.white : Colors.grey[600],
                             fontWeight: FontWeight.w600,
                             fontSize: 16,
                           ),
@@ -272,8 +263,7 @@ class _LoginPageState extends ConsumerState<LoginPage>
         children: [
           CustomButton(
             text: 'Connexion avec Google',
-            onPressed: () =>
-                ref.read(authServiceProvider).signInWithGoogle(context),
+            onPressed: () => ref.read(authServiceProvider).signInWithGoogle(context),
             icon: Icons.g_mobiledata,
             backgroundColor: const Color(0xFFDB4437),
           ),
@@ -329,86 +319,106 @@ class _LoginPageState extends ConsumerState<LoginPage>
       ),
     );
   }
-  void _showVerificationDialogWithCheck(BuildContext context, User user) {
-  AwesomeDialog(
-    context: context,
-    dialogType: DialogType.warning,
-    title: 'Email non vérifié',
-    desc: 'Votre compte n\'est pas encore vérifié. Voulez-vous renvoyer un email de vérification ?',
-    btnCancelText: 'Annuler',
-    btnOkText: 'Renvoyer',
-    btnCancelOnPress: () async {
-      // Optionnel : déconnecter l'utilisateur si il annule explicitement
-      try {
-        await FirebaseAuth.instance.signOut();
-        _handleApiResult({
-          'success': true,
-          'message': 'Déconnecté.',
-          'devMessage': 'User signed out after cancelling verification dialog',
-        });
-      } catch (e) {
-        if (kDebugMode) print('[LOGIN DEBUG] signOut error: $e');
-      }
-    },
-    btnOkOnPress: () async {
-      try {
-        await user.sendEmailVerification();
-        if (context.mounted) {
-          _handleApiResult({
-            'success': true,
-            'message': 'Email de vérification renvoyé.',
-            'devMessage': 'Email verification sent via Firebase',
-          }, onSuccess: null);
-        }
-      } catch (e) {
-        if (context.mounted) {
-          _handleApiResult({
-            'success': false,
-            'message': 'Erreur lors de l\'envoi de l\'email: ${e.toString()}',
-            'devMessage': e.toString(),
-          });
-        }
-      }
-    },
-  ).show();
 
-  // SnackBar avec action "J'ai vérifié" — permet de relire l'état et rediriger
-  ScaffoldMessenger.of(context).showSnackBar(
-    SnackBar(
-      content: const Text('Après avoir cliqué sur le lien, appuyez sur "Vérifier".'),
-      action: SnackBarAction(
-        label: 'Vérifier',
-        onPressed: () async {
-          try {
-            // reload du user courant et vérification
-            await FirebaseAuth.instance.currentUser?.reload();
-            final reloaded = FirebaseAuth.instance.currentUser;
-            if (kDebugMode) {
-              print('[LOGIN DEBUG] after manual reload: emailVerified=${reloaded?.emailVerified}');
-            }
-            if (reloaded != null && reloaded.emailVerified) {
-              // Rediriger vers home
-              Get.offAllNamed(AppRoutes.mecaHome);
-            } else {
+  // Version protégée de ton dialog + snackBar handling
+  void _showVerificationDialogWithCheck(BuildContext context, User user) {
+    AwesomeDialog(
+      context: context,
+      dialogType: DialogType.warning,
+      title: 'Email non vérifié',
+      desc: 'Votre compte n\'est pas encore vérifié. Voulez-vous renvoyer un email de vérification ?',
+      btnCancelText: 'Annuler',
+      btnOkText: 'Renvoyer',
+      btnCancelOnPress: () async {
+        try {
+          await FirebaseAuth.instance.signOut();
+          if (mounted) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
               _handleApiResult({
-                'success': false,
-                'message': 'Email toujours non vérifié. Vérifiez le lien dans votre boite mail.',
-                'devMessage': 'emailVerified still false after reload',
+                'success': true,
+                'message': 'Déconnecté.',
+                'devMessage': 'User signed out after cancelling verification dialog',
               });
-            }
-          } catch (e) {
-            _handleApiResult({
-              'success': false,
-              'message': 'Erreur lors de la vérification: ${e.toString()}',
-              'devMessage': e.toString(),
             });
           }
-        },
-      ),
-      duration: const Duration(seconds: 10),
-    ),
-  );
-}
+        } catch (e) {
+          if (kDebugMode) print('[LOGIN DEBUG] signOut error: $e');
+        }
+      },
+      btnOkOnPress: () async {
+        try {
+          await user.sendEmailVerification();
+          if (mounted) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              _handleApiResult({
+                'success': true,
+                'message': 'Email de vérification renvoyé.',
+                'devMessage': 'Email verification sent via Firebase',
+              }, onSuccess: null);
+            });
+          }
+        } catch (e) {
+          if (mounted) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              _handleApiResult({
+                'success': false,
+                'message': 'Erreur lors de l\'envoi de l\'email: ${e.toString()}',
+                'devMessage': e.toString(),
+              });
+            });
+          }
+        }
+      },
+    ).show();
+
+    // Retarder l'affichage du SnackBar pour éviter setState pendant build
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Après avoir cliqué sur le lien, appuyez sur "Vérifier".'),
+          action: SnackBarAction(
+            label: 'Vérifier',
+            onPressed: () async {
+              try {
+                await FirebaseAuth.instance.currentUser?.reload();
+                final reloaded = FirebaseAuth.instance.currentUser;
+                if (kDebugMode) {
+                  print('[LOGIN DEBUG] after manual reload: emailVerified=${reloaded?.emailVerified}');
+                }
+                if (reloaded != null && reloaded.emailVerified) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    if (mounted) Get.offAllNamed(AppRoutes.mecaHome);
+                  });
+                } else {
+                  if (mounted) {
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      _handleApiResult({
+                        'success': false,
+                        'message': 'Email toujours non vérifié. Vérifiez le lien dans votre boite mail.',
+                        'devMessage': 'emailVerified still false after reload',
+                      });
+                    });
+                  }
+                }
+              } catch (e) {
+                if (mounted) {
+                  WidgetsBinding.instance.addPostFrameCallback((_) {
+                    _handleApiResult({
+                      'success': false,
+                      'message': 'Erreur lors de la vérification: ${e.toString()}',
+                      'devMessage': e.toString(),
+                    });
+                  });
+                }
+              }
+            },
+          ),
+          duration: const Duration(seconds: 10),
+        ),
+      );
+    });
+  }
 
   Widget _buildPhoneForm() {
     return SlideTransition(
@@ -449,123 +459,192 @@ class _LoginPageState extends ConsumerState<LoginPage>
       ),
     );
   }
-Future<void> _handleEmailLogin() async {
-  if (emailController.text.isEmpty || passwordController.text.isEmpty) {
-    _handleApiResult({
-      'success': false,
-      'message': 'Veuillez remplir tous les champs',
-      'devMessage': 'Missing email or password in login form',
-    });
-    return;
-  }
 
-  setState(() => _isLoading = true);
+  // ---------------------- MODIFICATION CLÉ : _handleEmailLogin ----------------------
+  Future<void> _handleEmailLogin() async {
+    final email = emailController.text.trim();
+    final password = passwordController.text;
 
-  try {
-    final credential = await FirebaseAuth.instance.signInWithEmailAndPassword(
-      email: emailController.text.trim(),
-      password: passwordController.text,
-    );
-
-    // Récupérer le user et forcer un reload pour obtenir un emailVerified à jour
-    User? user = credential.user ?? FirebaseAuth.instance.currentUser;
-    if (user != null) {
-      await user.reload();
-      user = FirebaseAuth.instance.currentUser;
-    }
-
-    if (kDebugMode) {
-      print('[LOGIN DEBUG] user after signIn: uid=${user?.uid} emailVerified=${user?.emailVerified}');
-    }
-
-    if (user != null && !user.emailVerified) {
-      // Afficher dialog de vérification sans déconnecter immédiatement
-      if (mounted) _showVerificationDialogWithCheck(context, user);
+    if (email.isEmpty || password.isEmpty) {
+      // afficher erreur sur la même page (pas de navigation)
+      if (mounted) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _handleApiResult({
+            'success': false,
+            'message': 'Veuillez remplir tous les champs',
+            'devMessage': 'Missing email or password in login form',
+          });
+        });
+      }
       return;
     }
 
-    // Si tout est ok -> navigation vers la page principale
-    Get.offAllNamed(AppRoutes.mecaHome);
+    // set loading (hors build conflict)
+    if (mounted) setState(() => _isLoading = true);
 
+    try {
+      final userService = UserService();
+      final apiClient = ApiClient();
 
-  } on FirebaseAuthException catch (e) {
-    String message = 'Erreur inconnue';
-    if (e.code == 'user-not-found') {
-      message = 'Aucun utilisateur trouvé pour cet email.';
-    } else if (e.code == 'wrong-password' || e.code == 'invalid-credential') {
-      message = 'Mot de passe incorrect.';
-    } else {
-      message = 'Erreur: ${e.message}';
+      final res = await userService.login(email: email, password: password);
+
+      if (kDebugMode) print('[LOGIN DEBUG] backend login response: $res');
+
+      if (res['success'] == true) {
+        // On cherche un token sous plusieurs noms communs
+        String? token;
+        if (res.containsKey('token') && res['token'] is String) {
+          token = res['token'] as String;
+        } else if (res.containsKey('accessToken') && res['accessToken'] is String) {
+          token = res['accessToken'] as String;
+        } else if (res.containsKey('data') && res['data'] is Map && (res['data']['token'] != null)) {
+          token = res['data']['token'] as String?;
+        } else if (res.containsKey('jwt') && res['jwt'] is String) {
+          token = res['jwt'] as String;
+        }
+
+        if (token != null && token.isNotEmpty) {
+          await apiClient.saveToken(token);
+
+          // fetch profile optional (non bloquant)
+          try {
+            final profile = await UserService().getProfile(token);
+            if (kDebugMode) print('[LOGIN DEBUG] profile fetched: $profile');
+            // stocke le profile si tu as un provider
+          } catch (e) {
+            if (kDebugMode) print('[LOGIN DEBUG] fetching profile failed: $e');
+          }
+
+          // NAVIGUE d'abord et passe un argument pour afficher le message dans la page cible
+          if (mounted) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              Get.offAllNamed(
+                AppRoutes.mecaHome,
+                arguments: {
+                  'justLoggedIn': true,
+                  'message': 'Connecté avec succès.',
+                },
+              );
+            });
+          }
+        } else {
+          // pas de token mais backend success -> afficher message d'erreur ou naviguer quand même
+          if (mounted) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              _handleApiResult({
+                'success': true,
+                'message': 'Connecté (mais aucun token reçu).',
+                'devMessage': 'No token found in backend response: $res',
+              }, onSuccess: () {
+                if (mounted) Get.offAllNamed(AppRoutes.mecaHome);
+              });
+            });
+          }
+        }
+      } else {
+        // Backend returned success=false -> afficher erreur SUR LA PAGE ACTUELLE
+        final message = (res['message'] as String?) ?? 'Erreur d\'authentification.';
+        if (mounted) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _handleApiResult({
+              'success': false,
+              'message': message,
+              'devMessage': 'Backend returned success=false: $res',
+            });
+          });
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) print('[LOGIN DEBUG] unexpected error during backend login: $e');
+      if (mounted) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _handleApiResult({
+            'success': false,
+            'message': 'Une erreur inattendue s\'est produite lors de la connexion.',
+            'devMessage': e.toString(),
+          });
+        });
+      }
+    } finally {
+      // setState(false) retardé pour éviter setState during build
+      if (mounted) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) setState(() => _isLoading = false);
+        });
+      }
     }
-    _handleApiResult({
-      'success': false,
-      'message': message,
-      'devMessage': e.toString(),
-    });
-  } catch (e) {
-    _handleApiResult({
-      'success': false,
-      'message': 'Une erreur inattendue s\'est produite',
-      'devMessage': e.toString(),
-    });
-  } finally {
-    if (mounted) setState(() => _isLoading = false);
   }
-}
+  // ---------------------- FIN _handleEmailLogin ----------------------
 
   void _handlePhoneAuth() {
     if (!_codeSent) {
       if (phoneController.text.isEmpty) {
-        _handleApiResult({
-          'success': false,
-          'message': 'Veuillez entrer votre numéro de téléphone',
-          'devMessage': 'Phone input empty in phone auth',
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _handleApiResult({
+            'success': false,
+            'message': 'Veuillez entrer votre numéro de téléphone',
+            'devMessage': 'Phone input empty in phone auth',
+          });
         });
         return;
       }
-      setState(() => _isLoading = true);
-      ref
-          .read(authServiceProvider)
-          .signInWithPhone(
+      if (mounted) setState(() => _isLoading = true);
+      ref.read(authServiceProvider).signInWithPhone(
             phoneController.text,
             context,
             () {
-              setState(() {
-                _codeSent = true;
-                _isLoading = false;
-              });
+              if (mounted) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted) {
+                    setState(() {
+                      _codeSent = true;
+                      _isLoading = false;
+                    });
+                  }
+                });
+              }
             },
             (error) {
-              setState(() => _isLoading = false);
-              _handleApiResult({
-                'success': false,
-                'message': error,
-                'devMessage': error,
-              });
+              if (mounted) {
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted) setState(() => _isLoading = false);
+                  _handleApiResult({
+                    'success': false,
+                    'message': error,
+                    'devMessage': error,
+                  });
+                });
+              }
             },
           );
     } else {
-      setState(() => _isLoading = true);
-      ref
-          .read(authServiceProvider)
-          .verifySmsCode(
+      if (mounted) setState(() => _isLoading = true);
+      ref.read(authServiceProvider).verifySmsCode(
             otpController.text.trim(),
             context,
             isSignup: false,
             onSuccess: (User? firebaseUser) async {
               if (firebaseUser != null) {
-                // Utilisateur Firebase connecté avec succès -> navigation vers l'app
-                Get.offAllNamed(AppRoutes.mecaHome);
+                // Navigation retardée pour éviter build conflict
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  if (mounted) Get.offAllNamed(AppRoutes.mecaHome);
+                });
               } else {
-                _handleApiResult({
-                  'success': false,
-                  'message': 'Échec de l\'authentification.',
-                  'devMessage': 'verifySmsCode returned null user',
+                WidgetsBinding.instance.addPostFrameCallback((_) {
+                  _handleApiResult({
+                    'success': false,
+                    'message': 'Échec de l\'authentification.',
+                    'devMessage': 'verifySmsCode returned null user',
+                  });
                 });
               }
             },
           );
-      setState(() => _isLoading = false);
+      if (mounted) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) setState(() => _isLoading = false);
+        });
+      }
     }
   }
 

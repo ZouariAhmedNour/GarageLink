@@ -2,11 +2,11 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:garagelink/MecanicienScreens/edit_localisation.dart';
 import 'package:garagelink/auth/login.dart';
 import 'package:garagelink/components/custom_button.dart';
 import 'package:garagelink/components/custom_text_form.dart';
 import 'package:garagelink/providers/signup_providers.dart';
-import 'package:garagelink/services/api_client.dart';
 import 'package:garagelink/services/user_service_api.dart';
 import 'package:garagelink/utils/input_formatters.dart';
 import 'package:get/get.dart';
@@ -388,55 +388,25 @@ Future<void> _handleEmailSignup() async {
 
   setState(() => _isLoading = true);
 
-  try {
-    // ----- REMARQUE : Firebase signup/commenté -----
-    // On ne crée plus d'utilisateur Firebase ici (temporairement).
-    // final credential = await FirebaseAuth.instance
-    //     .createUserWithEmailAndPassword(
-    //       email: emailController.text.trim(),
-    //       password: passwordController.text.trim(),
-    //     );
-    // await credential.user?.sendEmailVerification();
+ try {
+  // validation OK -> ne pas appeler userService.register ici
+  final passedData = {
+    "username": fullNameController.text.trim(),
+    "garagenom": "Mon Garage",
+    "matriculefiscal": "123456",
+    "email": emailController.text.trim(),
+    "password": passwordController.text.trim(),
+    "phone": phoneController.text.trim(),
+    // NE PAS inclure userId ici (on n'a pas encore créé l'utilisateur)
+  };
 
-    // 🌐 Backend API signup (utiliser uniquement le backend)
-    final userService = UserService();
-    final res = await userService.register(
-      username: fullNameController.text.trim(),
-      garagenom: "Mon Garage", // placeholder si nécessaire
-      matriculefiscal: "123456", // placeholder
-      email: emailController.text.trim(),
-      password: passwordController.text.trim(),
-      phone: phoneController.text.trim(),
-    );
-
-    // Gérer la réponse : si le backend renvoie un token, le sauvegarder puis naviguer
-    if (res['success'] == true) {
-      // Si le backend renvoie un champ token (ex: res['token'] ou res['data']['token'])
-      String? token;
-      if (res.containsKey('token')) {
-        token = res['token'] as String?;
-      } else if (res.containsKey('data') && res['data'] is Map && res['data'].containsKey('token')) {
-        token = (res['data'] as Map)['token'] as String?;
-      }
-
-      if (token != null) {
-        // Sauvegarder le token pour les requêtes futures
-        await ApiClient().saveToken(token);
-      }
-
-      _handleApiResult(res, onSuccess: () {
-        // navigation : vers la page login (ou completeProfile selon ton backend)
-        Get.off(() => LoginPage());
-      });
-    } else {
-      // afficher l'erreur renvoyée par le backend
-      _handleApiResult(res);
-    }
-  } on Exception catch (e) {
-    _showSnackBar("Erreur: $e");
-  } finally {
-    if (mounted) setState(() => _isLoading = false);
-  }
+  // Navigation vers EditLocalisation pour compléter adresse/localisation
+  Get.to(() => EditLocalisation(), arguments: passedData);
+} on Exception catch (e) {
+  _showSnackBar("Erreur: $e");
+} finally {
+  if (mounted) setState(() => _isLoading = false);
+}
 }
   // 📱 GESTION INSCRIPTION TÉLÉPHONE
   // =================================
