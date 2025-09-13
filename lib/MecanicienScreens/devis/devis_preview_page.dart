@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
@@ -14,7 +15,6 @@ import 'package:garagelink/utils/devis_actions.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:printing/printing.dart';
 
-// Palette de couleurs pour la prévisualisation
 class PreviewColors {
   static const Color primary = Color(0xFF357ABD);
   static const Color primaryDark = Color(0xFF2A5F8F);
@@ -35,11 +35,11 @@ class DevisPreviewPage extends ConsumerStatefulWidget {
 class _DevisPreviewPageState extends ConsumerState<DevisPreviewPage>
     with TickerProviderStateMixin {
   final GlobalKey _previewKey = GlobalKey();
-  
+
   late AnimationController _animationController;
   late Animation<double> _slideAnimation;
   late Animation<double> _scaleAnimation;
-  
+
   bool _isProcessing = false;
   String _processingMessage = '';
 
@@ -67,7 +67,10 @@ class _DevisPreviewPageState extends ConsumerState<DevisPreviewPage>
 
   Future<Uint8List?> _capturePreviewPng() async {
     try {
-      final boundary = _previewKey.currentContext!.findRenderObject() as RenderRepaintBoundary;
+      final context = _previewKey.currentContext;
+      if (context == null) return null;
+      final boundary = context.findRenderObject() as RenderRepaintBoundary?;
+      if (boundary == null) return null;
       final image = await boundary.toImage(pixelRatio: 3.0);
       final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
       return byteData?.buffer.asUint8List();
@@ -88,39 +91,85 @@ class _DevisPreviewPageState extends ConsumerState<DevisPreviewPage>
     try {
       switch (action) {
         case 'send':
+          // Essaie d'abord une capture visuelle; si elle échoue on envoie sans preview.
           final png = await _capturePreviewPng();
-          await generateAndSendDevis(ref, context, previewPng: png, devisToSend: devis);
-          _showSuccessMessage('${isFacture ? 'Facture' : 'Devis'} envoyé avec succès');
+          try {
+            if (png != null) {
+              // send with preview image if supported by your function
+              await generateAndSendDevis(ref, context, previewPng: png, devisToSend: devis);
+            } else {
+              // fallback : envoi sans image
+              await generateAndSendDevis(ref, context, devisToSend: devis);
+            }
+            _showSuccessMessage('${isFacture ? 'Facture' : 'Devis'} envoyé avec succès');
+          } catch (e) {
+            // Si l'envoi échoue, on retente sans preview et on propose de partager le PDF au besoin.
+            debugPrint('Envoi avec preview échoué: $e — tentative d\'envoi sans preview');
+            try {
+              await generateAndSendDevis(ref, context, devisToSend: devis);
+              _showSuccessMessage('${isFacture ? 'Facture' : 'Devis'} envoyé (sans preview)');
+            } catch (inner) {
+              debugPrint('Tentative d\'envoi sans preview également échouée: $inner');
+              // Proposer au moins de partager le PDF localement pour l'utilisateur
+              try {
+                final pdfBytes = await PdfService.instance.buildDevisPdfBytes(devis, footerNote: 'Généré par GarageLink');
+                await Printing.sharePdf(bytes: pdfBytes, filename: '${isFacture ? 'facture' : 'devis'}_${devis.id ?? 'doc'}.pdf');
+                _showSuccessMessage('Envoi automatique impossible — PDF partagé localement pour envoi manuel.');
+              } catch (shareErr) {
+                debugPrint('Erreur génération/partage PDF fallback: $shareErr');
+                _showErrorMessage('Impossible d\'envoyer le devis : $e');
+              }
+            }
+          }
           break;
-       case 'download':
-  final bytes = await PdfService.buildDevisPdf(
-    devis,
-    title: isFacture ? 'Facture' : 'Devis',
-  );
 
-  // Récupérer le dossier Downloads officiel
-  final downloadsDir = await getDownloadsDirectory();
+        case 'download':
+          final bytes = await PdfService.instance.buildDevisPdfBytes(devis, footerNote: 'Généré par GarageLink');
 
-  if (downloadsDir != null) {
-    final filePath =
-        '${downloadsDir.path}/${isFacture ? 'facture' : 'devis'}_${devis.client}.pdf';
+          if (kIsWeb) {
+            // Sur web : on utilise Printing.sharePdf (ou Printing.layoutPdf selon besoin)
+            await Printing.sharePdf(bytes: bytes, filename: '${isFacture ? 'facture' : 'devis'}_${devis.id ?? 'doc'}.pdf');
+            _showSuccessMessage('PDF prêt à être téléchargé (web).');
+            break;
+          }
 
-    final file = File(filePath);
-    await file.writeAsBytes(bytes);
+          // Desktop / Mobile : essayer Downloads puis fallback vers Documents
+          Directory? targetDir;
+          try {
+            targetDir = await getDownloadsDirectory();
+          } catch (_) {
+            targetDir = null;
+          }
+          targetDir ??= await getApplicationDocumentsDirectory();
 
-    _showSuccessMessage('PDF enregistré dans :\n$filePath');
-  } else {
-    _showErrorMessage("Impossible d'accéder au dossier Downloads");
-  }
-  break;
+          final safeClient = (devis.client.isNotEmpty ? devis.client : 'client').replaceAll(RegExp(r'[^A-Za-z0-9_\-]'), '_');
+          final fileName = '${isFacture ? 'facture' : 'devis'}_${safeClient}_${DateTime.now().millisecondsSinceEpoch}.pdf';
+          final filePath = '${targetDir.path}/$fileName';
+
+          try {
+            final file = File(filePath);
+            await file.writeAsBytes(bytes, flush: true);
+            _showSuccessMessage('PDF enregistré :\n$filePath');
+          } catch (e) {
+            debugPrint('Erreur écriture fichier PDF: $e');
+            // fallback : partager le PDF si écriture locale échoue
+            await Printing.sharePdf(bytes: bytes, filename: fileName);
+            _showSuccessMessage('Impossible d\'écrire localement, PDF partagé.');
+          }
+          break;
 
         case 'print':
-          final bytes = await PdfService.buildDevisPdf(devis, title: isFacture ? 'Facture' : 'Devis');
-          await Printing.layoutPdf(onLayout: (_) => bytes);
+          final bytes = await PdfService.instance.buildDevisPdfBytes(devis, footerNote: 'Généré par GarageLink');
+          // Printing.layoutPdf peut être utilisé directement:
+          await PdfService.instance.printPdfBytes(bytes);
           _showSuccessMessage('Impression lancée');
           break;
+
+        default:
+          _showErrorMessage('Action inconnue');
       }
-    } catch (e) {
+    } catch (e, st) {
+      debugPrint('Erreur action $action: $e\n$st');
       _showErrorMessage('Erreur: ${e.toString()}');
     } finally {
       setState(() => _isProcessing = false);
@@ -129,10 +178,14 @@ class _DevisPreviewPageState extends ConsumerState<DevisPreviewPage>
 
   String _getProcessingMessage(String action) {
     switch (action) {
-      case 'send': return 'Envoi en cours...';
-      case 'download': return 'Génération PDF...';
-      case 'print': return 'Préparation impression...';
-      default: return 'Traitement...';
+      case 'send':
+        return 'Envoi en cours...';
+      case 'download':
+        return 'Génération PDF...';
+      case 'print':
+        return 'Préparation impression...';
+      default:
+        return 'Traitement...';
     }
   }
 
@@ -141,12 +194,12 @@ class _DevisPreviewPageState extends ConsumerState<DevisPreviewPage>
       SnackBar(
         content: Row(
           children: [
-            Icon(Icons.check_circle, color: PreviewColors.success),
+            const Icon(Icons.check_circle, color: Colors.white),
             const SizedBox(width: 8),
-            Text(message),
+            Expanded(child: Text(message)),
           ],
         ),
-        backgroundColor: Colors.white,
+        backgroundColor: PreviewColors.success,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
@@ -158,12 +211,12 @@ class _DevisPreviewPageState extends ConsumerState<DevisPreviewPage>
       SnackBar(
         content: Row(
           children: [
-            const Icon(Icons.error, color: Colors.red),
+            const Icon(Icons.error, color: Colors.white),
             const SizedBox(width: 8),
             Expanded(child: Text(message)),
           ],
         ),
-        backgroundColor: Colors.white,
+        backgroundColor: Colors.redAccent,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
@@ -204,12 +257,17 @@ class _DevisPreviewPageState extends ConsumerState<DevisPreviewPage>
                         child: PdfPreview(
                           canChangeOrientation: false,
                           canChangePageFormat: false,
-                          build: (format) => PdfService.buildDevisPdf(
-                            previewDevis,
-                            title: isFacture ? 'Facture' : 'Devis',
-                          ),
-                          pdfFileName: '${isFacture ? 'facture' : 'devis'}_${previewDevis.client}.pdf',
-                          allowSharing: false,
+                          build: (format) async {
+                            // build doit renvoyer Future<Uint8List>
+                            return await PdfService.instance.buildDevisPdfBytes(
+                              previewDevis,
+                              footerNote: 'Généré par GarageLink',
+                            );
+                          },
+                          pdfFileName:
+                              '${isFacture ? 'facture' : 'devis'}_${previewDevis.client.replaceAll(RegExp(r"[^A-Za-z0-9]"), "_")}.pdf',
+                          allowPrinting: true,
+                          allowSharing: true,
                         ),
                       ),
                     ),
@@ -263,7 +321,6 @@ class _DevisPreviewPageState extends ConsumerState<DevisPreviewPage>
             ),
             background: Stack(
               children: [
-                // Gradient background
                 Container(
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
@@ -273,7 +330,6 @@ class _DevisPreviewPageState extends ConsumerState<DevisPreviewPage>
                     ),
                   ),
                 ),
-                // Geometric patterns
                 Positioned(
                   top: -50,
                   right: -50,
@@ -304,7 +360,6 @@ class _DevisPreviewPageState extends ConsumerState<DevisPreviewPage>
                     ),
                   ),
                 ),
-                // Document icon overlay
                 Positioned(
                   top: 30,
                   left: 20,
@@ -421,13 +476,13 @@ class _DevisPreviewPageState extends ConsumerState<DevisPreviewPage>
     return actions.asMap().entries.map((entry) {
       final index = entry.key;
       final action = entry.value;
-      
+
       return AnimatedBuilder(
         animation: _animationController,
         builder: (context, child) {
           return Transform.translate(
             offset: Offset(
-              _slideAnimation.value * (1 + index * 0.1), 
+              _slideAnimation.value * (1 + index * 0.1),
               0,
             ),
             child: Transform.scale(
@@ -449,13 +504,9 @@ class _DevisPreviewPageState extends ConsumerState<DevisPreviewPage>
     return Container(
       margin: const EdgeInsets.only(right: 4),
       decoration: BoxDecoration(
-        color: isPrimary 
-          ? Colors.white.withOpacity(0.2) 
-          : Colors.transparent,
+        color: isPrimary ? Colors.white.withOpacity(0.2) : Colors.transparent,
         borderRadius: BorderRadius.circular(8),
-        border: isPrimary 
-          ? Border.all(color: Colors.white.withOpacity(0.3))
-          : null,
+        border: isPrimary ? Border.all(color: Colors.white.withOpacity(0.3)) : null,
       ),
       child: IconButton(
         icon: Icon(icon, color: Colors.white),

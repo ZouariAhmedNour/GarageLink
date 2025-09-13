@@ -21,7 +21,7 @@ class UserService {
   String? cityId,
 }) async {
   try {
-    final uri = Uri.parse('$UrlApi/api/signup'); // ton endpoint
+    final uri = Uri.parse('$UrlApi/signup'); // ton endpoint
     final Map<String, dynamic> body = {
   "username": username,
   "garagenom": garagenom,
@@ -74,7 +74,7 @@ class UserService {
   // Récupérer tous les gouvernorats
   Future<Map<String, dynamic>> getGovernorates() async {
     try {
-      final uri = Uri.parse('$UrlApi/api/governorates');
+      final uri = Uri.parse('$UrlApi/governorates');
       final res = await http.get(uri);
       if (res.statusCode >= 200 && res.statusCode < 300) {
         return {"success": true, "data": jsonDecode(res.body)};
@@ -89,7 +89,7 @@ class UserService {
   // Récupérer villes par gouvernorat
   Future<Map<String, dynamic>> getCities(String governorateId) async {
     try {
-      final uri = Uri.parse('$UrlApi/api/cities/$governorateId');
+      final uri = Uri.parse('$UrlApi/cities/$governorateId');
       final res = await http.get(uri);
       if (res.statusCode >= 200 && res.statusCode < 300) {
         return {"success": true, "data": jsonDecode(res.body)};
@@ -107,7 +107,7 @@ class UserService {
     required String password,
   }) async {
     try {
-      final uri = Uri.parse('$UrlApi/api/login');
+      final uri = Uri.parse('$UrlApi/login');
       final res = await http.post(
         uri,
         headers: {"Content-Type": "application/json"},
@@ -127,7 +127,7 @@ class UserService {
   /// GET PROFILE
   Future<UserModel?> getProfile(String token) async {
     try {
-      final uri = Uri.parse('$UrlApi/api/profile');
+      final uri = Uri.parse('$UrlApi/profile');
       final res = await http.get(
         uri,
         headers: {
@@ -152,7 +152,7 @@ class UserService {
     required String token,
   }) async {
     try {
-      final uri = Uri.parse('$UrlApi/api/profile');
+      final uri = Uri.parse('$UrlApi/profile');
       final res = await http.put(
         uri,
         headers: {

@@ -20,6 +20,7 @@ class AppRoutes {
   static const String createOrderScreen = '/createOrderScreen';
   static const String addEditServiceScreen = '/addEditServiceScreen';
   static const String stockDashboard = '/stockDashboard';
+  static const String stockPieceFormScreen = '/stockPieceFormScreen';
   static const String factureScreen = '/factureScreen';
   static const String factureDetailPage = '/FactureDetailPage';
   static const String mecListScreen= '/mecListScreen';

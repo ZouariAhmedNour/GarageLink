@@ -1,3 +1,4 @@
+// lib/screens/stock_dashboard.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,10 +7,10 @@ import 'package:garagelink/MecanicienScreens/stock/stock%20widgets/main_grid.dar
 import 'package:garagelink/MecanicienScreens/stock/stock%20widgets/modern_drawer.dart';
 import 'package:garagelink/MecanicienScreens/stock/stock%20widgets/stock_appbar.dart';
 import 'package:garagelink/providers/mouvement_provider.dart';
-import 'package:garagelink/providers/piece_provider.dart';
+import 'package:garagelink/providers/stockpiece_provider.dart';
 import 'package:garagelink/providers/stock_provider.dart';
 
-// Palette de couleurs unifiée
+/// Palette de couleurs unifiée
 class StockColors {
   static const Color primary = Color(0xFF357ABD);
   static const Color primaryLight = Color(0xFF5A9BD8);
@@ -19,6 +20,16 @@ class StockColors {
   static const Color surface = Color(0xFFFAFAFA);
   static const Color cardBg = Colors.white;
 }
+
+/// Provider calculé pour la valeur totale du stock
+final totalValeurStockProvider = Provider<double>((ref) {
+  final piecesAsync = ref.watch(stockPieceProvider);
+  return piecesAsync.when(
+    data: (pieces) => pieces.fold<double>(0, (sum, p) => sum + p.valeurStock),
+    loading: () => 0,
+    error: (_, __) => 0,
+  );
+});
 
 class StockDashboard extends ConsumerStatefulWidget {
   const StockDashboard({super.key});
@@ -54,7 +65,7 @@ class _StockDashboardState extends ConsumerState<StockDashboard>
 
   @override
   Widget build(BuildContext context) {
-    final pieces = ref.watch(pieceProvider);
+    final piecesAsync = ref.watch(stockPieceProvider);
     final alertes = ref.watch(stockProvider);
     final mouvements = ref.watch(mouvementProvider);
     final totalValeur = ref.watch(totalValeurStockProvider);
@@ -71,9 +82,9 @@ class _StockDashboardState extends ConsumerState<StockDashboard>
             child: Opacity(opacity: _slideAnimation.value, child: child),
           );
         },
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final isWide = constraints.maxWidth > 900;
+        child: piecesAsync.when(
+          data: (pieces) {
+            final isWide = MediaQuery.of(context).size.width > 900;
             return RefreshIndicator(
               onRefresh: _refreshData,
               color: StockColors.primary,
@@ -101,6 +112,8 @@ class _StockDashboardState extends ConsumerState<StockDashboard>
               ),
             );
           },
+          loading: () => const Center(child: CircularProgressIndicator()),
+          error: (err, stack) => Center(child: Text('Erreur: $err')),
         ),
       ),
     );

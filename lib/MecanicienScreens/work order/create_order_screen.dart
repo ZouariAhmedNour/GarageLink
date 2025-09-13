@@ -5,10 +5,10 @@ import 'package:garagelink/MecanicienScreens/devis/devis_widgets/generate_button
 import 'package:garagelink/MecanicienScreens/devis/devis_widgets/modern_card.dart';
 import 'package:garagelink/MecanicienScreens/devis/devis_widgets/modern_text_field.dart';
 import 'package:garagelink/MecanicienScreens/devis/devis_widgets/num_serie_input.dart';
+import 'package:garagelink/MecanicienScreens/work%20order/work_order_page.dart';
 import 'package:garagelink/models/client.dart';
 import 'package:garagelink/models/order.dart';
 import 'package:garagelink/providers/orders_provider.dart';
-import 'package:garagelink/MecanicienScreens/work%20order/work_order_page.dart';
 import 'package:get/get.dart';
 
 class CreateOrderScreen extends ConsumerStatefulWidget {

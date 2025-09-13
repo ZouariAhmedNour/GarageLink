@@ -1,10 +1,11 @@
 import 'package:garagelink/Clients%20Screens/clientHome.dart';
 import 'package:garagelink/Clients%20Screens/clientMapScreen.dart';
 import 'package:garagelink/Clients%20Screens/client_vehicles_screen.dart';
+import 'package:garagelink/MecanicienScreens/stock/stockPieceForm.dart';
 import 'package:garagelink/auth/login.dart';
 import 'package:garagelink/auth/reset_password.dart';
 import 'package:garagelink/auth/signup.dart';
-import 'package:garagelink/carnet%20Entretien/entretien_screen.dart';
+import 'package:garagelink/carnetEntretien/entretien_screen.dart';
 import 'package:garagelink/complete_profile.dart';
 import 'package:garagelink/configurations/app_routes.dart';
 import 'package:garagelink/MecanicienScreens/Facture/facture_detail_page.dart';
@@ -67,6 +68,8 @@ class GenerateRoutes {
       page: () => AddEditServiceScreen(),
     ),
     GetPage(name: AppRoutes.stockDashboard, page: () => StockDashboard()),
+    GetPage(name: AppRoutes.stockPieceFormScreen, page: () => StockPieceFormScreen()),
+
     GetPage(name: AppRoutes.factureScreen, page: () => const FactureScreen()),
     GetPage(
       name: AppRoutes.factureDetailPage,

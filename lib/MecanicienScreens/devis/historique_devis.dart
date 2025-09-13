@@ -1,3 +1,4 @@
+// lib/MecanicienScreens/devis/historique_devis.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -15,8 +16,7 @@ class HistoriqueDevisPage extends ConsumerStatefulWidget {
   const HistoriqueDevisPage({super.key});
 
   @override
-  ConsumerState<HistoriqueDevisPage> createState() =>
-      _HistoriqueDevisPageState();
+  ConsumerState<HistoriqueDevisPage> createState() => _HistoriqueDevisPageState();
 }
 
 class _HistoriqueDevisPageState extends ConsumerState<HistoriqueDevisPage>
@@ -62,14 +62,9 @@ class _HistoriqueDevisPageState extends ConsumerState<HistoriqueDevisPage>
   @override
   void initState() {
     super.initState();
-    _animationController = AnimationController(
-      duration: const Duration(milliseconds: 600),
-      vsync: this,
-    );
-    _fadeAnimation = CurvedAnimation(
-      parent: _animationController,
-      curve: Curves.easeInOut,
-    );
+    _animationController =
+        AnimationController(duration: const Duration(milliseconds: 600), vsync: this);
+    _fadeAnimation = CurvedAnimation(parent: _animationController, curve: Curves.easeInOut);
     _animationController.forward();
   }
 
@@ -86,16 +81,11 @@ class _HistoriqueDevisPageState extends ConsumerState<HistoriqueDevisPage>
     return Container(
       decoration: const BoxDecoration(
         gradient: LinearGradient(
-          colors: [primaryBlue, Color(0xFF4A90E2)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+            colors: [primaryBlue, Color(0xFF4A90E2)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight),
         boxShadow: [
-          BoxShadow(
-            color: Color(0x20357ABD),
-            blurRadius: 8,
-            offset: Offset(0, 2),
-          ),
+          BoxShadow(color: Color(0x20357ABD), blurRadius: 8, offset: Offset(0, 2)),
         ],
       ),
       child: SafeArea(
@@ -104,16 +94,10 @@ class _HistoriqueDevisPageState extends ConsumerState<HistoriqueDevisPage>
           child: Row(
             children: [
               Container(
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                decoration:
+                    BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(12)),
                 child: IconButton(
-                  icon: const Icon(
-                    Icons.arrow_back_ios_new,
-                    color: Colors.white,
-                    size: 20,
-                  ),
+                  icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
                   onPressed: () {
                     HapticFeedback.lightImpact();
                     Navigator.pop(context);
@@ -125,30 +109,17 @@ class _HistoriqueDevisPageState extends ConsumerState<HistoriqueDevisPage>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Historique des Devis',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    Text(
-                      'Recherchez et consultez vos devis',
-                      style: TextStyle(
-                        color: Colors.white.withOpacity(0.9),
-                        fontSize: 14,
-                      ),
-                    ),
+                    const Text('Historique des Devis',
+                        style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold)),
+                    Text('Recherchez et consultez vos devis',
+                        style: TextStyle(color: Colors.white.withOpacity(0.9), fontSize: 14)),
                   ],
                 ),
               ),
               Container(
                 padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(12),
-                ),
+                decoration:
+                    BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(12)),
                 child: const Icon(Icons.history, color: Colors.white, size: 24),
               ),
             ],
@@ -162,115 +133,76 @@ class _HistoriqueDevisPageState extends ConsumerState<HistoriqueDevisPage>
     return Container(
       margin: const EdgeInsets.all(16),
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), boxShadow: [
+        BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 2)),
+      ]),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(color: lightBlue, borderRadius: BorderRadius.circular(8)),
+              child: const Icon(Icons.filter_alt, color: primaryBlue, size: 20)),
+          const SizedBox(width: 12),
+          const Text('Filtres de recherche',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: darkGrey)),
+        ]),
+        const SizedBox(height: 16),
+        DropdownButtonFormField<TypeFiltre>(
+          value: typeFiltre,
+          decoration: InputDecoration(
+            labelText: 'Type de filtre',
+            prefixIcon: Icon(filtreConfig[typeFiltre]!['icon'] as IconData, color: primaryBlue),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+            filled: true,
+            fillColor: lightGrey,
           ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: lightBlue,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Icon(
-                  Icons.filter_alt,
-                  color: primaryBlue,
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: 12),
-              const Text(
-                'Filtres de recherche',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: darkGrey,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          DropdownButtonFormField<TypeFiltre>(
-            value: typeFiltre,
-            decoration: InputDecoration(
-              labelText: 'Type de filtre',
-              prefixIcon: Icon(
-                filtreConfig[typeFiltre]!['icon'],
-                color: primaryBlue,
-              ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-              filled: true,
-              fillColor: lightGrey,
-            ),
-            items: TypeFiltre.values.map((type) {
-              final config = filtreConfig[type]!;
-              return DropdownMenuItem(
-                value: type,
-                child: Row(
-                  children: [
-                    Icon(config['icon'], color: config['color'], size: 18),
-                    const SizedBox(width: 8),
-                    Text(config['label']),
-                  ],
-                ),
-              );
-            }).toList(),
-            onChanged: (val) {
-              if (val != null) {
-                HapticFeedback.selectionClick();
-                setState(() {
-                  typeFiltre = val;
-                  valeurFiltre = "";
-                  dateRange = null;
-                  vinCtrl.clear();
-                  numLocalCtrl.clear();
-                  rechercheCtrl.clear();
-                });
-              }
-            },
-          ),
-          const SizedBox(height: 16),
-          _buildFilterInput(),
-          const SizedBox(height: 16),
-          SizedBox(
-            width: double.infinity,
-            height: 48,
-            child: ElevatedButton.icon(
-              icon: const Icon(Icons.search, size: 20),
-              label: const Text(
-                'Rechercher',
-                style: TextStyle(fontWeight: FontWeight.w600),
-              ),
-              style: ElevatedButton.styleFrom(
+          items: TypeFiltre.values.map((type) {
+            final config = filtreConfig[type]!;
+            return DropdownMenuItem(
+              value: type,
+              child: Row(children: [
+                Icon(config['icon'] as IconData, color: config['color'] as Color, size: 18),
+                const SizedBox(width: 8),
+                Text(config['label'] as String)
+              ]),
+            );
+          }).toList(),
+          onChanged: (val) {
+            if (val != null) {
+              HapticFeedback.selectionClick();
+              setState(() {
+                typeFiltre = val;
+                valeurFiltre = "";
+                dateRange = null;
+                vinCtrl.clear();
+                numLocalCtrl.clear();
+                rechercheCtrl.clear();
+              });
+            }
+          },
+        ),
+        const SizedBox(height: 16),
+        _buildFilterInput(),
+        const SizedBox(height: 16),
+        SizedBox(
+          width: double.infinity,
+          height: 48,
+          child: ElevatedButton.icon(
+            icon: const Icon(Icons.search, size: 20),
+            label: const Text('Rechercher', style: TextStyle(fontWeight: FontWeight.w600)),
+            style: ElevatedButton.styleFrom(
                 backgroundColor: primaryBlue,
                 foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                elevation: 2,
-              ),
-              onPressed: () {
-                HapticFeedback.mediumImpact();
-                ref.read(filtreProvider.notifier).state = valeurFiltre;
-              },
-            ),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                elevation: 2),
+            onPressed: () {
+              HapticFeedback.mediumImpact();
+              // Mettre à jour le provider de filtre
+              ref.read(filtreProvider.notifier).state = valeurFiltre;
+            },
           ),
-        ],
-      ),
+        ),
+      ]),
     );
   }
 
@@ -279,25 +211,18 @@ class _HistoriqueDevisPageState extends ConsumerState<HistoriqueDevisPage>
       case TypeFiltre.date:
         return Container(
           decoration: BoxDecoration(
-            border: Border.all(color: Colors.grey.withOpacity(0.3)),
-            borderRadius: BorderRadius.circular(12),
-            color: lightGrey,
-          ),
+              border: Border.all(color: Colors.grey.withOpacity(0.3)),
+              borderRadius: BorderRadius.circular(12),
+              color: lightGrey),
           child: ListTile(
             leading: Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: lightBlue,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Icon(Icons.date_range, color: primaryBlue, size: 20),
-            ),
-            title: Text(
-              dateRange == null
-                  ? "Choisir une période"
-                  : "${dateRange!.start.toString().split(' ')[0]} → ${dateRange!.end.toString().split(' ')[0]}",
-              style: const TextStyle(fontWeight: FontWeight.w500),
-            ),
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(color: lightBlue, borderRadius: BorderRadius.circular(8)),
+                child: const Icon(Icons.date_range, color: primaryBlue, size: 20)),
+            title: Text(dateRange == null
+                ? "Choisir une période"
+                : "${dateRange!.start.toString().split(' ')[0]} → ${dateRange!.end.toString().split(' ')[0]}",
+                style: const TextStyle(fontWeight: FontWeight.w500)),
             trailing: const Icon(Icons.arrow_forward_ios, size: 16),
             onTap: () async {
               HapticFeedback.lightImpact();
@@ -306,19 +231,13 @@ class _HistoriqueDevisPageState extends ConsumerState<HistoriqueDevisPage>
                 firstDate: DateTime(2000),
                 lastDate: DateTime.now().add(const Duration(days: 365)),
                 builder: (context, child) {
-                  return Theme(
-                    data: Theme.of(context).copyWith(
-                      colorScheme: ColorScheme.light(primary: primaryBlue),
-                    ),
-                    child: child!,
-                  );
+                  return Theme(data: Theme.of(context).copyWith(colorScheme: ColorScheme.light(primary: primaryBlue)), child: child!);
                 },
               );
               if (picked != null) {
                 setState(() {
                   dateRange = picked;
-                  valeurFiltre =
-                      "${picked.start.toIso8601String()}|${picked.end.toIso8601String()}";
+                  valeurFiltre = "${picked.start.toIso8601String()}|${picked.end.toIso8601String()}";
                 });
               }
             },
@@ -328,33 +247,29 @@ class _HistoriqueDevisPageState extends ConsumerState<HistoriqueDevisPage>
         return NumeroSerieInput(
           vinCtrl: vinCtrl,
           numLocalCtrl: numLocalCtrl,
-          onChanged: (value) => valeurFiltre = value,
+          onChanged: (value) {
+            setState(() {
+              valeurFiltre = value;
+            });
+          },
         );
       default:
         return TextField(
           controller: rechercheCtrl,
           decoration: InputDecoration(
-            hintText: typeFiltre == TypeFiltre.id
-                ? "Entrer l'ID du devis"
-                : "Entrer le nom du client",
+            hintText: typeFiltre == TypeFiltre.id ? "Entrer l'ID du devis" : "Entrer le nom du client",
             prefixIcon: Container(
-              margin: const EdgeInsets.all(8),
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: lightBlue,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(
-                typeFiltre == TypeFiltre.id ? Icons.tag : Icons.person,
-                color: primaryBlue,
-                size: 20,
-              ),
-            ),
+                margin: const EdgeInsets.all(8),
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(color: lightBlue, borderRadius: BorderRadius.circular(8)),
+                child: Icon(typeFiltre == TypeFiltre.id ? Icons.tag : Icons.person, color: primaryBlue, size: 20)),
             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
             filled: true,
             fillColor: lightGrey,
           ),
-          onChanged: (value) => valeurFiltre = value,
+          onChanged: (value) {
+            valeurFiltre = value;
+          },
         );
     }
   }
@@ -367,28 +282,11 @@ class _HistoriqueDevisPageState extends ConsumerState<HistoriqueDevisPage>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: lightBlue,
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(Icons.search_off, size: 48, color: primaryBlue),
-            ),
+            Container(padding: const EdgeInsets.all(24), decoration: BoxDecoration(color: lightBlue, shape: BoxShape.circle), child: const Icon(Icons.search_off, size: 48, color: primaryBlue)),
             const SizedBox(height: 16),
-            const Text(
-              'Aucun devis trouvé',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-                color: darkGrey,
-              ),
-            ),
+            const Text('Aucun devis trouvé', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: darkGrey)),
             const SizedBox(height: 8),
-            Text(
-              'Essayez de modifier vos critères de recherche',
-              style: TextStyle(color: darkGrey.withOpacity(0.7)),
-            ),
+            Text('Essayez de modifier vos critères de recherche', style: TextStyle(color: darkGrey.withOpacity(0.7))),
           ],
         ),
       );
@@ -422,6 +320,92 @@ class _HistoriqueDevisPageState extends ConsumerState<HistoriqueDevisPage>
             statusLabel = 'Refusé';
             statusColor = Colors.red;
             break;
+          default:
+            statusLabel = 'Inconnu';
+            statusColor = Colors.grey;
+        }
+
+        // --- Date safe ---
+        final DateTime displayDate = devis.inspectionDate ?? devis.createdAt ?? DateTime.now();
+        final String dateStr = displayDate.toLocal().toString().split(" ")[0];
+
+        // --- Montant safe ---
+        final double montant = devis.totalTTC;
+
+        // Construction dynamique des boutons d'actions (corrige l'Expanded problématique)
+        final List<Widget> actionButtons = [];
+
+        if (devis.status == DevisStatus.brouillon) {
+          actionButtons.addAll([
+            IconButton(
+              icon: const Icon(Icons.send, color: Colors.orange, size: 18),
+              tooltip: 'Envoyer par e-mail',
+              onPressed: () async {
+                await generateAndSendDevis(ref, context, devisToSend: devis);
+              },
+            ),
+            IconButton(
+              icon: const Icon(Icons.check, color: Colors.green, size: 18),
+              tooltip: 'Accepter (local)',
+              onPressed: () {
+                if (devis.id != null) {
+                  ref.read(historiqueDevisProvider.notifier).updateStatusById(devis.id!, DevisStatus.accepte);
+                }
+              },
+            ),
+            IconButton(
+              icon: const Icon(Icons.close, color: Colors.red, size: 18),
+              tooltip: 'Refuser',
+              onPressed: () {
+                if (devis.id != null) {
+                  ref.read(historiqueDevisProvider.notifier).updateStatusById(devis.id!, DevisStatus.refuse);
+                }
+              },
+            ),
+          ]);
+        } else if (devis.status == DevisStatus.envoye || devis.status == DevisStatus.enAttente) {
+          actionButtons.addAll([
+            IconButton(
+              icon: const Icon(Icons.check, color: Colors.green, size: 18),
+              tooltip: 'Accepter',
+              onPressed: () {
+                if (devis.id != null) {
+                  ref.read(historiqueDevisProvider.notifier).updateStatusById(devis.id!, DevisStatus.accepte);
+                }
+              },
+            ),
+            IconButton(
+              icon: const Icon(Icons.close, color: Colors.red, size: 18),
+              tooltip: 'Refuser',
+              onPressed: () {
+                if (devis.id != null) {
+                  ref.read(historiqueDevisProvider.notifier).updateStatusById(devis.id!, DevisStatus.refuse);
+                }
+              },
+            ),
+          ]);
+        } else if (devis.status == DevisStatus.accepte) {
+          actionButtons.addAll([
+            IconButton(
+              icon: const Icon(Icons.receipt_long, color: Colors.blue, size: 18),
+              tooltip: 'Télécharger la facture (PDF)',
+              onPressed: () async {
+                try {
+                  final bytes = await PdfService.buildDevisPdf(devis, title: 'Facture');
+                  await Printing.sharePdf(bytes: bytes, filename: 'facture_${devis.id}.pdf');
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur génération facture : $e')));
+                }
+              },
+            ),
+            IconButton(
+              icon: const Icon(Icons.visibility, color: primaryBlue, size: 18),
+              tooltip: 'Voir la facture',
+              onPressed: () {
+                Navigator.push(context, MaterialPageRoute(builder: (_) => DevisPreviewPage(devis: devis)));
+              },
+            ),
+          ]);
         }
 
         // --- UI ---
@@ -430,246 +414,46 @@ class _HistoriqueDevisPageState extends ConsumerState<HistoriqueDevisPage>
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
+            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: const Offset(0, 2))],
           ),
           child: ListTile(
             contentPadding: const EdgeInsets.all(16),
-            leading: Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: lightBlue,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Icon(
-                Icons.description,
-                color: primaryBlue,
-                size: 24,
-              ),
-            ),
-            title: Text(
-              devis.client,
-              style: const TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
-                color: darkGrey,
-              ),
-            ),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    Icon(
-                      Icons.calendar_today,
-                      size: 14,
-                      color: darkGrey.withOpacity(0.6),
-                    ),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Text(
-                        devis.date.toLocal().toString().split(" ")[0],
-                        style: TextStyle(color: darkGrey.withOpacity(0.7)),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    Icon(
-                      Icons.money,
-                      size: 14,
-                      color: darkGrey.withOpacity(0.6),
-                    ),
-                    const SizedBox(width: 4),
-                    Expanded(
-                      child: Text(
-                        '${devis.totalTtc.toStringAsFixed(2)}DT',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                          color: primaryBlue,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+            leading: Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: lightBlue, borderRadius: BorderRadius.circular(12)), child: const Icon(Icons.description, color: primaryBlue, size: 24)),
+            title: Text(devis.client, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: darkGrey)),
+            subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const SizedBox(height: 4),
+              Row(children: [
+                Icon(Icons.calendar_today, size: 14, color: darkGrey.withOpacity(0.6)),
+                const SizedBox(width: 4),
+                Expanded(child: Text(dateStr, style: TextStyle(color: darkGrey.withOpacity(0.7)), overflow: TextOverflow.ellipsis)),
+              ]),
+              const SizedBox(height: 4),
+              Row(children: [
+                Icon(Icons.money, size: 14, color: darkGrey.withOpacity(0.6)),
+                const SizedBox(width: 4),
+                Expanded(child: Text('${montant.toStringAsFixed(2)}DT', style: const TextStyle(fontWeight: FontWeight.w600, color: primaryBlue), overflow: TextOverflow.ellipsis)),
+              ]),
+            ]),
             trailing: SizedBox(
-              width: 100, // Constrain trailing width
+              width: 110,
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
-                  // Badge statut
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: statusColor.withOpacity(0.12),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      statusLabel,
-                      style: TextStyle(
-                        color: statusColor,
-                        fontWeight: FontWeight.bold,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(color: statusColor.withOpacity(0.12), borderRadius: BorderRadius.circular(8)),
+                    child: Text(statusLabel, style: TextStyle(color: statusColor, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
                   ),
-                  const SizedBox(height: 4), // Reduced from 8 to 4
-                  // Actions
-                  Expanded(
+                  const SizedBox(height: 8),
+                  // Scroll horizontal pour les boutons d'action dans un conteneur à hauteur fixe
+                  SizedBox(
+                    height: 36,
                     child: SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
-                      child: Wrap(
-                        spacing: 4,
-                        runSpacing: 4,
-                        alignment: WrapAlignment.end,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          if (devis.status == DevisStatus.brouillon) ...[
-                            IconButton(
-                              icon: const Icon(
-                                Icons.send,
-                                color: Colors.orange,
-                                size: 18,
-                              ),
-                              tooltip: 'Envoyer par e-mail',
-                              onPressed: () async {
-                                await generateAndSendDevis(
-                                  ref,
-                                  context,
-                                  devisToSend: devis,
-                                );
-                              },
-                            ),
-                            IconButton(
-                              icon: const Icon(
-                                Icons.check,
-                                color: Colors.green,
-                                size: 18,
-                              ),
-                              tooltip: 'Accepter (local)',
-                              onPressed: () {
-                                ref
-                                    .read(historiqueDevisProvider.notifier)
-                                    .updateStatusById(
-                                      devis.id,
-                                      DevisStatus.accepte,
-                                    );
-                              },
-                            ),
-                            IconButton(
-                              icon: const Icon(
-                                Icons.close,
-                                color: Colors.red,
-                                size: 18,
-                              ),
-                              tooltip: 'Refuser',
-                              onPressed: () {
-                                ref
-                                    .read(historiqueDevisProvider.notifier)
-                                    .updateStatusById(
-                                      devis.id,
-                                      DevisStatus.refuse,
-                                    );
-                              },
-                            ),
-                          ] else if (devis.status == DevisStatus.envoye ||
-                              devis.status == DevisStatus.enAttente) ...[
-                            IconButton(
-                              icon: const Icon(
-                                Icons.check,
-                                color: Colors.green,
-                                size: 18,
-                              ),
-                              tooltip: 'Accepter',
-                              onPressed: () {
-                                ref
-                                    .read(historiqueDevisProvider.notifier)
-                                    .updateStatusById(
-                                      devis.id,
-                                      DevisStatus.accepte,
-                                    );
-                              },
-                            ),
-                            IconButton(
-                              icon: const Icon(
-                                Icons.close,
-                                color: Colors.red,
-                                size: 18,
-                              ),
-                              tooltip: 'Refuser',
-                              onPressed: () {
-                                ref
-                                    .read(historiqueDevisProvider.notifier)
-                                    .updateStatusById(
-                                      devis.id,
-                                      DevisStatus.refuse,
-                                    );
-                              },
-                            ),
-                          ] else if (devis.status == DevisStatus.accepte) ...[
-                            IconButton(
-                              icon: const Icon(
-                                Icons.receipt_long,
-                                color: Colors.blue,
-                                size: 18,
-                              ),
-                              tooltip: 'Télécharger la facture (PDF)',
-                              onPressed: () async {
-                                try {
-                                  final bytes = await PdfService.buildDevisPdf(
-                                    devis,
-                                    title: 'Facture',
-                                  );
-                                  await Printing.sharePdf(
-                                    bytes: bytes,
-                                    filename: 'facture_${devis.id}.pdf',
-                                  );
-                                } catch (e) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    SnackBar(
-                                      content: Text(
-                                        'Erreur génération facture : $e',
-                                      ),
-                                    ),
-                                  );
-                                }
-                              },
-                            ),
-                            IconButton(
-                              icon: const Icon(
-                                Icons.visibility,
-                                color: primaryBlue,
-                                size: 18,
-                              ),
-                              tooltip: 'Voir la facture',
-                              onPressed: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (_) =>
-                                        DevisPreviewPage(devis: devis),
-                                  ),
-                                );
-                              },
-                            ),
-                          ],
-                        ],
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: actionButtons,
                       ),
                     ),
                   ),
@@ -677,12 +461,7 @@ class _HistoriqueDevisPageState extends ConsumerState<HistoriqueDevisPage>
               ),
             ),
             onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => DevisPreviewPage(devis: devis),
-                ),
-              );
+              Navigator.push(context, MaterialPageRoute(builder: (_) => DevisPreviewPage(devis: devis)));
             },
           ),
         );

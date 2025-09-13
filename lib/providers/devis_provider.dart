@@ -1,72 +1,77 @@
 // lib/providers/devis_provider.dart
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:garagelink/models/devis.dart';
-import 'package:garagelink/MecanicienScreens/devis/models/piece.dart';
+import 'package:garagelink/models/devis.dart'; // contient DevisService & Devis
+// NOTE: n'importe quel import additionnel (ex: PieceRechange) n'est pas nécessaire ici
 
-class DevisProvider {
+class DevisState {
   final String client;
   final String numeroSerie;
   final DateTime date;
-  final List<Piece> pieces;
+  final List<DevisService> services;
   final double mainOeuvre;
   final Duration dureeEstimee;
-  final double tva;     // fraction, ex: 0.19
-  final double remise;  // fraction, ex: 0.10
+  final double tva; // fraction: ex 0.19 pour 19%
+  final double remise; // fraction: ex 0.10 pour 10%
 
-  DevisProvider({
+  DevisState({
     this.client = '',
     this.numeroSerie = '',
     DateTime? date,
-    this.pieces = const [],
+    this.services = const [],
     this.mainOeuvre = 0.0,
     this.dureeEstimee = const Duration(hours: 1),
     this.tva = 0.19,
     this.remise = 0.0,
   }) : date = date ?? DateTime.now();
 
-  double get sousTotalPieces => pieces.fold(0.0, (s, p) => s + p.total);
+  double get sousTotalPieces => services.fold(0.0, (s, srv) => s + (srv.total));
   double get sousTotal => sousTotalPieces + mainOeuvre;
-
   double get totalHt => sousTotal * (1.0 - remise);
   double get montantTva => totalHt * tva;
   double get totalTtc => totalHt + montantTva;
 
-  DevisProvider copyWith({
+  Devis toDevis() {
+    return Devis(
+      client: client,
+      inspectionDate: date,
+      services: services,
+      totalServicesHT: sousTotalPieces,
+      totalHT: totalHt,
+      totalTTC: totalTtc,
+      tvaRate: tva * 100, // Devis.tvaRate uses percentage in your model
+      maindoeuvre: mainOeuvre,
+      estimatedTime: dureeEstimee,
+      status: DevisStatus.brouillon,
+    );
+  }
+
+  DevisState copyWith({
     String? client,
     String? numeroSerie,
     DateTime? date,
-    List<Piece>? pieces,
+    List<DevisService>? services,
     double? mainOeuvre,
     Duration? dureeEstimee,
     double? tva,
     double? remise,
-  }) =>
-      DevisProvider(
-        client: client ?? this.client,
-        numeroSerie: numeroSerie ?? this.numeroSerie,
-        date: date ?? this.date,
-        pieces: pieces ?? this.pieces,
-        mainOeuvre: mainOeuvre ?? this.mainOeuvre,
-        dureeEstimee: dureeEstimee ?? this.dureeEstimee,
-        tva: tva ?? this.tva,
-        remise: remise ?? this.remise,
-      );
-
-  Devis toDevis() => Devis(
-        client: client,
-        numeroSerie: numeroSerie,
-        date: date,
-        pieces: pieces,
-        mainOeuvre: mainOeuvre,
-        dureeEstimee: dureeEstimee,
-        tva: tva,
-        remise: remise,
-      );
+  }) {
+    return DevisState(
+      client: client ?? this.client,
+      numeroSerie: numeroSerie ?? this.numeroSerie,
+      date: date ?? this.date,
+      services: services ?? this.services,
+      mainOeuvre: mainOeuvre ?? this.mainOeuvre,
+      dureeEstimee: dureeEstimee ?? this.dureeEstimee,
+      tva: tva ?? this.tva,
+      remise: remise ?? this.remise,
+    );
+  }
 }
 
-class DevisNotifier extends StateNotifier<DevisProvider> {
-  DevisNotifier() : super(DevisProvider());
+class DevisNotifier extends StateNotifier<DevisState> {
+  DevisNotifier() : super(DevisState());
 
+  // setters
   void setClient(String v) => state = state.copyWith(client: v);
   void setNumeroSerie(String v) => state = state.copyWith(numeroSerie: v);
   void setDate(DateTime d) => state = state.copyWith(date: d);
@@ -75,12 +80,24 @@ class DevisNotifier extends StateNotifier<DevisProvider> {
   void setTva(double t) => state = state.copyWith(tva: t);
   void setRemise(double r) => state = state.copyWith(remise: r);
 
-  void addPiece(Piece p) => state = state.copyWith(pieces: [...state.pieces, p]);
-  void removePieceAt(int i) {
-    final copy = [...state.pieces];
+  // services (lignes)
+  void addService(DevisService s) => state = state.copyWith(services: [...state.services, s]);
+
+  void removeServiceAt(int i) {
+    final copy = [...state.services];
     if (i >= 0 && i < copy.length) copy.removeAt(i);
-    state = state.copyWith(pieces: copy);
+    state = state.copyWith(services: copy);
   }
+
+  void updateServiceAt(int i, DevisService s) {
+    if (i < 0 || i >= state.services.length) return;
+    final list = [...state.services];
+    list[i] = s;
+    state = state.copyWith(services: list);
+  }
+
+  // convert to Devis model (prêt à être envoyé au backend)
+  Devis toDevisModel() => state.toDevis();
 }
 
-final devisProvider = StateNotifierProvider<DevisNotifier, DevisProvider>((ref) => DevisNotifier());
+final devisProvider = StateNotifierProvider<DevisNotifier, DevisState>((ref) => DevisNotifier());

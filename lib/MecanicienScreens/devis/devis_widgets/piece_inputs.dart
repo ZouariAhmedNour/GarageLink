@@ -21,6 +21,31 @@ class PieceInputs extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // helper validator for PU field:
+    String? puValidator(String? v) {
+      final hasServices = ref.read(devisProvider).services.isNotEmpty;
+      if (hasServices) return null; // si on a déjà des lignes, PU optionnel
+      if (v == null || v.isEmpty) return 'Champ requis';
+      // try parse number
+      final normalized = v.replaceAll(',', '.').trim();
+      final parsed = double.tryParse(normalized);
+      if (parsed == null) return 'Valeur numérique requise';
+      if (parsed < 0) return 'Valeur invalide';
+      return null;
+    }
+
+    // helper validator for QTE field (ensure positive int)
+    String? qteValidator(String? v) {
+      if (validator != null) {
+        final res = validator!(v);
+        if (res != null) return res;
+      }
+      if (v == null || v.isEmpty) return 'Champ requis';
+      final parsed = int.tryParse(v.trim());
+      if (parsed == null || parsed <= 0) return 'Entier positif requis';
+      return null;
+    }
+
     return isTablet
         ? Row(
             children: [
@@ -40,7 +65,7 @@ class PieceInputs extends ConsumerWidget {
                   label: 'Qté',
                   icon: Icons.add_circle_outline,
                   keyboardType: TextInputType.number,
-                  validator: validator,
+                  validator: qteValidator,
                 ),
               ),
               const SizedBox(width: 12),
@@ -50,11 +75,7 @@ class PieceInputs extends ConsumerWidget {
                   label: 'PU',
                   icon: Icons.money,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  validator: (v) {
-                    if (ref.read(devisProvider).pieces.isNotEmpty) return null;
-                    if (v == null || v.isEmpty) return 'Champ requis';
-                    return null;
-                  },
+                  validator: puValidator,
                 ),
               ),
             ],
@@ -76,7 +97,7 @@ class PieceInputs extends ConsumerWidget {
                       label: 'Qté',
                       icon: Icons.add_circle_outline,
                       keyboardType: TextInputType.number,
-                      validator: validator,
+                      validator: qteValidator,
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -86,11 +107,7 @@ class PieceInputs extends ConsumerWidget {
                       label: 'PU',
                       icon: Icons.money,
                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      validator: (v) {
-                        if (ref.read(devisProvider).pieces.isNotEmpty) return null;
-                        if (v == null || v.isEmpty) return 'Champ requis';
-                        return null;
-                      },
+                      validator: puValidator,
                     ),
                   ),
                 ],

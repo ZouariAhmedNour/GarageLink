@@ -58,35 +58,89 @@ final historiqueDevisProvider =
 
 // ✅ Fonction utilitaire pour accepter un devis et générer une facture
 void onDevisAccepted(Devis devis, WidgetRef ref) {
+  // Préparer un numéro de facture unique
+  final invoiceId = (devis.id != null && devis.id!.isNotEmpty)
+      ? 'INV_${devis.id}'
+      : 'INV_${DateTime.now().millisecondsSinceEpoch}';
+
+  // Récupérer totaux depuis le devis
+  final double totalTTC = devis.totalTTC;
+  final double totalHT = devis.totalHT;
+  final double totalTVA = (totalTTC - totalHT) >= 0 ? (totalTTC - totalHT) : 0.0;
+
+  // Convertir les services du Devis en ServiceItem (Facture)
+  final List<ServiceItem> services = devis.services.map((s) {
+    return ServiceItem(
+      id: null,
+      pieceId: s.pieceId,
+      piece: s.piece,
+      quantity: s.quantity,
+      unitPrice: s.unitPrice,
+      total: s.total,
+    );
+  }).toList();
+
   final facture = Facture(
-    id: 'INV_${devis.id}', // logique ID simple
-    date: DateTime.now(),
-    montant: double.parse(devis.totalTtc.toStringAsFixed(2)),
-    clientName: devis.client,
+    id: invoiceId,
+    numeroFacture: invoiceId,
+    devisId: devis.id, // lier la facture au devis si disponible
+    clientInfo: ClientInfo(nom: devis.client),
+    vehicleInfo: devis.vehicleInfo,
+    invoiceDate: DateTime.now(), // remplace le 'date' inexistant
+    inspectionDate: devis.inspectionDate,
+    services: services,
+    maindoeuvre: devis.maindoeuvre,
+    tvaRate: devis.tvaRate,
+    totalHT: totalHT,
+    totalTVA: totalTVA,
+    totalTTC: totalTTC,
+    createdAt: DateTime.now(),
   );
 
-  // Ici on utilise facturesProvider (pas facturesNotifierProvider)
-  ref.read(facturesProvider.notifier).setFactures([
-    ...ref.read(facturesProvider).factures,
-    facture,
-  ]);
+  // Ajouter la facture via le provider
+  try {
+    ref.read(facturesProvider.notifier).addFacture(facture);
+  } catch (e) {
+    // gérer l'erreur ou logger (ne pas planter l'app)
+    // debugPrint('onDevisAccepted: impossible d\'ajouter la facture: $e');
+  }
+
+  // Mettre à jour le status du devis dans l'historique
+  if (devis.id != null) {
+    ref.read(historiqueDevisProvider.notifier).updateStatusById(
+      devis.id!,
+      DevisStatus.accepte,
+    );
+  }
 }
 
-// 🔎 Provider pour la recherche
+// 🔎 Provider pour la recherche (texte)
 final filtreProvider = StateProvider<String>((ref) => "");
 
-// 🔎 Provider filtré
+// 🔎 Provider filtré (recherche dans l'historique)
 final devisFiltresProvider = Provider<List<Devis>>((ref) {
-  final filtre = ref.watch(filtreProvider).toLowerCase();
+  final filtreRaw = ref.watch(filtreProvider);
+  final filtre = (filtreRaw).toLowerCase().trim();
   final historique = ref.watch(historiqueDevisProvider);
 
   if (filtre.isEmpty) return historique;
 
+  String norm(String? s) => (s ?? '').toLowerCase();
+
   return historique.where((devis) {
-    final clientMatch = devis.client.toLowerCase().contains(filtre);
-    final numeroSerieMatch = devis.numeroSerie.toLowerCase().contains(filtre);
-    final idMatch = devis.id.toLowerCase().contains(filtre);
-    final dateMatch = devis.date.toString().toLowerCase().contains(filtre);
+    final clientMatch = norm(devis.client).contains(filtre);
+
+    // numéro/serie : on utilise vehiculeId, factureId ou empty comme fallback
+    final numeroSerie = norm(devis.vehiculeId ?? devis.factureId ?? '');
+    final numeroSerieMatch = numeroSerie.contains(filtre);
+
+    final idMatch = norm(devis.id).contains(filtre);
+
+    // date : essayer inspectionDate puis createdAt
+    final dateVal = devis.inspectionDate ?? devis.createdAt;
+    final dateStr = dateVal != null ? dateVal.toIso8601String().toLowerCase() : '';
+    final dateMatch = dateStr.contains(filtre);
+
     return clientMatch || numeroSerieMatch || idMatch || dateMatch;
   }).toList();
 });

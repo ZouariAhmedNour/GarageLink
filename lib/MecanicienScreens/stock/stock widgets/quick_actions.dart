@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:garagelink/MecanicienScreens/stock/catalogue_screen.dart';
 import 'package:garagelink/MecanicienScreens/stock/mouvement_form.dart';
 import 'package:garagelink/MecanicienScreens/stock/mouvements_screen.dart';
-import 'package:garagelink/MecanicienScreens/stock/piece_form.dart';
+import 'package:garagelink/MecanicienScreens/stock/stockPieceForm.dart';
 import 'package:garagelink/MecanicienScreens/stock/stock_dashboard.dart';
 import 'package:get/get.dart';
 
@@ -20,7 +20,7 @@ class QuickActions extends StatelessWidget {
           label: 'Nouvelle pièce',
           icon: Icons.add_box,
           isPrimary: true,
-          onTap: () => Get.to(() => const PieceFormScreen()),
+          onTap: () => Get.to(() => const StockPieceFormScreen()),
         ),
         ActionButton(
           label: 'Mouvement',
