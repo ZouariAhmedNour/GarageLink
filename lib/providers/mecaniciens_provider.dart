@@ -1,78 +1,232 @@
-// providers/mecaniciens_provider.dart
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../models/mecanicien.dart';
+import 'package:garagelink/models/mecanicien.dart';
+import 'package:garagelink/services/mecanicien_api.dart';
+import 'package:collection/collection.dart'; // Pour firstWhereOrNull
 
-class MecaniciensNotifier extends StateNotifier<List<Mecanicien>> {
-  MecaniciensNotifier() : super(_initialData);
+// Provider pour le token d'authentification (partagé avec autres providers)
+final authTokenProvider = StateProvider<String?>((ref) => null);
 
-  static final List<Mecanicien> _initialData = [
-  Mecanicien(
-    id: 'MEC-1',
-    nom: 'Ahmed Ben Ali',
-    dateNaissance: DateTime(1990, 3, 12),
-    telephone: '21612345678',
-    email: 'ahmed@example.com',
-    matricule: 'MAT-001',
-    poste: Poste.mecanicien,
-    dateEmbauche: DateTime(2018, 6, 1),
-    typeContrat: TypeContrat.cdi,
-    statut: Statut.actif,
-    salaire: 1200,
-    services: [Service.revision, Service.diagnostic],
-    experience: '6 ans en mécanique générale',
-    permisConduite: 'B',
-  ),
-  Mecanicien(
-    id: 'MEC-2',
-    nom: 'Sarra Haddad',
-    dateNaissance: DateTime(1995, 10, 5),
-    telephone: '21698765432',
-    email: 'sarra@example.com',
-    matricule: 'MAT-002',
-    poste: Poste.electricien,
-    dateEmbauche: DateTime(2020, 1, 15),
-    typeContrat: TypeContrat.cdd,
-    statut: Statut.actif,
-    salaire: 1100,
-    services: [Service.entretien, Service.climatisation],
-    experience: '3 ans électricité auto',
-    permisConduite: 'B',
-  ),
-];
+// État des mécaniciens
+class MecaniciensState {
+  final List<Mecanicien> mecaniciens;
+  final bool loading;
+  final String? error;
 
-  void addMec(Mecanicien m) {
-    state = [...state, m];
-  }
+  const MecaniciensState({
+    this.mecaniciens = const [],
+    this.loading = false,
+    this.error,
+  });
 
-  void updateMec(String id, Mecanicien updated) {
-    state = state.map((m) => m.id == id ? updated : m).toList();
-  }
+  MecaniciensState copyWith({
+    List<Mecanicien>? mecaniciens,
+    bool? loading,
+    String? error,
+  }) =>
+      MecaniciensState(
+        mecaniciens: mecaniciens ?? this.mecaniciens,
+        loading: loading ?? this.loading,
+        error: error,
+      );
+}
 
-  void removeMec(String id) {
-    state = state.where((m) => m.id != id).toList();
-  }
+class MecaniciensNotifier extends StateNotifier<MecaniciensState> {
+  MecaniciensNotifier(this.ref) : super(const MecaniciensState());
 
-  Mecanicien? getById(String id) {
+  final Ref ref;
+
+  // Récupérer le token depuis le provider
+  String? get _token => ref.read(authTokenProvider);
+
+  // Vérifier si le token est disponible
+  bool get _hasToken => _token != null && _token!.isNotEmpty;
+
+  // État
+  void setLoading(bool value) => state = state.copyWith(loading: value, error: null);
+
+  void setError(String error) => state = state.copyWith(error: error, loading: false);
+
+  void setMecaniciens(List<Mecanicien> list) => state = state.copyWith(mecaniciens: [...list], error: null);
+
+  void clear() => state = const MecaniciensState();
+
+  // Réseau : charger tous les mécaniciens
+  Future<void> loadAll() async {
+    if (!_hasToken) {
+      state = state.copyWith(error: 'Token d\'authentification requis');
+      return;
+    }
+
+    setLoading(true);
     try {
-      return state.firstWhere((m) => m.id == id);
+      final mecaniciens = await MecanicienApi.getAllMecaniciens(_token!);
+      setMecaniciens(mecaniciens);
     } catch (e) {
+      setError(e.toString());
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // Réseau : récupérer un mécanicien par ID
+  Future<Mecanicien?> getById(String id) async {
+    if (!_hasToken) {
+      state = state.copyWith(error: 'Token d\'authentification requis');
       return null;
+    }
+
+    setLoading(true);
+    try {
+      final mecanicien = await MecanicienApi.getMecanicienById(_token!, id);
+      return mecanicien;
+    } catch (e) {
+      setError(e.toString());
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // Réseau : récupérer les mécaniciens par service
+  Future<void> getByService(String serviceId) async {
+    if (!_hasToken) {
+      state = state.copyWith(error: 'Token d\'authentification requis');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      final mecaniciens = await MecanicienApi.getMecaniciensByService(_token!, serviceId);
+      setMecaniciens(mecaniciens);
+    } catch (e) {
+      setError(e.toString());
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // Réseau : ajouter un mécanicien
+  Future<void> addMecanicien({
+    required String nom,
+    required DateTime dateNaissance,
+    required String telephone,
+    required String email,
+    required Poste poste,
+    required DateTime dateEmbauche,
+    required TypeContrat typeContrat,
+    required Statut statut,
+    required double salaire,
+    required List<ServiceMecanicien> services,
+    required String experience,
+    required PermisConduire permisConduire,
+  }) async {
+    if (!_hasToken) {
+      state = state.copyWith(error: 'Token d\'authentification requis');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      final mecanicien = await MecanicienApi.createMecanicien(
+        token: _token!,
+        nom: nom,
+        dateNaissance: dateNaissance,
+        telephone: telephone,
+        email: email,
+        poste: poste,
+        dateEmbauche: dateEmbauche,
+        typeContrat: typeContrat,
+        statut: statut,
+        salaire: salaire,
+        services: services,
+        experience: experience,
+        permisConduire: permisConduire,
+      );
+      state = state.copyWith(mecaniciens: [...state.mecaniciens, mecanicien], error: null);
+    } catch (e) {
+      setError(e.toString());
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // Réseau : mettre à jour un mécanicien
+  Future<void> updateMecanicien({
+    required String id,
+    String? nom,
+    DateTime? dateNaissance,
+    String? telephone,
+    String? email,
+    Poste? poste,
+    DateTime? dateEmbauche,
+    TypeContrat? typeContrat,
+    Statut? statut,
+    double? salaire,
+    List<ServiceMecanicien>? services,
+    String? experience,
+    PermisConduire? permisConduire,
+  }) async {
+    if (!_hasToken) {
+      state = state.copyWith(error: 'Token d\'authentification requis');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      final updatedMecanicien = await MecanicienApi.updateMecanicien(
+        token: _token!,
+        id: id,
+        nom: nom,
+        dateNaissance: dateNaissance,
+        telephone: telephone,
+        email: email,
+        poste: poste,
+        dateEmbauche: dateEmbauche,
+        typeContrat: typeContrat,
+        statut: statut,
+        salaire: salaire,
+        services: services,
+        experience: experience,
+        permisConduire: permisConduire,
+      );
+      state = state.copyWith(
+        mecaniciens: state.mecaniciens.map((m) => m.id == id ? updatedMecanicien : m).toList(),
+        error: null,
+      );
+    } catch (e) {
+      setError(e.toString());
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // Réseau : supprimer un mécanicien
+  Future<void> removeMecanicien(String id) async {
+    if (!_hasToken) {
+      state = state.copyWith(error: 'Token d\'authentification requis');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await MecanicienApi.deleteMecanicien(_token!, id);
+      state = state.copyWith(
+        mecaniciens: state.mecaniciens.where((m) => m.id != id).toList(),
+        error: null,
+      );
+    } catch (e) {
+      setError(e.toString());
+    } finally {
+      setLoading(false);
     }
   }
 }
 
-
-
-final mecaniciensProvider =
-    StateNotifierProvider<MecaniciensNotifier, List<Mecanicien>>((ref) {
-  return MecaniciensNotifier();
+final mecaniciensProvider = StateNotifierProvider<MecaniciensNotifier, MecaniciensState>((ref) {
+  return MecaniciensNotifier(ref);
 });
 
 final mecanicienByIdProvider = Provider.family<Mecanicien?, String>((ref, id) {
-  final list = ref.watch(mecaniciensProvider);
-  try {
-    return list.firstWhere((m) => m.id == id);
-  } catch (e) {
-    return null;
-  }
+  final mecaniciens = ref.watch(mecaniciensProvider).mecaniciens;
+  return mecaniciens.firstWhereOrNull((m) => m.id == id);
 });

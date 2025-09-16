@@ -212,9 +212,10 @@ class PdfService {
 
   /// Share a PDF file: on web it will use the printing package's share mechanism,
   /// on mobile it will create a temporary file and use share_plus.
-  Future<void> sharePdf(Uint8List bytes, String filename) async {
+   Future<void> sharePdf(Uint8List bytes, String filename, {String? subject, String? text, List<String>? to}) async {
     if (kIsWeb) {
       // Printing.sharePdf works on web
+      // On web we can't attach recipients reliably; just share the PDF.
       await Printing.sharePdf(bytes: bytes, filename: filename);
       return;
     }
@@ -222,7 +223,16 @@ class PdfService {
     final tmpDir = await getTemporaryDirectory();
     final file = File('${tmpDir.path}/$filename');
     await file.writeAsBytes(bytes, flush: true);
-    await Share.shareXFiles([XFile(file.path)], text: 'Devis - $filename');
+    final xfile = XFile(file.path);
+
+    // If a 'to' list is provided, prefix the body so that receiver is visible when client ignores recipients param.
+    String combinedText = text ?? '';
+    if (to != null && to.isNotEmpty) {
+      combinedText = 'Destinataire(s): ${to.join(', ')}\n\n$combinedText';
+    }
+
+    // shareXFiles supports subject and text parameters on mobile.
+    await Share.shareXFiles([xfile], text: combinedText, subject: subject);
   }
 
   // ---------------- Helpers ----------------

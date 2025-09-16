@@ -1,11 +1,12 @@
+// lib/screens/client_vehicles_screen.dart
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:garagelink/providers/client_provider.dart';
+import 'package:garagelink/providers/ficheClient_provider.dart';
 import 'package:garagelink/providers/vehicule_provider.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
-import 'package:garagelink/models/client.dart';
+import 'package:garagelink/models/ficheClient.dart';
 import 'package:garagelink/configurations/app_routes.dart';
 
 class ClientVehiclesScreen extends ConsumerWidget {
@@ -23,13 +24,15 @@ class ClientVehiclesScreen extends ConsumerWidget {
       );
     }
 
-    // Récupère l'état courant
+    // état courant des véhicules (StateNotifier -> VehiculesState)
     final vehiculesState = ref.watch(vehiculesProvider);
-    // Liste filtrée
-    final vehicules = vehiculesState.vehicules.where((v) => v.clientId == clientId).toList();
+    final vehicules = vehiculesState.vehicules.where((v) => (v.proprietaireId ?? '') == clientId).toList();
 
+    // état courant des clients (AsyncValue<List<Client>>)
     final clientsState = ref.watch(clientsProvider);
-    final client = clientsState.clients.firstWhere(
+    final List<Client> clientsList = clientsState.asData?.value ?? [];
+
+    final client = clientsList.firstWhere(
       (c) => c.id == clientId,
       orElse: () => Client(
         id: clientId,
@@ -37,6 +40,8 @@ class ClientVehiclesScreen extends ConsumerWidget {
         mail: '',
         telephone: '',
         adresse: '',
+        categorie: Categorie.particulier,
+        vehiculeIds: const [],
       ),
     );
 
@@ -132,8 +137,15 @@ class ClientVehiclesScreen extends ConsumerWidget {
                                 tooltip: 'Éditer',
                                 icon: const Icon(Icons.edit, color: Color(0xFF357ABD)),
                                 onPressed: () {
-                                  // si tu as un écran d'édition, tu peux naviguer en passant l'id du véhicule
-                                  // ex: Get.toNamed(AppRoutes.addVehiculeScreen, arguments: {'clientId': clientId, 'vehiculeId': v.id});
+                                  final vid = v.id;
+                                  if (vid == null || vid.isEmpty) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('ID véhicule manquant')),
+                                    );
+                                    return;
+                                  }
+                                  // Navigation : adapte la route si nécessaire
+                                  Get.toNamed(AppRoutes.addVehiculeScreen, arguments: {'clientId': clientId, 'vehiculeId': vid});
                                 },
                               ),
                               IconButton(
@@ -146,23 +158,34 @@ class ClientVehiclesScreen extends ConsumerWidget {
                                     textCancel: 'Annuler',
                                     textConfirm: 'Supprimer',
                                     onConfirm: () {
-                                      // suppression du véhicule
-                                      ref.read(vehiculesProvider.notifier).removeVehicule(v.id);
+                                      final vid = v.id;
+                                      if (vid == null || vid.isEmpty) {
+                                        Navigator.of(context).pop();
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          const SnackBar(content: Text('ID véhicule manquant')),
+                                        );
+                                        return;
+                                      }
 
-                                      // --- CORRECTION ICI: use indexWhere to check existence ---
-                                      final clients = ref.read(clientsProvider).clients;
+                                      // suppression côté provider local
+                                      ref.read(vehiculesProvider.notifier).removeVehicule(vid);
+
+                                      // Mettre à jour vehiculeIds du client côté provider — envoi d'un Map minimal
+                                      final clients = ref.read(clientsProvider).asData?.value ?? [];
                                       final idx = clients.indexWhere((c) => c.id == clientId);
                                       if (idx != -1) {
                                         final maybeClient = clients[idx];
-                                        final updated = maybeClient.copyWith(
-                                          vehiculeIds: maybeClient.vehiculeIds.where((id) => id != v.id).toList(),
-                                        );
-                                        ref.read(clientsProvider.notifier).updateClient(maybeClient.id, updated);
-                                      }
-                                      // -------------------------------------------------------
+                                        final updatedVehIds = maybeClient.vehiculeIds.where((id) => id != vid).toList();
 
-                                      Get.back(); // ferme le dialog
-                                      // Optionnel : snackbar
+                                        if (maybeClient.id != null && maybeClient.id!.isNotEmpty) {
+                                          // updateClient attend probablement (id, Map<String,dynamic>)
+                                          ref.read(clientsProvider.notifier).updateClient(maybeClient.id!, {
+                                            'vehiculeIds': updatedVehIds,
+                                          });
+                                        }
+                                      }
+
+                                      Navigator.of(context).pop(); // ferme le dialog
                                       ScaffoldMessenger.of(context).showSnackBar(
                                         SnackBar(content: Text('${v.marque} ${v.modele} supprimé')),
                                       );
@@ -182,7 +205,6 @@ class ClientVehiclesScreen extends ConsumerWidget {
       floatingActionButton: FloatingActionButton(
         backgroundColor: const Color(0xFF357ABD),
         onPressed: () {
-          // navigation vers ton AddVehScreen (GenerateRoutes attend un String clientId)
           Get.toNamed(AppRoutes.addVehiculeScreen, arguments: clientId);
         },
         child: const Icon(Icons.add),

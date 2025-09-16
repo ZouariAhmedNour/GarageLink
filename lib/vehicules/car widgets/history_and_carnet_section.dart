@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:garagelink/carnetEntretien/entretien_screen.dart';
 import 'package:garagelink/models/vehicule.dart';
-import 'package:garagelink/providers/carnet_provider.dart';
+import 'package:garagelink/providers/carnetEntretien_provider.dart';
 import 'ui_constants.dart';
 import 'package:intl/intl.dart';
 import 'package:get/get.dart';

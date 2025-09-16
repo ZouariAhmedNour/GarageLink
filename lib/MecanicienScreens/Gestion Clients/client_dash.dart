@@ -1,3 +1,4 @@
+// lib/MecanicienScreens/Gestion Clients/client_dash.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -5,13 +6,13 @@ import 'package:garagelink/MecanicienScreens/Gestion%20Clients/add_client.dart';
 import 'package:garagelink/MecanicienScreens/devis/devis_widgets/num_serie_input.dart';
 import 'package:garagelink/components/default_app_bar.dart';
 import 'package:garagelink/configurations/app_routes.dart';
-import 'package:garagelink/vehicules/add_veh.dart';
-import 'package:garagelink/vehicules/vehicule_info.dart';
-import 'package:garagelink/models/client.dart';
+import 'package:garagelink/providers/ficheClient_provider.dart';
+import 'package:garagelink/models/ficheClient.dart';
 import 'package:garagelink/models/vehicule.dart';
-import 'package:garagelink/providers/client_provider.dart';
 import 'package:garagelink/providers/orders_provider.dart';
 import 'package:garagelink/providers/vehicule_provider.dart';
+import 'package:garagelink/vehicules/add_veh.dart';
+import 'package:garagelink/vehicules/vehicule_info.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 
@@ -24,7 +25,7 @@ class ClientDash extends ConsumerStatefulWidget {
 
 enum TypeFiltre { nom, immatriculation, periode }
 
-class _ClientDashState extends ConsumerState<ClientDash> 
+class _ClientDashState extends ConsumerState<ClientDash>
     with SingleTickerProviderStateMixin {
   static const primaryColor = Color(0xFF357ABD);
   static const backgroundColor = Color(0xFFF8FAFC);
@@ -33,8 +34,8 @@ class _ClientDashState extends ConsumerState<ClientDash>
   static const errorColor = Color(0xFFE53E3E);
 
   late AnimationController _animationController;
-Animation<double>? _fadeAnimation;
-Animation<Offset>? _slideAnimation;
+  Animation<double>? _fadeAnimation;
+  Animation<Offset>? _slideAnimation;
 
   int selectedIndex = 0;
   String nomFilter = '';
@@ -42,6 +43,7 @@ Animation<Offset>? _slideAnimation;
   DateTimeRange? dateRangeFilter;
   final vinCtrl = TextEditingController();
   final numLocalCtrl = TextEditingController();
+  
 
   @override
   void initState() {
@@ -124,33 +126,37 @@ Animation<Offset>? _slideAnimation;
     );
   }
 
+  Future<void> _pickDateRange() async {
+    HapticFeedback.lightImpact();
+    final picked = await showDateRangePicker(
+      context: context,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+      initialDateRange: dateRangeFilter,
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: Theme.of(context).colorScheme.copyWith(primary: primaryColor),
+          ),
+          child: child!,
+        );
+      },
+    );
+    if (picked != null) setState(() => dateRangeFilter = picked);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final clientsState = ref.watch(clientsProvider);
-    final vehState = ref.watch(vehiculesProvider);
+    final clientsAsync = ref.watch(clientsProvider);
+    final vehState = ref.watch(vehiculesProvider); // VehiculesState
     final ordersState = ref.watch(ordersProvider);
-
-    final filtered = clientsState.clients.where((c) {
-      bool matches = true;
-      if (selectedIndex == 0) {
-        matches = nomFilter.isEmpty || c.nomComplet.toLowerCase().contains(nomFilter.toLowerCase());
-      } else if (selectedIndex == 1) {
-        matches = immatFilter.isEmpty || c.vehiculeIds.any((vid) => vid.toLowerCase().contains(immatFilter.toLowerCase()));
-      } else if (selectedIndex == 2) {
-        final clientOrders = ordersState.where((o) => o.clientId == c.id).toList();
-        matches = dateRangeFilter == null || clientOrders.any((o) =>
-          o.date.isAfter(dateRangeFilter!.start.subtract(const Duration(days: 1))) &&
-          o.date.isBefore(dateRangeFilter!.end.add(const Duration(days: 1))));
-      }
-      return matches;
-    }).toList();
 
     return Scaffold(
       backgroundColor: backgroundColor,
-    appBar: CustomAppBar(
-  title: 'Clients',
-  backgroundColor: primaryColor,
-),
+      appBar: CustomAppBar(
+        title: 'Clients',
+        backgroundColor: primaryColor,
+      ),
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: primaryColor,
         onPressed: () {
@@ -160,104 +166,136 @@ Animation<Offset>? _slideAnimation;
         icon: const Icon(Icons.person_add, color: Colors.white),
         label: const Text('Ajouter', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
       ),
-     body: _fadeAnimation == null || _slideAnimation == null
-  ? const SizedBox.shrink()
-  : FadeTransition(
-      opacity: _fadeAnimation!,
-      child: SlideTransition(
-        position: _slideAnimation!,
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildSearchCard(
-                  Column(
+      body: _fadeAnimation == null || _slideAnimation == null
+          ? const SizedBox.shrink()
+          : FadeTransition(
+              opacity: _fadeAnimation!,
+              child: SlideTransition(
+                position: _slideAnimation!,
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.filter_list, color: primaryColor, size: 20),
-                          const SizedBox(width: 8),
-                          Text('Filtres', style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w600, color: Colors.black87)),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        child: Row(
+                      _buildSearchCard(
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            _buildFilterChip('Nom', Icons.person, selectedIndex == 0, 
-                              () => setState(() => selectedIndex = 0)),
-                            const SizedBox(width: 8),
-                            _buildFilterChip('Immatriculation', Icons.directions_car, selectedIndex == 1, 
-                              () => setState(() => selectedIndex = 1)),
-                            const SizedBox(width: 8),
-                            _buildFilterChip('Période', Icons.date_range, selectedIndex == 2, 
-                              () => setState(() => selectedIndex = 2)),
+                            Row(
+                              children: [
+                                const Icon(Icons.filter_list, color: primaryColor, size: 20),
+                                const SizedBox(width: 8),
+                                Text('Filtres', style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  fontWeight: FontWeight.w600, color: Colors.black87)),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: Row(
+                                children: [
+                                  _buildFilterChip('Nom', Icons.person, selectedIndex == 0,
+                                    () => setState(() => selectedIndex = 0)),
+                                  const SizedBox(width: 8),
+                                  _buildFilterChip('Immatriculation', Icons.directions_car, selectedIndex == 1,
+                                    () => setState(() => selectedIndex = 1)),
+                                  const SizedBox(width: 8),
+                                  _buildFilterChip('Période', Icons.date_range, selectedIndex == 2,
+                                    () => setState(() => selectedIndex = 2)),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(height: 16),
+                            _buildSearchInterface(),
                           ],
                         ),
                       ),
                       const SizedBox(height: 16),
-                      _buildSearchInterface(),
+                      if (dateRangeFilter != null)
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: primaryColor.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: primaryColor.withOpacity(0.3)),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.date_range, color: primaryColor, size: 16),
+                              const SizedBox(width: 8),
+                              Text('${DateFormat('dd/MM/yyyy').format(dateRangeFilter!.start)} → ${DateFormat('dd/MM/yyyy').format(dateRangeFilter!.end)}',
+                                style: const TextStyle(color: primaryColor, fontWeight: FontWeight.w600)),
+                              const Spacer(),
+                              IconButton(
+                                icon: const Icon(Icons.close, color: primaryColor, size: 18),
+                                onPressed: () {
+                                  HapticFeedback.lightImpact();
+                                  setState(() => dateRangeFilter = null);
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                      if (dateRangeFilter != null) const SizedBox(height: 16),
+
+                      // Zone principale: contenu selon l'état async du provider
+                      Expanded(
+                        child: clientsAsync.when(
+                          data: (clientsList) {
+                            // filtre des clients selon le mode
+                            final filtered = clientsList.where((c) {
+                              bool matches = true;
+                              if (selectedIndex == 0) {
+                                matches = nomFilter.isEmpty || c.nomComplet.toLowerCase().contains(nomFilter.toLowerCase());
+                              } else if (selectedIndex == 1) {
+                                if (immatFilter.isEmpty) {
+                                  matches = true;
+                                } else {
+                                  // rechercher parmi les véhicules fournis par le provider (proprietaireId)
+                                  final clientVehs = vehState.vehicules.where((v) => (v.proprietaireId ?? '') == (c.id ?? '')).toList();
+                                  matches = clientVehs.any((v) => v.immatriculation.toLowerCase().contains(immatFilter.toLowerCase()));
+                                }
+                              } else if (selectedIndex == 2) {
+                                final clientOrders = ordersState.where((o) => o.clientId == c.id).toList();
+                                matches = dateRangeFilter == null || clientOrders.any((o) =>
+                                  o.date.isAfter(dateRangeFilter!.start.subtract(const Duration(days: 1))) &&
+                                  o.date.isBefore(dateRangeFilter!.end.add(const Duration(days: 1))));
+                              }
+                              return matches;
+                            }).toList();
+
+                            if (filtered.isEmpty) {
+                              return Center(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.person_search, size: 64, color: Colors.grey[400]),
+                                    const SizedBox(height: 16),
+                                    Text('Aucun client trouvé', style: TextStyle(fontSize: 18, color: Colors.grey[600])),
+                                  ],
+                                ),
+                              );
+                            }
+
+                            return ListView.separated(
+                              itemCount: filtered.length,
+                              separatorBuilder: (_, __) => const SizedBox(height: 8),
+                              itemBuilder: (context, idx) {
+                                final c = filtered[idx];
+                                final clientVeh = vehState.vehicules.where((v) => (v.proprietaireId ?? '') == (c.id ?? '')).toList();
+                                return ClientCard(client: c, vehicules: clientVeh, index: idx);
+                              },
+                            );
+                          },
+                          loading: () => const Center(child: CircularProgressIndicator()),
+                          error: (err, st) => Center(child: Text('Erreur chargement clients: ${err.toString()}')),
+                        ),
+                      ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 16),
-                if (dateRangeFilter != null) 
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: primaryColor.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: primaryColor.withOpacity(0.3)),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.date_range, color: primaryColor, size: 16),
-                        const SizedBox(width: 8),
-                        Text('${DateFormat('dd/MM/yyyy').format(dateRangeFilter!.start)} → ${DateFormat('dd/MM/yyyy').format(dateRangeFilter!.end)}',
-                          style: const TextStyle(color: primaryColor, fontWeight: FontWeight.w600)),
-                        const Spacer(),
-                        IconButton(
-                          icon: const Icon(Icons.close, color: primaryColor, size: 18),
-                          onPressed: () {
-                            HapticFeedback.lightImpact();
-                            setState(() => dateRangeFilter = null);
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                if (dateRangeFilter != null) const SizedBox(height: 16),
-                Expanded(
-                  child: filtered.isEmpty
-                    ? Center(
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(Icons.person_search, size: 64, color: Colors.grey[400]),
-                            const SizedBox(height: 16),
-                            Text('Aucun client trouvé', style: TextStyle(fontSize: 18, color: Colors.grey[600])),
-                          ],
-                        ),
-                      )
-                    : ListView.separated(
-                        itemCount: filtered.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 8),
-                        itemBuilder: (context, idx) {
-                          final c = filtered[idx];
-                          final clientVeh = vehState.vehicules.where((v) => v.clientId == c.id).toList();
-                          return ClientCard(client: c, vehicules: clientVeh, index: idx);
-                        },
-                      ),
-                ),
-              ],
+              ),
             ),
-          ),
-        ),
-      ),
     );
   }
 
@@ -288,27 +326,10 @@ Animation<Offset>? _slideAnimation;
         return Container();
     }
   }
-
-  Future<void> _pickDateRange() async {
-    HapticFeedback.lightImpact();
-    final picked = await showDateRangePicker(
-      context: context,
-      firstDate: DateTime(2000),
-      lastDate: DateTime(2100),
-      initialDateRange: dateRangeFilter,
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme: Theme.of(context).colorScheme.copyWith(primary: primaryColor),
-          ),
-          child: child!,
-        );
-      },
-    );
-    if (picked != null) setState(() => dateRangeFilter = picked);
-  }
 }
 
+
+// --------------------- ClientCard ---------------------
 class ClientCard extends ConsumerStatefulWidget {
   final Client client;
   final List<Vehicule> vehicules;
@@ -321,10 +342,12 @@ class ClientCard extends ConsumerStatefulWidget {
 
 class _ClientCardState extends ConsumerState<ClientCard> with SingleTickerProviderStateMixin {
   bool expanded = false;
+  bool _fetchedVehicules = false;
   static const primaryColor = Color(0xFF357ABD);
   static const successColor = Color(0xFF38A169);
   static const errorColor = Color(0xFFE53E3E);
   late AnimationController _expandController;
+  
 
   @override
   void initState() {
@@ -341,7 +364,6 @@ class _ClientCardState extends ConsumerState<ClientCard> with SingleTickerProvid
     super.dispose();
   }
 
-  // Bouton d'action compact et contraint
   Widget _buildActionButton(IconData icon, Color color, VoidCallback onPressed, {String? tooltip}) {
     return ConstrainedBox(
       constraints: const BoxConstraints(minWidth: 36, minHeight: 36, maxWidth: 44),
@@ -364,8 +386,132 @@ class _ClientCardState extends ConsumerState<ClientCard> with SingleTickerProvid
     );
   }
 
+  void _showDeleteDialog() {
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (ctx) => AlertDialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        titlePadding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
+        contentPadding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+        actionsPadding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+        title: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: const Color(0xFFF56500).withOpacity(0.12),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Icon(Icons.warning_amber_rounded, color: Color(0xFFF56500), size: 28),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'Confirmer la suppression',
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Text.rich(
+            TextSpan(
+              children: [
+                const TextSpan(
+                  text: 'Voulez-vous vraiment supprimer le client ',
+                  style: TextStyle(fontSize: 14, color: Colors.black87),
+                ),
+                TextSpan(
+                  text: '"${widget.client.nomComplet}"',
+                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Colors.black87),
+                ),
+                const TextSpan(
+                  text: ' ?',
+                  style: TextStyle(fontSize: 14, color: Colors.black87),
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => Navigator.of(ctx).pop(false),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.grey.shade800,
+                    side: BorderSide(color: Colors.grey.shade300),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Text('Annuler', style: TextStyle(fontWeight: FontWeight.w600)),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () => _deleteClient(ctx),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: errorColor,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  child: const Text('Supprimer', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _deleteClient(BuildContext dialogContext) async {
+    Navigator.pop(dialogContext);
+    HapticFeedback.mediumImpact();
+
+    final id = widget.client.id;
+    if (id == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('ID client invalide'), backgroundColor: errorColor),
+      );
+      return;
+    }
+
+    final success = await ref.read(clientsProvider.notifier).removeClient(id);
+    if (success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Row(
+            children: [Icon(Icons.check, color: Colors.white), SizedBox(width: 8), Text("Client supprimé avec succès")],
+          ),
+          backgroundColor: successColor,
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Row(
+            children: [Icon(Icons.error, color: Colors.white), SizedBox(width: 8), Text("Erreur lors de la suppression")],
+          ),
+          backgroundColor: errorColor,
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+     final clientVehCache = ref.watch(vehiculesProvider).vehicules
+      .where((v) => (v.proprietaireId ?? '') == (widget.client.id ?? ''))
+      .toList();
     return AnimatedContainer(
       duration: Duration(milliseconds: 300 + (widget.index * 50)),
       child: Card(
@@ -381,7 +527,7 @@ class _ClientCardState extends ConsumerState<ClientCard> with SingleTickerProvid
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
-                    colors: widget.client.categorie == Categorie.particulier 
+                    colors: widget.client.categorie == Categorie.particulier
                       ? [primaryColor.withOpacity(0.1), primaryColor.withOpacity(0.2)]
                       : [successColor.withOpacity(0.1), successColor.withOpacity(0.2)],
                   ),
@@ -393,14 +539,12 @@ class _ClientCardState extends ConsumerState<ClientCard> with SingleTickerProvid
                   size: 24,
                 ),
               ),
-              // Title: ellipsis si trop long
               title: Text(
                 widget.client.nomComplet,
                 style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
-              // Subtitle : téléphone + nb véhicules (texte flexible)
               subtitle: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -438,7 +582,6 @@ class _ClientCardState extends ConsumerState<ClientCard> with SingleTickerProvid
                   ],
                 ],
               ),
-              // Trailing : FittedBox pour éviter overflow horizontal
               trailing: FittedBox(
                 fit: BoxFit.scaleDown,
                 child: Row(
@@ -456,16 +599,34 @@ class _ClientCardState extends ConsumerState<ClientCard> with SingleTickerProvid
                       tooltip: 'Supprimer',
                     ),
                     const SizedBox(width: 6),
-                    _buildActionButton(
-                      expanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
-                      Colors.grey[600]!,
-                      () {
-                        setState(() => expanded = !expanded);
-                        if (expanded) _expandController.forward();
-                        else _expandController.reverse();
-                      },
-                      tooltip: expanded ? 'Réduire' : 'Développer',
-                    ),
+                   _buildActionButton(
+  expanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+  Colors.grey[600]!,
+  () async {
+    // basculer l'état d'expansion
+    setState(() => expanded = !expanded);
+
+    if (expanded) {
+      _expandController.forward();
+      // fetch remote une seule fois la première ouverture (si id présent)
+      if (!_fetchedVehicules && (widget.client.id ?? '').isNotEmpty) {
+        _fetchedVehicules = true;
+        try {
+          await ref.read(vehiculesProvider.notifier).loadByProprietaire(widget.client.id!);
+        } catch (e) {
+          // optional : notifier l'utilisateur en cas d'erreur
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Erreur chargement véhicules')),
+          );
+        }
+      }
+    } else {
+      _expandController.reverse();
+    }
+  },
+  tooltip: expanded ? 'Réduire' : 'Développer',
+),
+
                   ],
                 ),
               ),
@@ -494,40 +655,56 @@ class _ClientCardState extends ConsumerState<ClientCard> with SingleTickerProvid
                         ),
                         _buildActionButton(
                           Icons.add, primaryColor,
-                          () => Get.to(() => AddVehScreen(clientId: widget.client.id)),
+                          () {
+                            final cid = widget.client.id;
+                            if (cid == null || cid.isEmpty) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Impossible d\'ajouter: ID client manquant')),
+                              );
+                              return;
+                            }
+                            Get.to(() => AddVehScreen(clientId: cid));
+                          },
                           tooltip: 'Ajouter véhicule',
                         ),
                       ],
                     ),
                     const SizedBox(height: 8),
-                    widget.vehicules.isEmpty 
-                      ? Text('Aucun véhicule', style: TextStyle(color: Colors.grey[600], fontStyle: FontStyle.italic))
-                      : Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: widget.vehicules.map((v) => 
-                            InkWell(
-                              onTap: () {
-                                HapticFeedback.lightImpact();
-                                Get.to(() => VehiculeInfoScreen(vehiculeId: v.id));
-                              },
-                              borderRadius: BorderRadius.circular(8),
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey[100],
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(color: Colors.grey[300]!),
-                                ),
-                                child: Text(
-                                  '${v.marque} ${v.modele}\n${v.immatriculation}',
-                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
-                                  textAlign: TextAlign.center,
-                                ),
-                              ),
-                            ),
-                          ).toList(),
-                        ),
+                    
+                   clientVehCache.isEmpty
+  ? Text('Aucun véhicule', style: TextStyle(color: Colors.grey[600], fontStyle: FontStyle.italic))
+  : Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: clientVehCache.map((v) =>
+        InkWell(
+          onTap: () {
+            HapticFeedback.lightImpact();
+            if (v.id.isEmpty) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('ID véhicule manquant')),
+              );
+              return;
+            }
+            Get.to(() => VehiculeInfoScreen(vehiculeId: v.id));
+          },
+          borderRadius: BorderRadius.circular(8),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: Colors.grey[100],
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.grey[300]!),
+            ),
+            child: Text(
+              '${v.marque} ${v.modele}\n${v.immatriculation}',
+              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ),
+      ).toList(),
+    ),
                   ],
                 ),
               ),
@@ -547,120 +724,5 @@ class _ClientCardState extends ConsumerState<ClientCard> with SingleTickerProvid
         Expanded(child: Text(value, style: TextStyle(color: Colors.grey[600]), maxLines: 2, overflow: TextOverflow.ellipsis)),
       ],
     );
-  }
-
- void _showDeleteDialog() {
-  showDialog(
-    context: context,
-    barrierDismissible: true,
-    builder: (ctx) => AlertDialog(
-      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      titlePadding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
-      contentPadding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-      actionsPadding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
-      // TITRE avec icône stylée + texte flexible pour éviter overflow
-      title: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: const Color(0xFFF56500).withOpacity(0.12),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: const Icon(Icons.warning_amber_rounded, color: Color(0xFFF56500), size: 28),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              'Confirmer la suppression',
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
-      ),
-      // CONTENU scrollable (préserve l'affichage sur petits écrans)
-      content: SingleChildScrollView(
-        child: Text.rich(
-          TextSpan(
-            children: [
-              const TextSpan(
-                text: 'Voulez-vous vraiment supprimer le client ',
-                style: TextStyle(fontSize: 14, color: Colors.black87),
-              ),
-              TextSpan(
-                text: '"${widget.client.nomComplet}"',
-                style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Colors.black87),
-              ),
-              const TextSpan(
-                text: ' ?',
-                style: TextStyle(fontSize: 14, color: Colors.black87),
-              ),
-            ],
-          ),
-        ),
-      ),
-      // ACTIONS : deux boutons larges et adaptatifs
-      actions: [
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton(
-                onPressed: () => Navigator.of(ctx).pop(false),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.grey.shade800,
-                  side: BorderSide(color: Colors.grey.shade300),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                child: const Text('Annuler', style: TextStyle(fontWeight: FontWeight.w600)),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: ElevatedButton(
-                onPressed: () => _deleteClient(ctx),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: errorColor,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                child: const Text('Supprimer', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
-              ),
-            ),
-          ],
-        ),
-      ],
-    ),
-  );
-}
-
-  void _deleteClient(BuildContext dialogContext) async {
-    Navigator.pop(dialogContext);
-    HapticFeedback.mediumImpact();
-    try {
-      ref.read(clientsProvider.notifier).removeClient(widget.client.id);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Row(
-            children: [Icon(Icons.check, color: Colors.white), SizedBox(width: 8), Text("Client supprimé avec succès")],
-          ),
-          backgroundColor: successColor,
-        ),
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Row(
-            children: [Icon(Icons.error, color: Colors.white), SizedBox(width: 8), Text("Erreur lors de la suppression")],
-          ),
-          backgroundColor: errorColor,
-        ),
-      );
-    }
   }
 }

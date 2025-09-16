@@ -1,147 +1,334 @@
-// lib/services/devis_api.dart
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:garagelink/models/devis.dart';
+import 'package:garagelink/global.dart'; // Importer la constante UrlApi
+
+// Modèle pour OrdreTravail (simplifié, à ajuster selon le modèle backend)
+class OrdreTravail {
+  final String? id;
+  final String devisId;
+  final String? status;
+  final DateTime? createdAt;
+
+  OrdreTravail({
+    this.id,
+    required this.devisId,
+    this.status,
+    this.createdAt,
+  });
+
+  factory OrdreTravail.fromJson(Map<String, dynamic> json) {
+    return OrdreTravail(
+      id: json['_id']?.toString(),
+      devisId: json['devisId']?.toString() ?? '',
+      status: json['status'],
+      createdAt: json['createdAt'] != null
+          ? DateTime.parse(json['createdAt'])
+          : null,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      '_id': id,
+      'devisId': devisId,
+      'status': status,
+      'createdAt': createdAt?.toIso8601String(),
+    }..removeWhere((key, value) => value == null);
+  }
+}
+
+// Modèle pour la réponse de getDevisByNum
+class DevisWithOrdres {
+  final Devis devis;
+  final List<OrdreTravail> ordres;
+
+  DevisWithOrdres({
+    required this.devis,
+    required this.ordres,
+  });
+
+  factory DevisWithOrdres.fromJson(Map<String, dynamic> json) {
+    return DevisWithOrdres(
+      devis: Devis.fromJson(json['devis'] as Map<String, dynamic>),
+      ordres: (json['ordres'] as List<dynamic>?)
+              ?.map((item) => OrdreTravail.fromJson(item as Map<String, dynamic>))
+              .toList() ??
+          [],
+    );
+  }
+}
 
 class DevisApi {
-  final String baseUrl;
-  DevisApi({required this.baseUrl});
+  // En-têtes par défaut pour les requêtes JSON
+  static const Map<String, String> _headers = {
+    'Content-Type': 'application/json',
+  };
 
-  Map<String, String> getHeaders([String? token]) {
-    final headers = {'Content-Type': 'application/json'};
-    if (token != null && token.isNotEmpty) headers['Authorization'] = 'Bearer $token';
-    return headers;
-  }
+  // En-têtes avec authentification
+  static Map<String, String> _authHeaders(String token) => {
+        ..._headers,
+        'Authorization': 'Bearer $token',
+      };
 
-  Future<Map<String, dynamic>> createDevis(Map<String, dynamic> payload, {String? token}) async {
-    try {
-      final res = await http.post(Uri.parse('$baseUrl/createdevis'),
-          headers: getHeaders(token), body: jsonEncode(payload));
-      final body = res.body.isNotEmpty ? jsonDecode(res.body) : null;
-      if (res.statusCode == 201 || res.statusCode == 200) {
-        final data = body?['data'] ?? body;
-        final devis = data is Map ? Devis.fromJson(Map<String, dynamic>.from(data)) : null;
-        return {'success': true, 'data': devis, 'raw': body};
+  /// Créer un nouveau devis
+  static Future<Devis> createDevis({
+    required String token,
+    required String clientId,
+    required String clientName,
+    required String vehicleInfo,
+    required String vehiculeId,
+    required String inspectionDate,
+    required List<Service> services,
+    double? tvaRate,
+    double? maindoeuvre,
+    required EstimatedTime estimatedTime,
+  }) async {
+    final url = Uri.parse('$UrlApi/devis');
+    final body = jsonEncode({
+      'clientId': clientId,
+      'clientName': clientName,
+      'vehicleInfo': vehicleInfo,
+      'vehiculeId': vehiculeId,
+      'inspectionDate': inspectionDate,
+      'services': services.map((s) => s.toJson()).toList(),
+      if (tvaRate != null) 'tvaRate': tvaRate,
+      if (maindoeuvre != null) 'maindoeuvre': maindoeuvre,
+      'estimatedTime': estimatedTime.toJson(),
+    });
+
+    final response = await http.post(
+      url,
+      headers: _authHeaders(token),
+      body: body,
+    );
+
+    if (response.statusCode == 201) {
+      final json = jsonDecode(response.body) as Map<String, dynamic>;
+      if (json['success'] == true) {
+        return Devis.fromJson(json['data'] as Map<String, dynamic>);
       }
-      return {'success': false, 'message': 'Erreur création: ${res.statusCode}', 'raw': body ?? res.body};
-    } catch (e) {
-      return {'success': false, 'message': e.toString()};
+      throw Exception(json['message'] ?? 'Erreur lors de la création du devis');
+    } else {
+      final json = jsonDecode(response.body) as Map<String, dynamic>;
+      throw Exception(json['message'] ?? 'Erreur lors de la création du devis');
     }
   }
 
-  Future<Map<String, dynamic>> getAllDevis({Map<String, String>? query, String? token}) async {
-    try {
-      final uri = Uri.parse('$baseUrl/Devis').replace(queryParameters: query);
-      final res = await http.get(uri, headers: getHeaders(token));
-      if (res.statusCode == 200) {
-        final body = jsonDecode(res.body);
-        final list = body is Map && body['data'] is List ? body['data'] as List : (body is List ? body : []);
-        final devisList = list.map((e) => Devis.fromJson(Map<String, dynamic>.from(e))).toList();
-        return {'success': true, 'data': devisList};
+  /// Récupérer tous les devis avec filtres
+  static Future<List<Devis>> getAllDevis({
+    required String token,
+    String? status,
+    String? clientName,
+    String? dateDebut,
+    String? dateFin,
+  }) async {
+    final queryParams = {
+      if (status != null && status != 'tous') 'status': status,
+      if (clientName != null) 'clientName': clientName,
+      if (dateDebut != null) 'dateDebut': dateDebut,
+      if (dateFin != null) 'dateFin': dateFin,
+    };
+    final url = Uri.parse('$UrlApi/devis').replace(queryParameters: queryParams);
+    final response = await http.get(
+      url,
+      headers: _authHeaders(token),
+    );
+
+    if (response.statusCode == 200) {
+      final json = jsonDecode(response.body) as Map<String, dynamic>;
+      if (json['success'] == true) {
+        return (json['data'] as List<dynamic>)
+            .map((item) => Devis.fromJson(item as Map<String, dynamic>))
+            .toList();
       }
-      return {'success': false, 'message': 'Erreur HTTP ${res.statusCode}', 'raw': res.body};
-    } catch (e) {
-      return {'success': false, 'message': e.toString()};
+      throw Exception(json['message'] ?? 'Erreur lors de la récupération des devis');
+    } else {
+      final json = jsonDecode(response.body) as Map<String, dynamic>;
+      throw Exception(json['message'] ?? 'Erreur lors de la récupération des devis');
     }
   }
 
-  Future<Map<String, dynamic>> getDevisById(String id, {String? token}) async {
-    try {
-      final res = await http.get(Uri.parse('$baseUrl/Devis/$id'), headers: getHeaders(token));
-      if (res.statusCode == 200) {
-        final body = jsonDecode(res.body);
-        final d = Devis.fromJson(Map<String, dynamic>.from(body));
-        return {'success': true, 'data': d};
-      }
-      return {'success': false, 'message': 'Not found ${res.statusCode}', 'raw': res.body};
-    } catch (e) {
-      return {'success': false, 'message': e.toString()};
+  /// Récupérer un devis par ID (MongoDB _id ou custom id)
+  static Future<Devis> getDevisById(String token, String id) async {
+    final url = Uri.parse('$UrlApi/devis/$id');
+    final response = await http.get(
+      url,
+      headers: _authHeaders(token),
+    );
+
+    if (response.statusCode == 200) {
+      final json = jsonDecode(response.body) as Map<String, dynamic>;
+      return Devis.fromJson(json);
+    } else {
+      final json = jsonDecode(response.body) as Map<String, dynamic>;
+      throw Exception(json['error'] ?? 'Erreur lors de la récupération du devis');
     }
   }
 
-  // Recherche par numéro DEV###:
-  Future<Map<String, dynamic>> getDevisByNum(String num, {String? token}) async {
-    try {
-      final res = await http.get(Uri.parse('$baseUrl/devis/code/$num'), headers: getHeaders(token));
-      if (res.statusCode == 200) {
-        final body = jsonDecode(res.body);
-        // body may include {devis, ordres}
-        final dRaw = body['devis'] ?? body;
-        final d = dRaw != null ? Devis.fromJson(Map<String, dynamic>.from(dRaw)) : null;
-        return {'success': true, 'data': d, 'raw': body};
-      }
-      return {'success': false, 'message': 'Not found ${res.statusCode}', 'raw': res.body};
-    } catch (e) {
-      return {'success': false, 'message': e.toString()};
+  /// Récupérer un devis par numéro (DEVxxx) avec ordres associés
+  static Future<DevisWithOrdres> getDevisByNum(String token, String id) async {
+    final url = Uri.parse('$UrlApi/devis/by-num/$id');
+    final response = await http.get(
+      url,
+      headers: _authHeaders(token),
+    );
+
+    if (response.statusCode == 200) {
+      final json = jsonDecode(response.body) as Map<String, dynamic>;
+      return DevisWithOrdres.fromJson(json);
+    } else {
+      final json = jsonDecode(response.body) as Map<String, dynamic>;
+      throw Exception(json['error'] ?? 'Erreur lors de la récupération du devis');
     }
   }
 
-  Future<Map<String, dynamic>> updateDevis(String id, Map<String, dynamic> updateData, {String? token}) async {
-    try {
-      final res = await http.put(Uri.parse('$baseUrl/Devis/$id'),
-          headers: getHeaders(token), body: jsonEncode(updateData));
-      final body = res.body.isNotEmpty ? jsonDecode(res.body) : null;
-      if (res.statusCode == 200) {
-        final data = body is Map && body['data'] != null ? body['data'] : body;
-        final d = data != null ? Devis.fromJson(Map<String, dynamic>.from(data)) : null;
-        return {'success': true, 'data': d};
+  /// Mettre à jour un devis
+  static Future<Devis> updateDevis({
+    required String token,
+    required String id, // Custom ID (DEVxxx)
+    String? clientId,
+    String? clientName,
+    String? vehicleInfo,
+    String? inspectionDate,
+    List<Service>? services,
+    double? tvaRate,
+    double? maindoeuvre,
+    EstimatedTime? estimatedTime,
+  }) async {
+    final url = Uri.parse('$UrlApi/devis/$id');
+    final body = jsonEncode({
+      if (clientId != null) 'clientId': clientId,
+      if (clientName != null) 'clientName': clientName,
+      if (vehicleInfo != null) 'vehicleInfo': vehicleInfo,
+      if (inspectionDate != null) 'inspectionDate': inspectionDate,
+      if (services != null) 'services': services.map((s) => s.toJson()).toList(),
+      if (tvaRate != null) 'tvaRate': tvaRate,
+      if (maindoeuvre != null) 'maindoeuvre': maindoeuvre,
+      if (estimatedTime != null) 'estimatedTime': estimatedTime.toJson(),
+    });
+
+    final response = await http.put(
+      url,
+      headers: _authHeaders(token),
+      body: body,
+    );
+
+    if (response.statusCode == 200) {
+      final json = jsonDecode(response.body) as Map<String, dynamic>;
+      if (json['success'] == true) {
+        return Devis.fromJson(json['data'] as Map<String, dynamic>);
       }
-      return {'success': false, 'message': 'Erreur mise à jour ${res.statusCode}', 'raw': body ?? res.body};
-    } catch (e) {
-      return {'success': false, 'message': e.toString()};
+      throw Exception(json['message'] ?? 'Erreur lors de la mise à jour du devis');
+    } else {
+      final json = jsonDecode(response.body) as Map<String, dynamic>;
+      throw Exception(json['message'] ?? 'Erreur lors de la mise à jour du devis');
     }
   }
 
-  Future<Map<String, dynamic>> deleteDevis(String id, {String? token}) async {
-    try {
-      final res = await http.delete(Uri.parse('$baseUrl/Devis/$id'), headers: getHeaders(token));
-      if (res.statusCode == 200) {
-        final body = res.body.isNotEmpty ? jsonDecode(res.body) : null;
-        return {'success': true, 'message': body?['message'] ?? 'Supprimé'};
+  /// Mettre à jour le factureId d'un devis
+  static Future<Devis> updateFactureId({
+    required String token,
+    required String id, // MongoDB _id
+    required String factureId,
+  }) async {
+    final url = Uri.parse('$UrlApi/devis/$id');
+    final body = jsonEncode({
+      'factureId': factureId,
+    });
+
+    final response = await http.put(
+      url,
+      headers: _authHeaders(token),
+      body: body,
+    );
+
+    if (response.statusCode == 200) {
+      final json = jsonDecode(response.body) as Map<String, dynamic>;
+      if (json['success'] == true) {
+        return Devis.fromJson(json['data'] as Map<String, dynamic>);
       }
-      return {'success': false, 'message': 'Erreur suppression ${res.statusCode}', 'raw': res.body};
-    } catch (e) {
-      return {'success': false, 'message': e.toString()};
+      throw Exception(json['message'] ?? 'Erreur lors de la mise à jour du factureId');
+    } else {
+      final json = jsonDecode(response.body) as Map<String, dynamic>;
+      throw Exception(json['message'] ?? 'Erreur lors de la mise à jour du factureId');
     }
   }
 
-  // endpoints qui renvoient une page HTML (accept/refuse) — on les appelle si besoin
-  Future<Map<String, dynamic>> acceptDevis(String devisId, {String? token}) async {
-    try {
-      final res = await http.get(Uri.parse('$baseUrl/devis/$devisId/accept'), headers: getHeaders(token));
-      if (res.statusCode == 200) {
-        return {'success': true, 'message': 'Devis accepté', 'html': res.body};
+  /// Supprimer un devis
+  static Future<void> deleteDevis(String token, String id) async {
+    final url = Uri.parse('$UrlApi/devis/$id');
+    final response = await http.delete(
+      url,
+      headers: _authHeaders(token),
+    );
+
+    if (response.statusCode == 200) {
+      final json = jsonDecode(response.body) as Map<String, dynamic>;
+      if (json['success'] == true) {
+        return;
       }
-      return {'success': false, 'message': 'Erreur accept ${res.statusCode}', 'raw': res.body};
-    } catch (e) {
-      return {'success': false, 'message': e.toString()};
+      throw Exception(json['message'] ?? 'Erreur lors de la suppression du devis');
+    } else {
+      final json = jsonDecode(response.body) as Map<String, dynamic>;
+      throw Exception(json['message'] ?? 'Erreur lors de la suppression du devis');
     }
   }
 
-  Future<Map<String, dynamic>> refuseDevis(String devisId, {String? token}) async {
-    try {
-      final res = await http.get(Uri.parse('$baseUrl/devis/$devisId/refuse'), headers: getHeaders(token));
-      if (res.statusCode == 200) {
-        return {'success': true, 'message': 'Devis refusé', 'html': res.body};
-      }
-      return {'success': false, 'message': 'Erreur refuse ${res.statusCode}', 'raw': res.body};
-    } catch (e) {
-      return {'success': false, 'message': e.toString()};
+  /// Accepter un devis
+  static Future<void> acceptDevis(String token, String devisId) async {
+    final url = Uri.parse('$UrlApi/devis/$devisId/accept');
+    final response = await http.post(
+      url,
+      headers: _authHeaders(token),
+    );
+
+    if (response.statusCode == 200) {
+      return;
+    } else {
+      throw Exception('Erreur lors de l\'acceptation du devis');
     }
   }
 
-  // envoyer un devis par email (route: POST /devis/:devisId/send-email) — auth required in backend
-  Future<Map<String, dynamic>> sendDevisByEmail(String devisId, {Map<String, dynamic>? body, String? token}) async {
-    try {
-      final res = await http.post(Uri.parse('$baseUrl/devis/$devisId/send-email'),
-          headers: getHeaders(token), body: jsonEncode(body ?? {}));
-      final data = res.body.isNotEmpty ? jsonDecode(res.body) : null;
-      if (res.statusCode == 200 || res.statusCode == 201) {
-        return {'success': true, 'data': data, 'message': data?['message'] ?? 'Envoyé'};
+  /// Refuser un devis
+  static Future<void> refuseDevis(String token, String devisId) async {
+    final url = Uri.parse('$UrlApi/devis/$devisId/refuse');
+    final response = await http.post(
+      url,
+      headers: _authHeaders(token),
+    );
+
+    if (response.statusCode == 200) {
+      return;
+    } else {
+      throw Exception('Erreur lors du refus du devis');
+    }
+  }
+
+  /// Mettre à jour le statut d'un devis
+  static Future<Devis> updateDevisStatus({
+    required String token,
+    required String id, // Custom ID (DEVxxx)
+    required String status,
+  }) async {
+    final url = Uri.parse('$UrlApi/devis/$id/status');
+    final body = jsonEncode({'status': status});
+
+    final response = await http.put(
+      url,
+      headers: _authHeaders(token),
+      body: body,
+    );
+
+    if (response.statusCode == 200) {
+      final json = jsonDecode(response.body) as Map<String, dynamic>;
+      if (json['success'] == true) {
+        return Devis.fromJson(json['data'] as Map<String, dynamic>);
       }
-      return {'success': false, 'message': 'Erreur envoi ${res.statusCode}', 'raw': res.body};
-    } catch (e) {
-      return {'success': false, 'message': e.toString()};
+      throw Exception(json['message'] ?? 'Erreur lors de la mise à jour du statut');
+    } else {
+      final json = jsonDecode(response.body) as Map<String, dynamic>;
+      throw Exception(json['message'] ?? 'Erreur lors de la mise à jour du statut');
     }
   }
 }

@@ -3,6 +3,9 @@ import 'package:flutter/material.dart';
 
 final loginEmailProvider = StateProvider<String>((ref) => '');
 final loginPasswordProvider = StateProvider<String>((ref) => '');
+final resetTokenProvider = StateProvider<String>((ref) => '');
+final newPasswordProvider = StateProvider<String>((ref) => '');
+final confirmNewPasswordProvider = StateProvider<String>((ref) => '');
 
 final loginEmailControllerProvider = Provider<TextEditingController>((ref) {
   final controller = TextEditingController();
@@ -15,13 +18,20 @@ final loginPasswordControllerProvider = Provider<TextEditingController>((ref) {
   ref.onDispose(() => controller.dispose());
   return controller;
 });
-final numberControllerProvider = Provider<TextEditingController>((ref) {
-  final controller = TextEditingController(text: '+216');
+
+final resetTokenControllerProvider = Provider<TextEditingController>((ref) {
+  final controller = TextEditingController();
   ref.onDispose(() => controller.dispose());
   return controller;
 });
 
-final otpControllerProvider = Provider<TextEditingController>((ref) {
+final newPasswordControllerProvider = Provider<TextEditingController>((ref) {
+  final controller = TextEditingController();
+  ref.onDispose(() => controller.dispose());
+  return controller;
+});
+
+final confirmNewPasswordControllerProvider = Provider<TextEditingController>((ref) {
   final controller = TextEditingController();
   ref.onDispose(() => controller.dispose());
   return controller;

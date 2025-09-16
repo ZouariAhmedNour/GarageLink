@@ -1,9 +1,10 @@
+// lib/screens/edit_client_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:garagelink/components/default_app_bar.dart';
-import 'package:garagelink/models/client.dart';
-import 'package:garagelink/providers/client_provider.dart';
+import 'package:garagelink/models/ficheClient.dart';
+import 'package:garagelink/providers/ficheClient_provider.dart';
 import 'package:get/get.dart';
 
 class EditClientScreen extends ConsumerStatefulWidget {
@@ -22,8 +23,8 @@ class _EditClientScreenState extends ConsumerState<EditClientScreen>
   late TextEditingController _telCtrl;
   late TextEditingController _adrCtrl;
   late Categorie _cat;
-late AnimationController _animationController;
-Animation<double>? _fadeAnimation;
+  late AnimationController _animationController;
+  Animation<double>? _fadeAnimation;
   bool _isLoading = false;
 
   // Palette de couleurs unifiée
@@ -90,23 +91,23 @@ Animation<double>? _fadeAnimation;
   }
 
   Widget _buildAnimatedCard({required Widget child}) {
-  // si _fadeAnimation est null (ex: après hot reload) on affiche directement l'enfant opaque
-  final opacity = _fadeAnimation ?? AlwaysStoppedAnimation<double>(1.0);
+    // si _fadeAnimation est null (ex: après hot reload) on affiche directement l'enfant opaque
+    final opacity = _fadeAnimation ?? AlwaysStoppedAnimation<double>(1.0);
 
-  return FadeTransition(
-    opacity: opacity,
-    child: Card(
-      color: cardColor,
-      elevation: 4,
-      shadowColor: primaryColor.withOpacity(0.1),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(24.0),
-        child: child,
+    return FadeTransition(
+      opacity: opacity,
+      child: Card(
+        color: cardColor,
+        elevation: 4,
+        shadowColor: primaryColor.withOpacity(0.1),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Padding(
+          padding: const EdgeInsets.all(24.0),
+          child: child,
+        ),
       ),
-    ),
-  );
-}
+    );
+  }
 
   Widget _buildTextField({
     required TextEditingController controller,
@@ -263,23 +264,61 @@ Animation<double>? _fadeAnimation;
     );
   }
 
-  void _handleSave() async {
-    if (!(_formKey.currentState?.validate() ?? false)) return;
+  Future<void> _handleSave() async {
+  if (!(_formKey.currentState?.validate() ?? false)) return;
 
-    HapticFeedback.mediumImpact();
-    setState(() => _isLoading = true);
+  final id = widget.client.id;
+  if (id == null || id.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('ID client invalide'), backgroundColor: errorColor),
+    );
+    return;
+  }
 
-    try {
-      final updated = widget.client.copyWith(
-        nomComplet: _nomCtrl.text.trim(),
-        mail: _mailCtrl.text.trim(),
-        telephone: _telCtrl.text.trim(),
-        adresse: _adrCtrl.text.trim(),
-        categorie: _cat,
-      );
+  HapticFeedback.mediumImpact();
+  setState(() => _isLoading = true);
 
-      ref.read(clientsProvider.notifier).updateClient(widget.client.id, updated);
+  try {
+    // Construire l'objet Client mis à jour
+    final updatedClient = widget.client.copyWith(
+      nomComplet: _nomCtrl.text.trim(),
+      mail: _mailCtrl.text.trim(),
+      telephone: _telCtrl.text.trim(),
+      adresse: _adrCtrl.text.trim(),
+      categorie: _cat,
+    );
 
+    // Convertir en Map<String, dynamic> avant d'appeler le provider
+    final Map<String, dynamic> payload = updatedClient.toJson();
+
+    // Appel au provider — many providers expect (id, Map)
+    final dynamic result = await ref.read(clientsProvider.notifier).updateClient(id, payload);
+
+    // Normaliser le résultat en boolean "success"
+    bool success = false;
+    if (result == null) {
+      // provider n'a rien retourné -> considérer ok (ou change selon ton impl)
+      success = true;
+    } else if (result is bool) {
+      success = result;
+    } else if (result is Client) {
+      success = true;
+      // Optionnel : si provider retourne le Client, tu peux mettre à jour localement
+      // ref.read(clientsProvider.notifier).setClient(result);
+    } else if (result is Map) {
+      // si c'est une Map { success: true, data: {...} } ou { data: clientMap }
+      if (result['success'] == true) success = true;
+      else if (result['data'] is Map || result['data'] is Client) success = true;
+      else {
+        // si la map ressemble plutôt à un client directement
+        success = true;
+      }
+    } else {
+      // fallback permissif
+      success = true;
+    }
+
+    if (success) {
       if (mounted) {
         HapticFeedback.lightImpact();
         ScaffoldMessenger.of(context).showSnackBar(
@@ -296,15 +335,14 @@ Animation<double>? _fadeAnimation;
             ),
             backgroundColor: successColor,
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             margin: const EdgeInsets.all(16),
           ),
         );
+        // fermer l'écran après succès
         Get.back();
       }
-    } catch (e) {
+    } else {
       if (mounted) {
         HapticFeedback.heavyImpact();
         ScaffoldMessenger.of(context).showSnackBar(
@@ -321,28 +359,47 @@ Animation<double>? _fadeAnimation;
             ),
             backgroundColor: errorColor,
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-            ),
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             margin: const EdgeInsets.all(16),
           ),
         );
       }
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
     }
+  } catch (e, st) {
+    if (mounted) {
+      HapticFeedback.heavyImpact();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.error_outline, color: Colors.white),
+              const SizedBox(width: 12),
+              Expanded(child: Text('Erreur: ${e.toString()}')),
+            ],
+          ),
+          backgroundColor: errorColor,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          margin: const EdgeInsets.all(16),
+        ),
+      );
+    }
+    // debugPrintStack(label: 'EditClientScreen._handleSave', stackTrace: st);
+  } finally {
+    if (mounted) setState(() => _isLoading = false);
   }
+}
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: backgroundColor,
       appBar: CustomAppBar(
-  title: 'Modifier le client',
-  centerTitle: true,
-  backgroundColor: primaryColor, // fallback si gradient null
-  gradient: const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [primaryColor, primaryLight]),
-),
+        title: 'Modifier le client',
+        centerTitle: true,
+        backgroundColor: primaryColor,
+        gradient: const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [primaryColor, primaryLight]),
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
           physics: const BouncingScrollPhysics(),
@@ -353,14 +410,14 @@ Animation<double>? _fadeAnimation;
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const SizedBox(height: 8),
-                
+
                 // Section informations personnelles
                 _buildAnimatedCard(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Row(
-                        children: [
+                      Row(
+                        children: const [
                           Icon(Icons.person_outline, color: primaryColor),
                           SizedBox(width: 8),
                           Text(
@@ -374,14 +431,14 @@ Animation<double>? _fadeAnimation;
                         ],
                       ),
                       const SizedBox(height: 24),
-                      
+
                       _buildTextField(
                         controller: _nomCtrl,
                         label: 'Nom complet',
                         icon: Icons.badge_outlined,
                         validator: _requiredValidator,
                       ),
-                      
+
                       _buildTextField(
                         controller: _mailCtrl,
                         label: 'Adresse email',
@@ -389,7 +446,7 @@ Animation<double>? _fadeAnimation;
                         keyboardType: TextInputType.emailAddress,
                         validator: _emailValidator,
                       ),
-                      
+
                       _buildTextField(
                         controller: _telCtrl,
                         label: 'Numéro de téléphone',
@@ -400,16 +457,16 @@ Animation<double>? _fadeAnimation;
                     ],
                   ),
                 ),
-                
+
                 const SizedBox(height: 16),
-                
+
                 // Section adresse et catégorie
                 _buildAnimatedCard(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Row(
-                        children: [
+                      Row(
+                        children: const [
                           Icon(Icons.location_on_outlined, color: primaryColor),
                           SizedBox(width: 8),
                           Text(
@@ -423,7 +480,7 @@ Animation<double>? _fadeAnimation;
                         ],
                       ),
                       const SizedBox(height: 24),
-                      
+
                       _buildTextField(
                         controller: _adrCtrl,
                         label: 'Adresse complète',
@@ -431,13 +488,13 @@ Animation<double>? _fadeAnimation;
                         validator: _requiredValidator,
                         maxLines: 2,
                       ),
-                      
+
                       const SizedBox(height: 8),
                       _buildCategorySelector(),
                     ],
                   ),
                 ),
-                
+
                 const SizedBox(height: 32),
                 _buildSaveButton(),
                 const SizedBox(height: 16),

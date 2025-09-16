@@ -1,14 +1,80 @@
 // lib/providers/historique_devis_provider.dart
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:garagelink/models/devis.dart';
-import 'package:garagelink/models/facture.dart';
+import 'package:garagelink/providers/auth_provider.dart';
 import 'package:garagelink/providers/factures_provider.dart';
+import 'package:garagelink/services/devis_api.dart';
+
+// Assure-toi que authTokenProvider existe dans ton projet
+// import 'package:garagelink/providers/auth_provider.dart';
 
 class HistoriqueDevisNotifier extends StateNotifier<List<Devis>> {
-  HistoriqueDevisNotifier() : super([]);
+  final Ref ref;
+  HistoriqueDevisNotifier(this.ref) : super([]);
+
+  // Helper: trouve l'index par _id (id) ou par devisId (DEVxxx)
+  int _findIndexByIdOrDevisId(String idOrDevisId) {
+    return state.indexWhere((d) =>
+        (d.id != null && d.id == idOrDevisId) ||
+        (d.devisId.isNotEmpty && d.devisId == idOrDevisId));
+  }
+
+  // Helper: convertit un Devis en nouveau Devis avec nouveau statut
+  Devis _withStatus(Devis d, DevisStatus status) {
+    return Devis(
+      id: d.id,
+      devisId: d.devisId,
+      clientId: d.clientId,
+      clientName: d.clientName,
+      vehicleInfo: d.vehicleInfo,
+      vehiculeId: d.vehiculeId,
+      factureId: d.factureId,
+      inspectionDate: d.inspectionDate,
+      services: d.services,
+      totalHT: d.totalHT,
+      totalServicesHT: d.totalServicesHT,
+      totalTTC: d.totalTTC,
+      tvaRate: d.tvaRate,
+      maindoeuvre: d.maindoeuvre,
+      estimatedTime: d.estimatedTime,
+      status: status,
+      createdAt: d.createdAt,
+      updatedAt: d.updatedAt,
+    );
+  }
+
+  // Utilitaire pour convertir DevisStatus -> String attendu par l'API/backend
+  String statusToString(DevisStatus s) {
+    switch (s) {
+      case DevisStatus.envoye:
+        return 'envoye';
+      case DevisStatus.accepte:
+        return 'accepte';
+      case DevisStatus.refuse:
+        return 'refuse';
+      case DevisStatus.brouillon:
+      return 'brouillon';
+    }
+  }
+
+  /// Charger tous les devis depuis le backend et remplacer l'état local
+  Future<void> loadAll() async {
+    final token = ref.read(authTokenProvider);
+    if (token == null || token.isEmpty) {
+      // pas de token -> on ne tente pas l'appel réseau
+      return;
+    }
+
+    try {
+      final List<Devis> devisList = await DevisApi.getAllDevis(token: token);
+      state = devisList;
+    } catch (e) {
+      // en cas d'erreur réseau, on garde l'état local (ou tu peux logger)
+    }
+  }
 
   void ajouterDevis(Devis devis) {
-    final idx = state.indexWhere((d) => d.id == devis.id);
+    final idx = _findIndexByIdOrDevisId(devis.id ?? devis.devisId);
     if (idx != -1) {
       final copie = [...state];
       copie[idx] = devis;
@@ -34,83 +100,70 @@ class HistoriqueDevisNotifier extends StateNotifier<List<Devis>> {
     }
   }
 
-  int _findIndexById(String id) => state.indexWhere((d) => d.id == id);
+  /// Met à jour le status côté backend puis côté local (fallback local si erreur)
+  Future<void> updateStatusById(String idOrDevisId, DevisStatus status) async {
+    final idx = _findIndexByIdOrDevisId(idOrDevisId);
+    final token = ref.read(authTokenProvider);
+    final statusStr = statusToString(status);
 
-  void updateStatusById(String id, DevisStatus status) {
-    final idx = _findIndexById(id);
+    // Tentative API (utilise la route PUT /devis/:id/status)
+    if (token != null && token.isNotEmpty) {
+      try {
+        final updated = await DevisApi.updateDevisStatus(
+          token: token,
+          id: idOrDevisId,
+          status: statusStr,
+        );
+        // updated est un Devis selon l'implémentation du client
+        final index = _findIndexByIdOrDevisId(updated.id ?? updated.devisId);
+        if (index != -1) {
+          modifierDevis(index, updated);
+        } else {
+          ajouterDevis(updated);
+        }
+        return;
+            } catch (e) {
+        // ignore and fallback to local update
+      }
+    }
+
+    // fallback local update si l'API a échoué ou pas de token
     if (idx != -1) {
-      final d = state[idx];
-      final updated = d.copyWith(status: status);
-      modifierDevis(idx, updated);
+      final current = state[idx];
+      final updatedLocal = _withStatus(current, status);
+      modifierDevis(idx, updatedLocal);
     }
   }
 
-  Devis? getById(String id) {
-    final idx = _findIndexById(id);
+  Devis? getById(String idOrDevisId) {
+    final idx = _findIndexByIdOrDevisId(idOrDevisId);
     return idx == -1 ? null : state[idx];
   }
 }
 
 final historiqueDevisProvider =
     StateNotifierProvider<HistoriqueDevisNotifier, List<Devis>>(
-  (ref) => HistoriqueDevisNotifier(),
+  (ref) => HistoriqueDevisNotifier(ref),
 );
 
 // ✅ Fonction utilitaire pour accepter un devis et générer une facture
-void onDevisAccepted(Devis devis, WidgetRef ref) {
-  // Préparer un numéro de facture unique
-  final invoiceId = (devis.id != null && devis.id!.isNotEmpty)
-      ? 'INV_${devis.id}'
-      : 'INV_${DateTime.now().millisecondsSinceEpoch}';
+// Note: on délègue la création de la facture au provider Factures (qui appelle l'API)
+// afin d'avoir une facture cohérente côté backend (numéro unique, totals, etc.).
+Future<void> onDevisAccepted(Devis devis, WidgetRef ref) async {
+  // Le provider Facture sait utiliser le token interne ; on lui passe le devisId.
+  final notifier = ref.read(historiqueDevisProvider.notifier);
 
-  // Récupérer totaux depuis le devis
-  final double totalTTC = devis.totalTTC;
-  final double totalHT = devis.totalHT;
-  final double totalTVA = (totalTTC - totalHT) >= 0 ? (totalTTC - totalHT) : 0.0;
+  final idToUse = (devis.id != null && devis.id!.isNotEmpty) ? devis.id! : devis.devisId;
 
-  // Convertir les services du Devis en ServiceItem (Facture)
-  final List<ServiceItem> services = devis.services.map((s) {
-    return ServiceItem(
-      id: null,
-      pieceId: s.pieceId,
-      piece: s.piece,
-      quantity: s.quantity,
-      unitPrice: s.unitPrice,
-      total: s.total,
-    );
-  }).toList();
-
-  final facture = Facture(
-    id: invoiceId,
-    numeroFacture: invoiceId,
-    devisId: devis.id, // lier la facture au devis si disponible
-    clientInfo: ClientInfo(nom: devis.client),
-    vehicleInfo: devis.vehicleInfo,
-    invoiceDate: DateTime.now(), // remplace le 'date' inexistant
-    inspectionDate: devis.inspectionDate,
-    services: services,
-    maindoeuvre: devis.maindoeuvre,
-    tvaRate: devis.tvaRate,
-    totalHT: totalHT,
-    totalTVA: totalTVA,
-    totalTTC: totalTTC,
-    createdAt: DateTime.now(),
-  );
-
-  // Ajouter la facture via le provider
   try {
-    ref.read(facturesProvider.notifier).addFacture(facture);
-  } catch (e) {
-    // gérer l'erreur ou logger (ne pas planter l'app)
-    // debugPrint('onDevisAccepted: impossible d\'ajouter la facture: $e');
-  }
+    // Demander au provider factures de créer la facture côté backend
+    await ref.read(facturesProvider.notifier).ajouterFacture(devisId: idToUse);
 
-  // Mettre à jour le status du devis dans l'historique
-  if (devis.id != null) {
-    ref.read(historiqueDevisProvider.notifier).updateStatusById(
-      devis.id!,
-      DevisStatus.accepte,
-    );
+    // Mettre à jour le statut du devis (backend + local)
+    await notifier.updateStatusById(idToUse, DevisStatus.accepte);
+  } catch (e) {
+    // Si l'appel à la création de facture échoue, on tente quand même de marquer localement
+    await notifier.updateStatusById(idToUse, DevisStatus.accepte);
   }
 }
 
@@ -127,17 +180,28 @@ final devisFiltresProvider = Provider<List<Devis>>((ref) {
 
   String norm(String? s) => (s ?? '').toLowerCase();
 
-  return historique.where((devis) {
-    final clientMatch = norm(devis.client).contains(filtre);
+  DateTime? parseInspection(Devis d) {
+    if (d.inspectionDate.isNotEmpty) {
+      try {
+        return DateTime.parse(d.inspectionDate);
+      } catch (_) {
+        return d.createdAt;
+      }
+    }
+    return d.createdAt;
+  }
 
-    // numéro/serie : on utilise vehiculeId, factureId ou empty comme fallback
-    final numeroSerie = norm(devis.vehiculeId ?? devis.factureId ?? '');
+  return historique.where((devis) {
+    final clientMatch = norm(devis.clientName).contains(filtre);
+
+    // numéro/serie : on utilise vehiculeId, factureId ou devisId comme fallback
+    final numeroSerie = norm(devis.vehiculeId);
     final numeroSerieMatch = numeroSerie.contains(filtre);
 
-    final idMatch = norm(devis.id).contains(filtre);
+    final idMatch = ((devis.id ?? '') + (devis.devisId)).toLowerCase().contains(filtre);
 
     // date : essayer inspectionDate puis createdAt
-    final dateVal = devis.inspectionDate ?? devis.createdAt;
+    final dateVal = parseInspection(devis);
     final dateStr = dateVal != null ? dateVal.toIso8601String().toLowerCase() : '';
     final dateMatch = dateStr.contains(filtre);
 

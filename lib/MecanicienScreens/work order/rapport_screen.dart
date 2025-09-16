@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:garagelink/models/order.dart';
+import 'package:garagelink/models/ordre.dart';
 import 'package:garagelink/models/rapport.dart';
 import 'package:garagelink/providers/rapport_providers.dart';
 

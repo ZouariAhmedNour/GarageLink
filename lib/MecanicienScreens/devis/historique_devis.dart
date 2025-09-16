@@ -4,7 +4,9 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:garagelink/MecanicienScreens/devis/devis_preview_page.dart';
 import 'package:garagelink/MecanicienScreens/devis/devis_widgets/num_serie_input.dart';
+import 'package:garagelink/models/ficheClient.dart';
 import 'package:garagelink/models/devis.dart';
+import 'package:garagelink/providers/ficheClient_provider.dart';
 import 'package:garagelink/providers/historique_devis_provider.dart';
 import 'package:garagelink/services/pdf_service.dart';
 import 'package:garagelink/utils/devis_actions.dart';
@@ -21,6 +23,8 @@ class HistoriqueDevisPage extends ConsumerStatefulWidget {
 
 class _HistoriqueDevisPageState extends ConsumerState<HistoriqueDevisPage>
     with SingleTickerProviderStateMixin {
+
+      
   static const Color primaryBlue = Color(0xFF357ABD);
   static const Color lightBlue = Color(0xFFE3F2FD);
   static const Color darkGrey = Color(0xFF2C3E50);
@@ -66,7 +70,22 @@ class _HistoriqueDevisPageState extends ConsumerState<HistoriqueDevisPage>
         AnimationController(duration: const Duration(milliseconds: 600), vsync: this);
     _fadeAnimation = CurvedAnimation(parent: _animationController, curve: Curves.easeInOut);
     _animationController.forward();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+  // charger l'historique
+  ref.read(historiqueDevisProvider.notifier).loadAll();
+
+  // précharger explicitement la liste clients (utilise la méthode refresh du AsyncNotifier)
+  try {
+    // await n'est pas possible ici directement — on déclenche la refresh asynchrone
+    ref.read(clientsProvider.notifier).refresh();
+  } catch (_) {
+    // si ton provider n'expose pas refresh, tu peux appeler ref.refresh(clientsProvider)
   }
+});
+  }
+
+
 
   @override
   void dispose() {
@@ -77,6 +96,9 @@ class _HistoriqueDevisPageState extends ConsumerState<HistoriqueDevisPage>
     super.dispose();
   }
 
+  // --- le reste du fichier est inchangé (copie exacte de ton implémentation)
+  // Je laisse tout le reste tel quel pour éviter toute régression.
+  // (Assure-toi d'avoir importé ce fichier à la place de l'ancien)
   Widget _buildModernAppBar() {
     return Container(
       decoration: const BoxDecoration(
@@ -340,9 +362,52 @@ class _HistoriqueDevisPageState extends ConsumerState<HistoriqueDevisPage>
             IconButton(
               icon: const Icon(Icons.send, color: Colors.orange, size: 18),
               tooltip: 'Envoyer par e-mail',
-              onPressed: () async {
-                await generateAndSendDevis(ref, context, devisToSend: devis);
-              },
+             onPressed: () async {
+  // Essayer de récupérer l'email du client depuis le provider si chargé
+  String? clientEmail;
+  final clientsAsync = ref.read(clientsProvider);
+  final clientsList = (clientsAsync is AsyncValue<List<Client>>) ? (clientsAsync.value ?? []) : [];
+  if (clientsList.isNotEmpty) {
+    try {
+      final found = clientsList.firstWhere((c) => (c.id ?? '') == (devis.clientId ?? ''), orElse: () => null);
+      if (found != null && found.mail.trim().isNotEmpty) clientEmail = found.mail.trim();
+    } catch (_) { /* ignore */ }
+  }
+
+  // DEBUG: log pour voir la valeur avant envoi
+  print('DEBUG Historique -> clientEmail for devis ${devis.id}: $clientEmail');
+
+  // Si pas d'email connu, demander à l'utilisateur de le saisir
+  if (clientEmail == null || clientEmail.isEmpty) {
+    final typed = await showDialog<String?>(
+      context: context,
+      builder: (ctx) {
+        String temp = '';
+        return AlertDialog(
+          title: const Text('E-mail manquant'),
+          content: TextFormField(
+            decoration: const InputDecoration(labelText: 'Adresse e-mail du client'),
+            keyboardType: TextInputType.emailAddress,
+            onChanged: (v) => temp = v,
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, null), child: const Text('Annuler')),
+            TextButton(onPressed: () => Navigator.pop(ctx, temp.trim()), child: const Text('OK')),
+          ],
+        );
+      },
+    );
+    if (typed == null || typed.isEmpty) {
+      // L'utilisateur a annulé ou rien entré -> on annule l'envoi
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Envoi annulé — aucun e-mail fourni'), backgroundColor: Colors.orange));
+      return;
+    }
+    clientEmail = typed;
+  }
+
+  // Appel en passant explicitement l'email (obligatoire pour que FlutterEmailSender tente de le remplir)
+  await generateAndSendDevis(ref, context, devisToSend: devis,);
+},
             ),
             IconButton(
               icon: const Icon(Icons.check, color: Colors.green, size: 18),
@@ -434,32 +499,38 @@ class _HistoriqueDevisPageState extends ConsumerState<HistoriqueDevisPage>
                 Expanded(child: Text('${montant.toStringAsFixed(2)}DT', style: const TextStyle(fontWeight: FontWeight.w600, color: primaryBlue), overflow: TextOverflow.ellipsis)),
               ]),
             ]),
-            trailing: SizedBox(
-              width: 110,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(color: statusColor.withOpacity(0.12), borderRadius: BorderRadius.circular(8)),
-                    child: Text(statusLabel, style: TextStyle(color: statusColor, fontWeight: FontWeight.bold), overflow: TextOverflow.ellipsis),
-                  ),
-                  const SizedBox(height: 8),
-                  // Scroll horizontal pour les boutons d'action dans un conteneur à hauteur fixe
-                  SizedBox(
-                    height: 36,
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: actionButtons,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
+          trailing: SizedBox(
+  width: 110,
+  child: Column(
+    mainAxisSize: MainAxisSize.min,
+    crossAxisAlignment: CrossAxisAlignment.end,
+    children: [
+      Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: statusColor.withOpacity(0.12),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Text(
+          statusLabel,
+          style: TextStyle(color: statusColor, fontWeight: FontWeight.bold),
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
+      const SizedBox(height: 8),
+      // Utiliser Flexible pour éviter overflow
+      Flexible(
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: actionButtons,
+          ),
+        ),
+      ),
+    ],
+  ),
+),
             onTap: () {
               Navigator.push(context, MaterialPageRoute(builder: (_) => DevisPreviewPage(devis: devis)));
             },

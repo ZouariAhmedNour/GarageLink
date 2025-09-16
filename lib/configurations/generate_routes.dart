@@ -31,11 +31,12 @@ import 'package:garagelink/MecanicienScreens/work%20order/create_order_screen.da
 import 'package:garagelink/MecanicienScreens/work%20order/notif_screen.dart';
 import 'package:garagelink/MecanicienScreens/work%20order/rapport_screen.dart';
 import 'package:garagelink/MecanicienScreens/work%20order/work_order_page.dart';
-import 'package:garagelink/models/client.dart';
+import 'package:garagelink/models/ficheClient.dart';
 import 'package:garagelink/models/facture.dart';
-import 'package:garagelink/models/order.dart';
+import 'package:garagelink/models/ordre.dart';
 import 'package:garagelink/splash_screen.dart';
 import 'package:get/get.dart';
+import 'package:http/http.dart';
 
 class GenerateRoutes {
   static final getPages = [
@@ -43,7 +44,7 @@ class GenerateRoutes {
     GetPage(name: AppRoutes.signup, page: () => SignUpPage()),
     GetPage(name: AppRoutes.mecaHome, page: () => MecaHomePage()),
     //GetPage(name: AppRoutes.adminHome, page: () => AdminHomePage()),
-    GetPage(name: AppRoutes.clientHome, page: () => ClientHomeScreen()),
+    // GetPage(name: AppRoutes.clientHome, page: () => ClientHomeScreen()),
     GetPage(name: AppRoutes.completeProfile, page: () => CompleteProfilePage()),
     GetPage(name: AppRoutes.resetPassword, page: () => ResetPasswordPage()),
     GetPage(name: AppRoutes.splashScreen, page: () => SplashScreen()),
@@ -53,7 +54,7 @@ class GenerateRoutes {
     GetPage(name: AppRoutes.creationDevis, page: () => CreationDevisPage()),
     GetPage(name: AppRoutes.devisPreviewPage, page: () => DevisPreviewPage()),
     GetPage(name: AppRoutes.historiqueDevis, page: () => HistoriqueDevisPage()),
-    GetPage(name: AppRoutes.workOrderPage, page: () => WorkOrderPage()),
+    // GetPage(name: AppRoutes.workOrderPage, page: () => WorkOrderPage()),
     GetPage(name: AppRoutes.notifScreen, page: () => NotifScreen()),
     GetPage(
       name: AppRoutes.rapportScreen,
@@ -62,7 +63,7 @@ class GenerateRoutes {
         return RapportScreen(order: order);
       },
     ),
-    GetPage(name: AppRoutes.createOrderScreen, page: () => CreateOrderScreen()),
+    // GetPage(name: AppRoutes.createOrderScreen, page: () => CreateOrderScreen()),
     GetPage(
       name: AppRoutes.addEditServiceScreen,
       page: () => AddEditServiceScreen(),

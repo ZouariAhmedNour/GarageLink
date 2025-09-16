@@ -1,3 +1,4 @@
+// lib/vehicules/car widgets/edit_vehicle_sheet.dart
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:garagelink/models/vehicule.dart';
@@ -24,100 +25,224 @@ Future<void> openEditVehicleSheet(BuildContext context, WidgetRef ref, Vehicule 
 
       return StatefulBuilder(builder: (context, setState) {
         return Container(
-          decoration: const BoxDecoration(color: Colors.white, borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+          ),
           child: Padding(
-            padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom + 20, left: 20, right: 20, top: 20),
+            padding: EdgeInsets.only(
+              bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+              left: 20,
+              right: 20,
+              top: 20,
+            ),
             child: SingleChildScrollView(
-              child: Column(mainAxisSize: MainAxisSize.min, children: [
-                Container(width: 50, height: 4, decoration: BoxDecoration(color: Colors.grey.shade300, borderRadius: BorderRadius.circular(4))),
-                const SizedBox(height: 20),
-                Row(children: const [Icon(Icons.edit, color: primaryBlue), SizedBox(width: 12), Text('Modifier le véhicule', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: darkBlue))]),
-                const SizedBox(height: 24),
-                _buildEditTextField(_marqueCtrl, 'Marque', Icons.business),
-                _buildEditTextField(_modeleCtrl, 'Modèle', Icons.directions_car),
-                _buildEditTextField(_anneeCtrl, 'Année', Icons.calendar_today, TextInputType.number),
-                _buildEditTextField(_kmCtrl, 'Kilométrage', Icons.speed, TextInputType.number),
-                Container(
-                  margin: const EdgeInsets.only(bottom: 16),
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Row(children: const [Icon(Icons.local_gas_station, color: primaryBlue), SizedBox(width: 8), Text('Carburant', style: TextStyle(fontWeight: FontWeight.w600))]),
-                    const SizedBox(height: 12),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: Carburant.values.map((c) {
-                        final isSelected = _selectedCarb == c;
-                        return FilterChip(
-                          label: Text(carburantLabel(c)),
-                          selected: isSelected,
-                          onSelected: (_) => setState(() => _selectedCarb = c),
-                          selectedColor: lightBlue,
-                          checkmarkColor: primaryBlue,
-                          backgroundColor: Colors.grey.shade100,
-                        );
-                      }).toList(),
-                    ),
-                  ]),
-                ),
-                Row(children: [
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      icon: const Icon(Icons.camera_alt),
-                      label: const Text('Photo'),
-                      style: ElevatedButton.styleFrom(backgroundColor: primaryBlue, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                      onPressed: () async {
-                        try {
-                          final XFile? photo = await picker.pickImage(source: ImageSource.camera, maxWidth: 1600, imageQuality: 80);
-                          if (photo != null) setState(() => _localPicPath = photo.path);
-                        } catch (e) {
-                          ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text('Erreur photo: $e')));
-                        }
-                      },
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // handle bar
+                  Container(
+                    width: 50,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade300,
+                      borderRadius: BorderRadius.circular(4),
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      icon: const Icon(Icons.calendar_today),
-                      label: Text(_pickedDate != null ? formatDate(_pickedDate) : 'Date'),
-                      style: OutlinedButton.styleFrom(foregroundColor: primaryBlue, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), side: const BorderSide(color: primaryBlue)),
-                      onPressed: () async {
-                        final picked = await showDatePicker(context: ctx, initialDate: _pickedDate ?? DateTime.now(), firstDate: DateTime(1900), lastDate: DateTime(DateTime.now().year + 5));
-                        if (picked != null) setState(() => _pickedDate = picked);
-                      },
+                  const SizedBox(height: 20),
+
+                  // header
+                  Row(
+                    children: const [
+                      Icon(Icons.edit, color: primaryBlue),
+                      SizedBox(width: 12),
+                      Text(
+                        'Modifier le véhicule',
+                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: darkBlue),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+
+                  // champs
+                  _buildEditTextField(_marqueCtrl, 'Marque', Icons.business),
+                  _buildEditTextField(_modeleCtrl, 'Modèle', Icons.directions_car),
+                  _buildEditTextField(_anneeCtrl, 'Année', Icons.calendar_today, TextInputType.number),
+                  _buildEditTextField(_kmCtrl, 'Kilométrage', Icons.speed, TextInputType.number),
+
+                  // carburant
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: const [
+                            Icon(Icons.local_gas_station, color: primaryBlue),
+                            SizedBox(width: 8),
+                            Text('Carburant', style: TextStyle(fontWeight: FontWeight.w600)),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: Carburant.values.map((c) {
+                            final isSelected = _selectedCarb == c;
+                            return FilterChip(
+                              label: Text(carburantLabel(c)),
+                              selected: isSelected,
+                              onSelected: (_) => setState(() => _selectedCarb = c),
+                              selectedColor: lightBlue,
+                              checkmarkColor: primaryBlue,
+                              backgroundColor: Colors.grey.shade100,
+                            );
+                          }).toList(),
+                        ),
+                      ],
                     ),
                   ),
-                ]),
-                if (_localPicPath != null) ...[
-                  const SizedBox(height: 16),
-                  Container(height: 120, decoration: BoxDecoration(borderRadius: BorderRadius.circular(12), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 8, offset: Offset(0, 2))]), child: ClipRRect(borderRadius: BorderRadius.circular(12), child: Image.file(File(_localPicPath!), fit: BoxFit.cover))),
+
+                  // photo + date
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          icon: const Icon(Icons.camera_alt),
+                          label: const Text('Photo'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: primaryBlue,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          onPressed: () async {
+                            try {
+                              final XFile? photo = await picker.pickImage(
+                                source: ImageSource.camera,
+                                maxWidth: 1600,
+                                imageQuality: 80,
+                              );
+                              if (photo != null) {
+                                setState(() => _localPicPath = photo.path);
+                              }
+                            } catch (e) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(content: Text('Erreur photo: $e')),
+                              );
+                            }
+                          },
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: OutlinedButton.icon(
+                          icon: const Icon(Icons.calendar_today),
+                          label: Text(_pickedDate != null ? formatDate(_pickedDate) : 'Date'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: primaryBlue,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            side: const BorderSide(color: primaryBlue),
+                          ),
+                          onPressed: () async {
+                            final picked = await showDatePicker(
+                              context: ctx,
+                              initialDate: _pickedDate ?? DateTime.now(),
+                              firstDate: DateTime(1900),
+                              lastDate: DateTime(DateTime.now().year + 5),
+                            );
+                            if (picked != null) setState(() => _pickedDate = picked);
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  // aperçu image
+                  if (_localPicPath != null) ...[
+                    const SizedBox(height: 16),
+                    Container(
+                      height: 120,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.1),
+                            blurRadius: 8,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: _localPicPath!.startsWith('http')
+                            ? Image.network(_localPicPath!, fit: BoxFit.cover)
+                            : Image.file(File(_localPicPath!), fit: BoxFit.cover),
+                      ),
+                    ),
+                  ],
+
+                  const SizedBox(height: 24),
+
+                  // boutons action
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.grey.shade600,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          child: const Text('Annuler'),
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: primaryBlue,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          onPressed: () {
+                            // Sécurité: veh.id doit être présent (mais selon ton modèle il peut être non-null)
+                            final vid = veh.id;
+                            if (vid == null || vid.isEmpty) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('ID véhicule manquant'), backgroundColor: Colors.red),
+                              );
+                              return;
+                            }
+
+                            final updated = veh.copyWith(
+                              marque: _marqueCtrl.text.trim(),
+                              modele: _modeleCtrl.text.trim(),
+                              carburant: _selectedCarb,
+                              annee: int.tryParse(_anneeCtrl.text.trim()),
+                              kilometrage: int.tryParse(_kmCtrl.text.trim()),
+                              picKm: _localPicPath,
+                              dateCirculation: _pickedDate,
+                            );
+
+                            ref.read(vehiculesProvider.notifier).updateVehicule(vid, updated);
+                            Navigator.of(context).pop();
+
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Véhicule modifié avec succès'),
+                                backgroundColor: successGreen,
+                              ),
+                            );
+                          },
+                          child: const Text('Enregistrer'),
+                        ),
+                      ),
+                    ],
+                  ),
                 ],
-                const SizedBox(height: 24),
-                Row(children: [
-                  Expanded(child: OutlinedButton(onPressed: () => Navigator.of(context).pop(), style: OutlinedButton.styleFrom(foregroundColor: Colors.grey.shade600, padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))), child: const Text('Annuler'))),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(backgroundColor: primaryBlue, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                      onPressed: () {
-                        final updated = veh.copyWith(
-                          marque: _marqueCtrl.text.trim(),
-                          modele: _modeleCtrl.text.trim(),
-                          carburant: _selectedCarb,
-                          annee: int.tryParse(_anneeCtrl.text.trim()),
-                          kilometrage: int.tryParse(_kmCtrl.text.trim()),
-                          picKm: _localPicPath,
-                          dateCirculation: _pickedDate,
-                        );
-                        ref.read(vehiculesProvider.notifier).updateVehicule(veh.id, updated);
-                        Navigator.of(context).pop();
-                        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Véhicule modifié avec succès'), backgroundColor: successGreen));
-                      },
-                      child: const Text('Enregistrer'),
-                    ),
-                  ),
-                ]),
-              ]),
+              ),
             ),
           ),
         );
@@ -126,7 +251,7 @@ Future<void> openEditVehicleSheet(BuildContext context, WidgetRef ref, Vehicule 
   );
 }
 
-// helper used inside this file (private to the file)
+/// Petite helper pour les champs (déclarée dans le même fichier)
 Widget _buildEditTextField(TextEditingController controller, String label, IconData icon, [TextInputType? keyboardType]) {
   return Container(
     margin: const EdgeInsets.only(bottom: 16),

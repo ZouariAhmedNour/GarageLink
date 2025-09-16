@@ -1,99 +1,101 @@
-import 'dart:convert';
+// vehicule.dart
 
-enum Carburant { essence, diesel, gpl, electrique, hybride }
+enum FuelType {
+  essence,
+  diesel,
+  hybride,
+  electrique,
+  gpl,
+}
+
+enum VehicleStatus {
+  actif,
+  inactif,
+}
 
 class Vehicule {
-  final String id;
-  final String immatriculation;
+  final String? id; // _id from MongoDB
+  final String proprietaireId; // Reference to FicheClient
   final String marque;
   final String modele;
+  final String immatriculation;
   final int? annee;
+  final String? couleur;
+  final FuelType typeCarburant;
   final int? kilometrage;
-  final String? picKm; // stocke le path/local file or url
-  final DateTime? dateCirculation;
-  final String? clientId; // id du client propriétaire
-  final Carburant carburant; // 👈 nouveau champ obligatoire
+  final VehicleStatus statut;
+  final DateTime? createdAt; // From timestamps
+  final DateTime? updatedAt; // From timestamps
 
   Vehicule({
-    required this.id,
-    required this.immatriculation,
+    this.id,
+    required this.proprietaireId,
     required this.marque,
     required this.modele,
-    required this.carburant,
+    required this.immatriculation,
     this.annee,
+    this.couleur,
+    this.typeCarburant = FuelType.essence,
     this.kilometrage,
-    this.picKm,
-    this.dateCirculation,
-    this.clientId,
+    this.statut = VehicleStatus.actif,
+    this.createdAt,
+    this.updatedAt,
   });
 
-  Vehicule copyWith({
-    String? id,
-    String? immatriculation,
-    String? marque,
-    String? modele,
-    int? annee,
-    int? kilometrage,
-    String? picKm,
-    DateTime? dateCirculation,
-    String? clientId,
-    Carburant? carburant,
-  }) {
+  // Parse JSON to Vehicule object
+  factory Vehicule.fromJson(Map<String, dynamic> json) {
     return Vehicule(
-      id: id ?? this.id,
-      immatriculation: immatriculation ?? this.immatriculation,
-      marque: marque ?? this.marque,
-      modele: modele ?? this.modele,
-      annee: annee ?? this.annee,
-      kilometrage: kilometrage ?? this.kilometrage,
-      picKm: picKm ?? this.picKm,
-      dateCirculation: dateCirculation ?? this.dateCirculation,
-      clientId: clientId ?? this.clientId,
-      carburant: carburant ?? this.carburant,
+      id: json['_id']?.toString(),
+      proprietaireId: json['proprietaireId']?.toString() ?? '',
+      marque: json['marque'] ?? '',
+      modele: json['modele'] ?? '',
+      immatriculation: json['immatriculation'] ?? '',
+      annee: json['annee'],
+      couleur: json['couleur'],
+      typeCarburant: _parseFuelType(json['typeCarburant']),
+      kilometrage: json['kilometrage'],
+      statut: json['statut'] == 'actif' ? VehicleStatus.actif : VehicleStatus.inactif,
+      createdAt: json['createdAt'] != null
+          ? DateTime.parse(json['createdAt'])
+          : null,
+      updatedAt: json['updatedAt'] != null
+          ? DateTime.parse(json['updatedAt'])
+          : null,
     );
   }
 
-  Map<String, dynamic> toMap() {
+  // Convert Vehicule object to JSON
+  Map<String, dynamic> toJson() {
     return {
-      'id': id,
-      'immatriculation': immatriculation,
+      '_id': id,
+      'proprietaireId': proprietaireId,
       'marque': marque,
       'modele': modele,
+      'immatriculation': immatriculation,
       'annee': annee,
+      'couleur': couleur,
+      'typeCarburant': typeCarburant.toString().split('.').last,
       'kilometrage': kilometrage,
-      'picKm': picKm,
-      'dateCirculation': dateCirculation?.toIso8601String(),
-      'clientId': clientId,
-      'carburant': carburant.name, // 👈 enum -> string
-    };
+      'statut': statut == VehicleStatus.actif ? 'actif' : 'inactif',
+      'createdAt': createdAt?.toIso8601String(),
+      'updatedAt': updatedAt?.toIso8601String(),
+    }..removeWhere((key, value) => value == null); // Remove null values
   }
 
-  factory Vehicule.fromMap(Map<String, dynamic> map) {
-    // safe, case-insensitive matching of enum name
-    final carburantStr = (map['carburant'] ?? '').toString().toLowerCase();
-    final carburant = Carburant.values.firstWhere(
-      (e) => e.name.toLowerCase() == carburantStr,
-      orElse: () => Carburant.essence, // valeur par défaut si absent/inconnue
-    );
-
-    return Vehicule(
-      id: map['id'] ?? '',
-      immatriculation: map['immatriculation'] ?? '',
-      marque: map['marque'] ?? '',
-      modele: map['modele'] ?? '',
-      annee: map['annee'],
-      kilometrage: map['kilometrage'],
-      picKm: map['picKm'],
-      dateCirculation: map['dateCirculation'] != null
-          ? DateTime.parse(map['dateCirculation'])
-          : null,
-      clientId: map['clientId'],
-      carburant: carburant,
-    );
+  // Helper method to parse fuel type
+  static FuelType _parseFuelType(String? type) {
+    switch (type) {
+      case 'diesel':
+        return FuelType.diesel;
+      case 'hybride':
+        return FuelType.hybride;
+      case 'electrique':
+        return FuelType.electrique;
+      case 'gpl':
+        return FuelType.gpl;
+      case 'essence':
+      default:
+        return FuelType.essence;
+    }
   }
-
-  String toJson() => json.encode(toMap());
-
-  factory Vehicule.fromJson(String source) =>
-      Vehicule.fromMap(json.decode(source));
 }

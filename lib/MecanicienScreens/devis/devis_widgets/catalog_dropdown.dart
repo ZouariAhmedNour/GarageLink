@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:garagelink/models/pieceRechange.dart';
+import 'package:garagelink/models/pieces.dart';
 import 'package:garagelink/utils/format.dart';
 
 class CatalogDropdown extends StatelessWidget {

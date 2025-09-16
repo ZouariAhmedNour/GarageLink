@@ -1,37 +1,57 @@
-// lib/services/cite_api.dart
 import 'dart:convert';
+import 'package:garagelink/models/cite.dart';
 import 'package:http/http.dart' as http;
-import '../global.dart';
-import '../models/city.dart';
+import 'package:garagelink/global.dart'; 
 
-class CiteApi {
-  final Duration _timeout = const Duration(seconds: 8);
+class CityApi {
+  // En-têtes par défaut pour les requêtes JSON
+  static const Map<String, String> _headers = {
+    'Content-Type': 'application/json',
+  };
 
-  /// Récupère les villes/délégations pour un gouvernorat donné
-  /// Retourne { success: true, data: List<City> } ou { success:false, message: ... }
-  Future<Map<String, dynamic>> getCities(String governorateId) async {
-    final uri = Uri.parse('$UrlApi/api/cities/$governorateId');
-    try {
-      final res = await http.get(uri, headers: {"Content-Type": "application/json"}).timeout(_timeout);
-      if (res.statusCode >= 200 && res.statusCode < 300) {
-        final decoded = jsonDecode(res.body);
-        if (decoded is List) {
-          final list = decoded.map((e) {
-            try {
-              return City.fromMap(Map<String, dynamic>.from(e));
-            } catch (_) {
-              return City(id: e['_id']?.toString() ?? '', name: e['name'] ?? '', nameAr: e['nameAr']);
-            }
-          }).toList();
-          return {"success": true, "data": list};
-        } else {
-          return {"success": false, "message": "Format inattendu reçu du serveur"};
-        }
-      } else {
-        return {"success": false, "message": "Erreur serveur (${res.statusCode})", "statusCode": res.statusCode};
+  // En-têtes avec authentification
+  static Map<String, String> _authHeaders(String token) => {
+        ..._headers,
+        'Authorization': 'Bearer $token',
+      };
+
+  /// Récupérer toutes les villes
+  static Future<List<City>> getAllCities(String token) async {
+    final url = Uri.parse('$UrlApi/cities');
+    final response = await http.get(
+      url,
+      headers: _authHeaders(token),
+    );
+
+    if (response.statusCode == 200) {
+      final json = jsonDecode(response.body);
+      if (json is List<dynamic>) {
+        return json.map((item) => City.fromJson(item as Map<String, dynamic>)).toList();
       }
-    } catch (e) {
-      return {"success": false, "message": "Erreur réseau: $e"};
+      throw Exception('Réponse inattendue du serveur : liste attendue');
+    } else {
+      final json = jsonDecode(response.body) as Map<String, dynamic>;
+      throw Exception(json['error'] ?? 'Erreur lors de la récupération des villes');
+    }
+  }
+
+  /// Récupérer les villes par gouvernorat
+  static Future<List<City>> getCitiesByGovernorate(String token, String governorateId) async {
+    final url = Uri.parse('$UrlApi/cities/by-governorate/$governorateId');
+    final response = await http.get(
+      url,
+      headers: _authHeaders(token),
+    );
+
+    if (response.statusCode == 200) {
+      final json = jsonDecode(response.body);
+      if (json is List<dynamic>) {
+        return json.map((item) => City.fromJson(item as Map<String, dynamic>)).toList();
+      }
+      throw Exception('Réponse inattendue du serveur : liste attendue');
+    } else {
+      final json = jsonDecode(response.body) as Map<String, dynamic>;
+      throw Exception(json['error'] ?? 'Erreur lors de la récupération des villes par gouvernorat');
     }
   }
 }

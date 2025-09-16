@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:garagelink/MecanicienScreens/devis/devis_widgets/num_serie_input.dart';
-import 'package:garagelink/models/client.dart';
+import 'package:garagelink/models/ficheClient.dart';
 import 'package:garagelink/providers/notif_providers.dart';
 import 'package:garagelink/services/share_email_service.dart';
 

@@ -1,12 +1,11 @@
+// lib/MecanicienScreens/Gestion Clients/add_client.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:garagelink/components/default_app_bar.dart';
-import 'package:garagelink/models/client.dart';
-import 'package:garagelink/providers/client_provider.dart';
-import 'package:garagelink/vehicules/car%20widgets/ui_constants.dart';
+import 'package:garagelink/models/ficheClient.dart';
+import 'package:garagelink/providers/ficheClient_provider.dart';
 import 'package:get/get.dart';
-import 'package:uuid/uuid.dart';
 
 class AddClientScreen extends ConsumerStatefulWidget {
   const AddClientScreen({Key? key}) : super(key: key);
@@ -15,21 +14,21 @@ class AddClientScreen extends ConsumerStatefulWidget {
   ConsumerState<AddClientScreen> createState() => _AddClientScreenState();
 }
 
-class _AddClientScreenState extends ConsumerState<AddClientScreen> 
+class _AddClientScreenState extends ConsumerState<AddClientScreen>
     with SingleTickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   final _nomCtrl = TextEditingController();
   final _mailCtrl = TextEditingController();
   final _telCtrl = TextEditingController();
   final _adrCtrl = TextEditingController();
-  
+
   late AnimationController _animationController;
- Animation<double>? _fadeAnimation;
-  
+  Animation<double>? _fadeAnimation;
+
   Categorie _cat = Categorie.particulier;
   bool _isLoading = false;
 
-  // Palette de couleurs unifiée
+  // Palette locale (utilisée dans le widget)
   static const Color _primaryBlue = Color(0xFF357ABD);
   static const Color _lightBlue = Color(0xFFE3F2FD);
   static const Color _darkBlue = Color(0xFF1976D2);
@@ -44,13 +43,9 @@ class _AddClientScreenState extends ConsumerState<AddClientScreen>
       duration: const Duration(milliseconds: 800),
       vsync: this,
     );
-    _fadeAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(
-      parent: _animationController,
-      curve: Curves.easeInOut,
-    ));
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
+    );
     _animationController.forward();
   }
 
@@ -64,9 +59,11 @@ class _AddClientScreenState extends ConsumerState<AddClientScreen>
     super.dispose();
   }
 
+  // Validators
   String? _emailValidator(String? v) {
-    if (v == null || v.isEmpty) return null;
-    final emailRegex = RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$');
+    if (v == null || v.isEmpty) return null; // email optionnel
+    final emailRegex =
+        RegExp(r'^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$');
     return emailRegex.hasMatch(v) ? null : 'Format email invalide (ex: nom@domaine.com)';
   }
 
@@ -85,6 +82,7 @@ class _AddClientScreenState extends ConsumerState<AddClientScreen>
     return null;
   }
 
+  // Snackbars
   void _showSuccessSnackBar() {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -92,7 +90,7 @@ class _AddClientScreenState extends ConsumerState<AddClientScreen>
           children: const [
             Icon(Icons.check_circle, color: Colors.white),
             SizedBox(width: 8),
-            Text('Client ajouté avec succès!'),
+            Text('Client ajouté avec succès !'),
           ],
         ),
         backgroundColor: _successGreen,
@@ -119,9 +117,10 @@ class _AddClientScreenState extends ConsumerState<AddClientScreen>
     );
   }
 
+  // Envoi du formulaire
   Future<void> _handleSubmit() async {
     HapticFeedback.mediumImpact();
-    
+
     if (!(_formKey.currentState?.validate() ?? false)) {
       _showErrorSnackBar('Veuillez corriger les erreurs dans le formulaire');
       return;
@@ -129,31 +128,35 @@ class _AddClientScreenState extends ConsumerState<AddClientScreen>
 
     setState(() => _isLoading = true);
 
-    try {
-      final id = const Uuid().v4();
-      final client = Client(
-        id: id,
-        nomComplet: _nomCtrl.text.trim(),
-        mail: _mailCtrl.text.trim(),
-        telephone: _telCtrl.text.trim(),
-        adresse: _adrCtrl.text.trim(),
-        categorie: _cat,
-      );
+    final client = Client(
+      id: null, // le backend génère l'_id
+      nomComplet: _nomCtrl.text.trim(),
+      mail: _mailCtrl.text.trim(),
+      telephone: _telCtrl.text.trim(),
+      adresse: _adrCtrl.text.trim(),
+      categorie: _cat,
+    );
 
-       ref.read(clientsProvider.notifier).addClient(client);
-      
-      HapticFeedback.heavyImpact();
-      _showSuccessSnackBar();
-      
-      await Future.delayed(const Duration(milliseconds: 500));
-      Get.back();
+    try {
+      final created =
+          await ref.read(clientsProvider.notifier).addClient(client);
+      if (created != null) {
+        HapticFeedback.heavyImpact();
+        _showSuccessSnackBar();
+        await Future.delayed(const Duration(milliseconds: 500));
+        if (mounted) Get.back();
+      } else {
+        _showErrorSnackBar('Impossible d\'ajouter le client (réponse serveur).');
+      }
     } catch (e) {
+      // le provider réémettra l'exception si besoin
       _showErrorSnackBar('Erreur lors de l\'ajout du client: ${e.toString()}');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
+  // Widgets réutilisables
   Widget _buildCustomTextField({
     required TextEditingController controller,
     required String label,
@@ -215,9 +218,9 @@ class _AddClientScreenState extends ConsumerState<AddClientScreen>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
-              children: const [
+              children: [
                 Icon(Icons.category, color: _primaryBlue),
-                SizedBox(width: 12),
+                const SizedBox(width: 12),
                 Text(
                   'Catégorie de client',
                   style: TextStyle(
@@ -241,24 +244,24 @@ class _AddClientScreenState extends ConsumerState<AddClientScreen>
                 child: DropdownButton<Categorie>(
                   value: _cat,
                   isExpanded: true,
-                  icon: const Icon(Icons.keyboard_arrow_down, color: _primaryBlue),
-                  style: const TextStyle(color: _darkBlue, fontSize: 16),
+                  icon: Icon(Icons.keyboard_arrow_down, color: _primaryBlue),
+                  style: const TextStyle(color: Colors.black87, fontSize: 16),
                   items: Categorie.values.map((categorie) {
                     return DropdownMenuItem(
                       value: categorie,
                       child: Row(
                         children: [
                           Icon(
-                            categorie == Categorie.particulier 
-                                ? Icons.person 
+                            categorie == Categorie.particulier
+                                ? Icons.person
                                 : Icons.business,
                             color: _primaryBlue,
                             size: 20,
                           ),
                           const SizedBox(width: 12),
                           Text(
-                            categorie == Categorie.particulier 
-                                ? 'Particulier' 
+                            categorie == Categorie.particulier
+                                ? 'Particulier'
                                 : 'Professionnel',
                             style: const TextStyle(fontWeight: FontWeight.w500),
                           ),
@@ -320,13 +323,13 @@ class _AddClientScreenState extends ConsumerState<AddClientScreen>
 
   @override
   Widget build(BuildContext context) {
+    // si besoin on peut écouter l'état global : final clientsAsync = ref.watch(clientsProvider);
     return Scaffold(
       backgroundColor: Colors.grey.shade50,
       appBar: CustomAppBar(
-  title: 'Nouveau client',
-  backgroundColor: primaryBlue,
-
-),
+        title: 'Nouveau client',
+        backgroundColor: _primaryBlue,
+      ),
       body: FadeTransition(
         opacity: _fadeAnimation!,
         child: SafeArea(
@@ -341,16 +344,17 @@ class _AddClientScreenState extends ConsumerState<AddClientScreen>
                   Card(
                     elevation: 2,
                     color: Colors.white,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                    shape:
+                        RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                     child: Padding(
                       padding: const EdgeInsets.all(20),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Row(
-                            children: const [
+                            children: [
                               Icon(Icons.info_outline, color: _primaryBlue),
-                              SizedBox(width: 8),
+                              const SizedBox(width: 8),
                               Text(
                                 'Informations personnelles',
                                 style: TextStyle(

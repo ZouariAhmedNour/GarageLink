@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:garagelink/models/devis.dart';
-import 'package:garagelink/models/pieceRechange.dart';
+import 'package:garagelink/models/pieces.dart';
 import 'package:garagelink/providers/devis_provider.dart';
 import 'package:garagelink/MecanicienScreens/devis/utils/show_modern_snackbar.dart';
 

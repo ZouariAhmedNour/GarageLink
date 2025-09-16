@@ -10,7 +10,7 @@ import 'package:garagelink/configurations/app_routes.dart';
 import 'package:garagelink/providers/login_providers.dart';
 import 'package:garagelink/services/api_client.dart';
 import 'package:garagelink/services/auth_service.dart';
-import 'package:garagelink/services/user_service_api.dart';
+import 'package:garagelink/services/user_api.dart';
 import 'package:garagelink/utils/input_formatters.dart';
 import 'package:get/get.dart';
 

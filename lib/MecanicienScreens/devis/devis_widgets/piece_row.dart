@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:garagelink/models/devis.dart' show DevisService;
-import 'package:garagelink/models/pieceRechange.dart' show PieceRechange;
+import 'package:garagelink/models/pieces.dart' show PieceRechange;
 import 'package:garagelink/utils/format.dart';
 
 /// PieceRow flexible : accepte un `entry` qui peut être :

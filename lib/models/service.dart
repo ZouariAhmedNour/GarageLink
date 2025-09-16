@@ -1,42 +1,52 @@
+// service.dart
 
-enum ServiceStatus { actif, inactif }
+enum ServiceStatut {
+  actif,
+  desactive,
+}
 
 class Service {
-  final String id;
-  final String nomService;
+  final String? id; // _id from MongoDB
+  final String serviceId; // Corresponds to 'id' field in schema
+  final String name;
   final String description;
-  final ServiceStatus status;
+  final ServiceStatut statut;
 
-  const Service({
-    required this.id,
-    required this.nomService,
+  Service({
+    this.id,
+    required this.serviceId,
+    required this.name,
     required this.description,
-    this.status = ServiceStatus.actif,
+    this.statut = ServiceStatut.actif,
   });
 
-  /// Copie avec modification
-  Service copyWith({
-    String? id,
-    String? nomService,
-    String? description,
-    ServiceStatus? status,
-  }) {
+  factory Service.fromJson(Map<String, dynamic> json) {
     return Service(
-      id: id ?? this.id,
-      nomService: nomService ?? this.nomService,
-      description: description ?? this.description,
-      status: status ?? this.status,
+      id: json['_id']?.toString(),
+      serviceId: json['id'] ?? '',
+      name: json['name'] ?? '',
+      description: json['description'] ?? '',
+      statut: _parseStatut(json['statut']),
     );
   }
 
-  factory Service.fromMap(Map<String, dynamic> map) {
-    return Service(
-      id: map['id'] as String,
-      nomService: map['nomService'] as String,
-      description: map['description'] as String,
-      status: map['status'] == 'inactif'
-          ? ServiceStatus.inactif
-          : ServiceStatus.actif,
-    );
+  Map<String, dynamic> toJson() {
+    return {
+      '_id': id,
+      'id': serviceId,
+      'name': name,
+      'description': description,
+      'statut': statut.toString().split('.').last.replaceAll('actif', 'Actif').replaceAll('desactive', 'Désactivé'),
+    }..removeWhere((key, value) => value == null);
+  }
+
+  static ServiceStatut _parseStatut(String? statut) {
+    switch (statut) {
+      case 'Désactivé':
+        return ServiceStatut.desactive;
+      case 'Actif':
+      default:
+        return ServiceStatut.actif;
+    }
   }
 }

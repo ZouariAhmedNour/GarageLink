@@ -7,7 +7,7 @@ import 'package:garagelink/auth/login.dart';
 import 'package:garagelink/components/custom_button.dart';
 import 'package:garagelink/components/custom_text_form.dart';
 import 'package:garagelink/providers/signup_providers.dart';
-import 'package:garagelink/services/user_service_api.dart';
+import 'package:garagelink/services/user_api.dart';
 import 'package:garagelink/utils/input_formatters.dart';
 import 'package:get/get.dart';
 

@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:garagelink/components/default_app_bar.dart';
-import 'package:garagelink/models/carnet_entretien.dart';
-import 'package:garagelink/providers/carnet_provider.dart';
+import 'package:garagelink/models/carnetEntretien.dart';
+import 'package:garagelink/providers/carnetEntretien_provider.dart';
 import 'package:intl/intl.dart';
 
 class EntretienScreen extends ConsumerStatefulWidget {

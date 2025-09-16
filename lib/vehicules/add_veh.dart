@@ -1,11 +1,14 @@
+// lib/screens/add_veh_screen.dart
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:garagelink/components/default_app_bar.dart';
 import 'package:garagelink/MecanicienScreens/devis/devis_widgets/num_serie_input.dart';
+import 'package:garagelink/global.dart';
 import 'package:garagelink/models/vehicule.dart';
-import 'package:garagelink/providers/vehicule_provider.dart';
+import 'package:garagelink/providers/vehicule_provider.dart'; // si tu as renommé le provider, adapte le path
+import 'package:garagelink/services/vehicule_api.dart';
 import 'package:get/get.dart';
 import 'package:uuid/uuid.dart';
 import 'package:image_picker/image_picker.dart';
@@ -18,7 +21,7 @@ class AddVehScreen extends ConsumerStatefulWidget {
   ConsumerState<AddVehScreen> createState() => _AddVehScreenState();
 }
 
-class _AddVehScreenState extends ConsumerState<AddVehScreen> 
+class _AddVehScreenState extends ConsumerState<AddVehScreen>
     with SingleTickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   final _vinCtrl = TextEditingController();
@@ -29,15 +32,15 @@ class _AddVehScreenState extends ConsumerState<AddVehScreen>
   final _km = TextEditingController();
   final _dateCtrl = TextEditingController();
 
-late AnimationController _animationController;
-Animation<double>? _fadeAnimation;
-Animation<Offset>? _slideAnimation;
+  late AnimationController _animationController;
+  Animation<double>? _fadeAnimation;
+  Animation<Offset>? _slideAnimation;
 
   DateTime? _dateCirculation;
   String? _picKmPath;
   final ImagePicker _picker = ImagePicker();
   bool _isLoading = false;
-  
+
   Carburant _selectedCarburant = Carburant.essence;
 
   // Palette de couleurs unifiée
@@ -90,7 +93,7 @@ Animation<Offset>? _slideAnimation;
     HapticFeedback.lightImpact();
     final now = DateTime.now();
     final initial = _dateCirculation ?? now;
-    
+
     final picked = await showDatePicker(
       context: context,
       initialDate: initial,
@@ -101,14 +104,14 @@ Animation<Offset>? _slideAnimation;
         return Theme(
           data: Theme.of(context).copyWith(
             colorScheme: Theme.of(context).colorScheme.copyWith(
-              primary: _primaryBlue,
-            ),
+                  primary: _primaryBlue,
+                ),
           ),
           child: child!,
         );
       },
     );
-    
+
     if (picked != null) {
       HapticFeedback.selectionClick();
       setState(() {
@@ -149,7 +152,7 @@ Animation<Offset>? _slideAnimation;
 
   Future<void> _takePhoto() async {
     HapticFeedback.mediumImpact();
-    
+
     try {
       final XFile? photo = await _picker.pickImage(
         source: ImageSource.camera,
@@ -158,7 +161,7 @@ Animation<Offset>? _slideAnimation;
         imageQuality: 85,
         preferredCameraDevice: CameraDevice.rear,
       );
-      
+
       if (photo != null) {
         HapticFeedback.lightImpact();
         setState(() {
@@ -173,7 +176,7 @@ Animation<Offset>? _slideAnimation;
 
   Future<void> _pickFromGallery() async {
     HapticFeedback.lightImpact();
-    
+
     try {
       final XFile? photo = await _picker.pickImage(
         source: ImageSource.gallery,
@@ -181,7 +184,7 @@ Animation<Offset>? _slideAnimation;
         maxHeight: 1200,
         imageQuality: 85,
       );
-      
+
       if (photo != null) {
         setState(() {
           _picKmPath = photo.path;
@@ -233,52 +236,96 @@ Animation<Offset>? _slideAnimation;
     );
   }
 
-  Future<void> _handleSubmit() async {
-    HapticFeedback.mediumImpact();
+Future<void> _handleSubmit() async {
+  HapticFeedback.mediumImpact();
 
-    if (!(_formKey.currentState?.validate() ?? false)) {
-      _showErrorSnackBar('Veuillez corriger les erreurs du formulaire');
-      return;
-    }
-
-    if (!_validateImmatriculation()) {
-      _showErrorSnackBar('Veuillez saisir le numéro local ou le VIN');
-      return;
-    }
-
-    setState(() => _isLoading = true);
-
-    try {
-      final immat = _numLocalCtrl.text.trim().isNotEmpty
-          ? _numLocalCtrl.text.trim()
-          : _vinCtrl.text.trim();
-
-      final vehicule = Vehicule(
-        id: const Uuid().v4(),
-        immatriculation: immat,
-        marque: _marque.text.trim(),
-        modele: _modele.text.trim(),
-        carburant: _selectedCarburant,
-        annee: int.tryParse(_annee.text.trim()),
-        kilometrage: int.tryParse(_km.text.trim()),
-        picKm: _picKmPath,
-        dateCirculation: _dateCirculation,
-        clientId: widget.clientId,
-      );
-
-       ref.read(vehiculesProvider.notifier).addVehicule(vehicule);
-      
-      HapticFeedback.heavyImpact();
-      _showSuccessSnackBar('Véhicule ajouté avec succès!');
-      
-      await Future.delayed(const Duration(milliseconds: 500));
-      Get.back();
-    } catch (e) {
-      _showErrorSnackBar('Erreur lors de l\'ajout: ${e.toString()}');
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
+  if (!(_formKey.currentState?.validate() ?? false)) {
+    _showErrorSnackBar('Veuillez corriger les erreurs du formulaire');
+    return;
   }
+
+  if (!_validateImmatriculation()) {
+    _showErrorSnackBar('Veuillez saisir le numéro local ou le VIN');
+    return;
+  }
+
+  setState(() => _isLoading = true);
+
+  // création d'un id temporaire (optimistic UI)
+  final tempId = const Uuid().v4();
+  final immat = _numLocalCtrl.text.trim().isNotEmpty
+      ? _numLocalCtrl.text.trim()
+      : _vinCtrl.text.trim();
+
+  final tempVehicule = Vehicule(
+    id: tempId,
+    immatriculation: immat,
+    marque: _marque.text.trim(),
+    modele: _modele.text.trim(),
+    carburant: _selectedCarburant,
+    annee: _annee.text.trim().isEmpty ? null : int.tryParse(_annee.text.trim()),
+    kilometrage: _km.text.trim().isEmpty ? null : int.tryParse(_km.text.trim()),
+    picKm: _picKmPath,
+    dateCirculation: _dateCirculation,
+    proprietaireId: widget.clientId,
+    proprietaireNom: null,
+    image: null,
+  );
+
+  // ajout local optimiste
+  ref.read(vehiculesProvider.notifier).addVehicule(tempVehicule);
+  _showSuccessSnackBar('Véhicule ajouté localement…');
+
+  try {
+    final vehApi = VehiculeApi(baseUrl: UrlApi);
+
+    // Appel à l'API pour créer le véhicule côté serveur
+    final res = await vehApi.createVehicule(tempVehicule);
+
+    if (res['success'] == true && res['data'] != null) {
+      final created = res['data'] is Vehicule
+          ? res['data'] as Vehicule
+          : Vehicule.fromMap(Map<String, dynamic>.from(res['data']));
+
+      // remplacer le vehicule temporaire par celui du serveur
+      ref.read(vehiculesProvider.notifier).removeVehicule(tempId);
+      ref.read(vehiculesProvider.notifier).addVehicule(created);
+
+      // si on a une photo du compteur, upload ensuite (endpoint attend un id existant)
+      if (_picKmPath != null && _picKmPath!.isNotEmpty) {
+        final uploadRes = await vehApi.uploadVehiculeImage(created.id, File(_picKmPath!));
+        if (uploadRes['success'] == true && uploadRes['data'] != null) {
+          final body = uploadRes['data'];
+          // backend peut renvoyer { vehicule: {...} } ou { imageUrl: '...' }
+          if (body is Map && body['vehicule'] != null) {
+            final updatedVeh = Vehicule.fromMap(Map<String, dynamic>.from(body['vehicule']));
+            ref.read(vehiculesProvider.notifier).updateVehicule(created.id, updatedVeh);
+          } else if (body is Map && body['imageUrl'] != null) {
+            final withImage = created.copyWith(image: body['imageUrl']?.toString());
+            ref.read(vehiculesProvider.notifier).updateVehicule(created.id, withImage);
+          }
+        } else {
+          // upload failed, on alerte l'utilisateur mais le véhicule est quand même créé
+          _showErrorSnackBar('Téléversement image échoué (${uploadRes['message'] ?? 'erreur'})');
+        }
+      }
+
+      _showSuccessSnackBar('Véhicule enregistré sur le serveur');
+      await Future.delayed(const Duration(milliseconds: 400));
+      if (mounted) Get.back();
+    } else {
+      // échec côté serveur : retirer l'objet temporaire et afficher erreur
+      ref.read(vehiculesProvider.notifier).removeVehicule(tempId);
+      _showErrorSnackBar('Erreur création serveur: ${res['message'] ?? 'inconnue'}');
+    }
+  } catch (e) {
+    // en cas d'exception réseau -> rollback local
+    ref.read(vehiculesProvider.notifier).removeVehicule(tempId);
+    _showErrorSnackBar('Erreur lors de l\'ajout: ${e.toString()}');
+  } finally {
+    if (mounted) setState(() => _isLoading = false);
+  }
+}
 
   Widget _buildCustomTextField({
     required TextEditingController controller,
@@ -358,7 +405,7 @@ Animation<Offset>? _slideAnimation;
                 final isSelected = _selectedCarburant == carburant;
                 final label = _getCarburantLabel(carburant);
                 final icon = _getCarburantIcon(carburant);
-                
+
                 return FilterChip(
                   label: Row(
                     mainAxisSize: MainAxisSize.min,
@@ -398,7 +445,7 @@ Animation<Offset>? _slideAnimation;
         return 'Électrique';
       case Carburant.hybride:
         return 'Hybride';
-      }
+    }
   }
 
   IconData _getCarburantIcon(Carburant carburant) {
@@ -413,7 +460,7 @@ Animation<Offset>? _slideAnimation;
         return Icons.electric_bolt;
       case Carburant.hybride:
         return Icons.battery_charging_full;
-      }
+    }
   }
 
   Widget _buildPhotoSection() {
@@ -645,17 +692,16 @@ Animation<Offset>? _slideAnimation;
     return Scaffold(
       backgroundColor: Colors.grey.shade50,
       appBar: CustomAppBar(
-  title: 'Nouveau véhicule',
-  backgroundColor: _primaryBlue, // ou primaryBlue si tu utilises ui_constants
-),
-     body: FadeTransition(
-  // si _fadeAnimation est null, on utilise un AlwaysStoppedAnimation (opacité = 1.0)
-  opacity: _fadeAnimation ?? const AlwaysStoppedAnimation<double>(1.0),
-  child: SlideTransition(
-    // si _slideAnimation est null, on utilise une AlwaysStoppedAnimation pour Offset
-    position: _slideAnimation ?? const AlwaysStoppedAnimation<Offset>(Offset.zero),
-    child: SafeArea(
-      child: SingleChildScrollView(
+        title: 'Nouveau véhicule',
+        backgroundColor: _primaryBlue,
+      ),
+      body: FadeTransition(
+        opacity: _fadeAnimation ?? const AlwaysStoppedAnimation<double>(1.0),
+        child: SlideTransition(
+          position:
+              _slideAnimation ?? const AlwaysStoppedAnimation<Offset>(Offset.zero),
+          child: SafeArea(
+            child: SingleChildScrollView(
               physics: const BouncingScrollPhysics(),
               padding: const EdgeInsets.all(20),
               child: Form(
@@ -663,11 +709,12 @@ Animation<Offset>? _slideAnimation;
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // Section Identification
+                    // Identification
                     Card(
                       elevation: 2,
                       color: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16)),
                       child: Padding(
                         padding: const EdgeInsets.all(20),
                         child: Column(
@@ -699,11 +746,12 @@ Animation<Offset>? _slideAnimation;
                     ),
                     const SizedBox(height: 20),
 
-                    // Section Informations techniques
+                    // Informations techniques
                     Card(
                       elevation: 2,
                       color: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16)),
                       child: Padding(
                         padding: const EdgeInsets.all(20),
                         child: Column(
@@ -762,15 +810,15 @@ Animation<Offset>? _slideAnimation;
                     ),
                     const SizedBox(height: 20),
 
-                    // Section Carburant
+                    // Carburant
                     _buildCarburantSelector(),
                     const SizedBox(height: 20),
 
-                    // Section Photo
+                    // Photo
                     _buildPhotoSection(),
                     const SizedBox(height: 32),
 
-                    // Bouton de soumission
+                    // Submit
                     _buildSubmitButton(),
                     const SizedBox(height: 20),
                   ],
@@ -784,7 +832,7 @@ Animation<Offset>? _slideAnimation;
   }
 }
 
-/// Écran de prévisualisation d'image amélioré
+/// Écran de prévisualisation d'image
 class ImagePreviewScreen extends StatelessWidget {
   final String imagePath;
   const ImagePreviewScreen({required this.imagePath, Key? key}) : super(key: key);
