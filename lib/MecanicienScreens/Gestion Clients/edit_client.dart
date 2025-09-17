@@ -76,9 +76,9 @@ class _EditClientScreenState extends ConsumerState<EditClientScreen>
   }
 
   String? _emailValidator(String? v) {
-    if (v == null || v.isEmpty) return null;
+    if (v == null || v.trim().isEmpty) return null; // email optionnel
     final emailRegex = RegExp(r'^[^@]+@[^@]+\.[^@]+');
-    return emailRegex.hasMatch(v) ? null : 'Format d\'email invalide';
+    return emailRegex.hasMatch(v.trim()) ? null : 'Format d\'email invalide';
   }
 
   String? _requiredValidator(String? v) =>
@@ -261,7 +261,16 @@ class _EditClientScreenState extends ConsumerState<EditClientScreen>
   }
 
   Future<void> _handleSave() async {
-    if (!(_formKey.currentState?.validate() ?? false)) return;
+    // retirer le focus clavier
+    FocusScope.of(context).unfocus();
+
+    if (!(_formKey.currentState?.validate() ?? false)) {
+      // signal visuel si la validation échoue
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Veuillez corriger les erreurs du formulaire')),
+      );
+      return;
+    }
 
     final id = widget.client.id;
     if (id == null || id.isEmpty) {
@@ -271,11 +280,19 @@ class _EditClientScreenState extends ConsumerState<EditClientScreen>
       return;
     }
 
+    // vérification du token (provider internal check gère aussi mais UX meilleure ici)
+    final token = ref.read(authTokenFromAuthProvider);
+    if (token == null || token.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Token manquant. Veuillez vous reconnecter.'), backgroundColor: Color(0xFFE53E3E)),
+      );
+      return;
+    }
+
     HapticFeedback.mediumImpact();
-    setState(() => _isLoading = true);
+    if (mounted) setState(() => _isLoading = true);
 
     try {
-      // Appel au provider updateFicheClient
       await ref.read(ficheClientsProvider.notifier).updateFicheClient(
         id: id,
         nom: _nomCtrl.text.trim(),
@@ -285,23 +302,36 @@ class _EditClientScreenState extends ConsumerState<EditClientScreen>
         email: _mailCtrl.text.trim(),
       );
 
-      // Vérifier si le provider a rapporté une erreur
+      // vérifier si le provider a enregistré une erreur
       final err = ref.read(ficheClientsProvider).error;
-      if (err != null) {
-        HapticFeedback.heavyImpact();
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                const Icon(Icons.error_outline, color: Colors.white),
-                const SizedBox(width: 12),
-                Expanded(child: Text('Erreur: $err')),
-              ],
+      if (err != null && err.isNotEmpty) {
+        if (mounted) {
+          HapticFeedback.heavyImpact();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.error_outline, color: Colors.white),
+                  const SizedBox(width: 12),
+                  Expanded(child: Text('Erreur: $err')),
+                ],
+              ),
+              backgroundColor: errorColor,
             ),
-            backgroundColor: errorColor,
-          ),
-        );
+          );
+        }
       } else {
+        // succès : essayer de récupérer l'objet mis à jour depuis le provider
+        FicheClient? updated;
+        try {
+          updated = ref
+              .read(ficheClientsProvider)
+              .clients
+              .firstWhere((element) => element.id == id);
+        } catch (_) {
+          updated = null;
+        }
+
         if (mounted) {
           HapticFeedback.lightImpact();
           ScaffoldMessenger.of(context).showSnackBar(
@@ -322,7 +352,10 @@ class _EditClientScreenState extends ConsumerState<EditClientScreen>
               margin: const EdgeInsets.all(16),
             ),
           );
-          Get.back();
+
+          // revenir en renvoyant le client mis à jour si disponible
+          await Future.delayed(const Duration(milliseconds: 300));
+          Get.back(result: updated ?? true);
         }
       }
     } catch (e) {

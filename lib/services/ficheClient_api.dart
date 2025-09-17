@@ -1,7 +1,8 @@
+// lib/services/fiche_client_api.dart
 import 'dart:convert';
 import 'package:garagelink/models/ficheClient.dart';
 import 'package:http/http.dart' as http;
-import 'package:garagelink/global.dart'; 
+import 'package:garagelink/global.dart';
 
 class FicheClientApi {
   // En-têtes par défaut pour les requêtes JSON
@@ -17,58 +18,53 @@ class FicheClientApi {
 
   /// Récupérer toutes les fiches clients
   static Future<List<FicheClient>> getFicheClients(String token) async {
-    final url = Uri.parse('$UrlApi/ficheClients');
-    final response = await http.get(
-      url,
-      headers: _authHeaders(token),
-    );
+    final url = Uri.parse('$UrlApi/GetAll');
+    final response = await http.get(url, headers: _authHeaders(token));
 
     if (response.statusCode == 200) {
-      final json = jsonDecode(response.body);
-      if (json is List<dynamic>) {
-        return json.map((item) => FicheClient.fromJson(item as Map<String, dynamic>)).toList();
+      final jsonBody = jsonDecode(response.body);
+      if (jsonBody is List<dynamic>) {
+        return jsonBody
+            .map((item) => FicheClient.fromJson(item as Map<String, dynamic>))
+            .toList();
       }
       throw Exception('Réponse inattendue du serveur : liste attendue');
     } else {
-      final json = jsonDecode(response.body) as Map<String, dynamic>;
-      throw Exception(json['error'] ?? 'Erreur lors de la récupération des fiches clients');
+      final jsonErr = jsonDecode(response.body) as Map<String, dynamic>;
+      throw Exception(jsonErr['error'] ?? 'Erreur lors de la récupération des fiches clients');
     }
   }
 
   /// Récupérer une fiche client par ID
   static Future<FicheClient> getFicheClientById(String token, String id) async {
-    final url = Uri.parse('$UrlApi/ficheClients/$id');
-    final response = await http.get(
-      url,
-      headers: _authHeaders(token),
-    );
+    final url = Uri.parse('$UrlApi/GetOne/$id');
+    final response = await http.get(url, headers: _authHeaders(token));
 
     if (response.statusCode == 200) {
-      final json = jsonDecode(response.body) as Map<String, dynamic>;
-      return FicheClient.fromJson(json);
+      final jsonBody = jsonDecode(response.body) as Map<String, dynamic>;
+      return FicheClient.fromJson(jsonBody);
     } else {
-      final json = jsonDecode(response.body) as Map<String, dynamic>;
-      throw Exception(json['error'] ?? 'Erreur lors de la récupération de la fiche client');
+      final jsonErr = jsonDecode(response.body) as Map<String, dynamic>;
+      throw Exception(jsonErr['error'] ?? 'Erreur lors de la récupération de la fiche client');
     }
   }
 
   /// Récupérer les noms et types des clients
   static Future<List<FicheClientSummary>> getFicheClientNoms(String token) async {
-    final url = Uri.parse('$UrlApi/ficheClients/noms');
-    final response = await http.get(
-      url,
-      headers: _authHeaders(token),
-    );
+    final url = Uri.parse('$UrlApi/clients/noms');
+    final response = await http.get(url, headers: _authHeaders(token));
 
     if (response.statusCode == 200) {
-      final json = jsonDecode(response.body);
-      if (json is List<dynamic>) {
-        return json.map((item) => FicheClientSummary.fromJson(item as Map<String, dynamic>)).toList();
+      final jsonBody = jsonDecode(response.body);
+      if (jsonBody is List<dynamic>) {
+        return jsonBody
+            .map((item) => FicheClientSummary.fromJson(item as Map<String, dynamic>))
+            .toList();
       }
       throw Exception('Réponse inattendue du serveur : liste attendue');
     } else {
-      final json = jsonDecode(response.body) as Map<String, dynamic>;
-      throw Exception(json['error'] ?? 'Erreur lors de la récupération des noms des clients');
+      final jsonErr = jsonDecode(response.body) as Map<String, dynamic>;
+      throw Exception(jsonErr['error'] ?? 'Erreur lors de la récupération des noms des clients');
     }
   }
 
@@ -81,7 +77,7 @@ class FicheClientApi {
     required String telephone,
     required String email,
   }) async {
-    final url = Uri.parse('$UrlApi/ficheClients');
+    final url = Uri.parse('$UrlApi/Creation');
     final fiche = FicheClient(
       nom: nom,
       type: type,
@@ -89,20 +85,19 @@ class FicheClientApi {
       telephone: telephone,
       email: email,
     );
-    final body = jsonEncode(fiche.toJson()..remove('_id'));
+    // Construire body explicitement pour éviter _id envoyé par erreur
+    final Map<String, dynamic> bodyMap = Map.from(fiche.toJson());
+    bodyMap.remove('_id');
+    final body = jsonEncode(bodyMap);
 
-    final response = await http.post(
-      url,
-      headers: _authHeaders(token),
-      body: body,
-    );
+    final response = await http.post(url, headers: _authHeaders(token), body: body);
 
     if (response.statusCode == 201) {
-      final json = jsonDecode(response.body) as Map<String, dynamic>;
-      return FicheClient.fromJson(json);
+      final jsonBody = jsonDecode(response.body) as Map<String, dynamic>;
+      return FicheClient.fromJson(jsonBody);
     } else {
-      final json = jsonDecode(response.body) as Map<String, dynamic>;
-      throw Exception(json['error'] ?? 'Erreur lors de la création de la fiche client');
+      final jsonErr = jsonDecode(response.body) as Map<String, dynamic>;
+      throw Exception(jsonErr['error'] ?? 'Erreur lors de la création de la fiche client');
     }
   }
 
@@ -116,7 +111,7 @@ class FicheClientApi {
     String? telephone,
     String? email,
   }) async {
-    final url = Uri.parse('$UrlApi/ficheClients/$id');
+    final url = Uri.parse('$UrlApi/updateOne/$id');
     final body = jsonEncode({
       if (nom != null) 'nom': nom,
       if (type != null) 'type': type == ClientType.particulier ? 'particulier' : 'professionnel',
@@ -125,79 +120,67 @@ class FicheClientApi {
       if (email != null) 'email': email,
     });
 
-    final response = await http.put(
-      url,
-      headers: _authHeaders(token),
-      body: body,
-    );
+    final response = await http.put(url, headers: _authHeaders(token), body: body);
 
     if (response.statusCode == 200) {
-      final json = jsonDecode(response.body) as Map<String, dynamic>;
-      return FicheClient.fromJson(json);
+      final jsonBody = jsonDecode(response.body) as Map<String, dynamic>;
+      return FicheClient.fromJson(jsonBody);
     } else {
-      final json = jsonDecode(response.body) as Map<String, dynamic>;
-      throw Exception(json['error'] ?? 'Erreur lors de la mise à jour de la fiche client');
+      final jsonErr = jsonDecode(response.body) as Map<String, dynamic>;
+      throw Exception(jsonErr['error'] ?? 'Erreur lors de la mise à jour de la fiche client');
     }
   }
 
   /// Supprimer une fiche client
   static Future<void> deleteFicheClient(String token, String id) async {
-    final url = Uri.parse('$UrlApi/ficheClients/$id');
-    final response = await http.delete(
-      url,
-      headers: _authHeaders(token),
-    );
+    final url = Uri.parse('$UrlApi/deleteOne/$id');
+    final response = await http.delete(url, headers: _authHeaders(token));
 
     if (response.statusCode == 200) {
       return;
     } else {
-      final json = jsonDecode(response.body) as Map<String, dynamic>;
-      throw Exception(json['error'] ?? 'Erreur lors de la suppression de la fiche client');
+      final jsonErr = jsonDecode(response.body) as Map<String, dynamic>;
+      throw Exception(jsonErr['error'] ?? 'Erreur lors de la suppression de la fiche client');
     }
   }
 
   /// Récupérer l'historique des visites d'un client
   static Future<HistoriqueVisiteResponse> getHistoriqueVisiteByIdClient(String token, String clientId) async {
-    final url = Uri.parse('$UrlApi/ficheClients/$clientId/historique');
-    final response = await http.get(
-      url,
-      headers: _authHeaders(token),
-    );
+    final url = Uri.parse('$UrlApi/clients/$clientId/historique');
+    final response = await http.get(url, headers: _authHeaders(token));
 
     if (response.statusCode == 200) {
-      final json = jsonDecode(response.body) as Map<String, dynamic>;
-      if (json['success'] == true) {
-        return HistoriqueVisiteResponse.fromJson(json);
+      final jsonBody = jsonDecode(response.body) as Map<String, dynamic>;
+      if (jsonBody['success'] == true) {
+        return HistoriqueVisiteResponse.fromJson(jsonBody);
       }
-      throw Exception(json['error'] ?? 'Erreur lors de la récupération de l\'historique des visites');
+      throw Exception(jsonBody['error'] ?? 'Erreur lors de la récupération de l\'historique des visites');
     } else {
-      final json = jsonDecode(response.body) as Map<String, dynamic>;
-      throw Exception(json['error'] ?? 'Erreur lors de la récupération de l\'historique des visites');
+      final jsonErr = jsonDecode(response.body) as Map<String, dynamic>;
+      throw Exception(jsonErr['error'] ?? 'Erreur lors de la récupération de l\'historique des visites');
     }
   }
 
   /// Récupérer un résumé des visites d'un client
   static Future<HistoryVisiteResponse> getHistoryVisite(String token, String clientId) async {
-    final url = Uri.parse('$UrlApi/ficheClients/$clientId/history');
-    final response = await http.get(
-      url,
-      headers: _authHeaders(token),
-    );
+    final url = Uri.parse('$UrlApi/clients/$clientId/visites-resume');
+    final response = await http.get(url, headers: _authHeaders(token));
 
     if (response.statusCode == 200) {
-      final json = jsonDecode(response.body) as Map<String, dynamic>;
-      if (json['success'] == true) {
-        return HistoryVisiteResponse.fromJson(json);
+      final jsonBody = jsonDecode(response.body) as Map<String, dynamic>;
+      if (jsonBody['success'] == true) {
+        return HistoryVisiteResponse.fromJson(jsonBody);
       }
-      throw Exception(json['error'] ?? 'Erreur lors de la récupération du résumé des visites');
+      throw Exception(jsonBody['error'] ?? 'Erreur lors de la récupération du résumé des visites');
     } else {
-      final json = jsonDecode(response.body) as Map<String, dynamic>;
-      throw Exception(json['error'] ?? 'Erreur lors de la récupération du résumé des visites');
+      final jsonErr = jsonDecode(response.body) as Map<String, dynamic>;
+      throw Exception(jsonErr['error'] ?? 'Erreur lors de la récupération du résumé des visites');
     }
   }
 }
 
-// Modèle pour le résumé des noms et types des clients
+/// ---- modèles additionnels utilisés dans ce fichier ----
+/// (Ne pas dupliquer si déjà présents ailleurs — ici pour référence)
 class FicheClientSummary {
   final String id;
   final String nom;

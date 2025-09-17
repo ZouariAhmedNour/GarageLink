@@ -61,16 +61,16 @@ class _AddClientScreenState extends ConsumerState<AddClientScreen>
 
   // Validators
   String? _emailValidator(String? v) {
-    if (v == null || v.isEmpty) return null; // email optionnel
+    if (v == null || v.trim().isEmpty) return null; // email optionnel
     final emailRegex =
         RegExp(r'^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$');
-    return emailRegex.hasMatch(v) ? null : 'Format email invalide (ex: nom@domaine.com)';
+    return emailRegex.hasMatch(v.trim()) ? null : 'Format email invalide (ex: nom@domaine.com)';
   }
 
   String? _phoneValidator(String? v) {
-    if (v == null || v.isEmpty) return 'Numéro de téléphone requis';
+    if (v == null || v.trim().isEmpty) return 'Numéro de téléphone requis';
     final phoneRegex = RegExp(r'^[\+]?[0-9\s\-\(\)]{6,20}$');
-    return phoneRegex.hasMatch(v) ? null : 'Format de téléphone invalide';
+    return phoneRegex.hasMatch(v.trim()) ? null : 'Format de téléphone invalide';
   }
 
   String? _requiredValidator(String? v) =>
@@ -119,17 +119,23 @@ class _AddClientScreenState extends ConsumerState<AddClientScreen>
 
   // Envoi du formulaire
   Future<void> _handleSubmit() async {
+    // retirer le focus clavier
+    FocusScope.of(context).unfocus();
+
     final token = ref.read(authTokenFromAuthProvider);
-if (token == null || token.isEmpty) {
-  _showErrorSnackBar('Token manquant. Veuillez vous reconnecter.');
-  return;
-}
+    if (token == null || token.isEmpty) {
+      _showErrorSnackBar('Token manquant. Veuillez vous reconnecter.');
+      return;
+    }
+
     HapticFeedback.mediumImpact();
 
     if (!(_formKey.currentState?.validate() ?? false)) {
       _showErrorSnackBar('Veuillez corriger les erreurs dans le formulaire');
       return;
     }
+
+    if (_isLoading) return;
 
     setState(() => _isLoading = true);
 
@@ -139,32 +145,35 @@ if (token == null || token.isEmpty) {
     final adresse = _adrCtrl.text.trim();
 
     try {
-      // Appel du provider (signature: addFicheClient({required String nom, required ClientType type, required String adresse, required String telephone, required String email})
+      // Appel du provider
       await ref.read(ficheClientsProvider.notifier).addFicheClient(
-        nom: nom,
-        type: _type,
-        adresse: adresse,
-        telephone: telephone,
-        email: email,
-      );
+            nom: nom,
+            type: _type,
+            adresse: adresse,
+            telephone: telephone,
+            email: email,
+          );
 
       // Vérifier si le provider a signalé une erreur
       final err = ref.read(ficheClientsProvider).error;
-      if (err != null) {
+      if (err != null && err.isNotEmpty) {
         _showErrorSnackBar('Erreur: $err');
       } else {
         HapticFeedback.heavyImpact();
         _showSuccessSnackBar();
-        // Réinitialiser le formulaire si besoin
+        // Réinitialiser le formulaire
         _formKey.currentState?.reset();
         _nomCtrl.clear();
         _mailCtrl.clear();
         _telCtrl.clear();
         _adrCtrl.clear();
-        setState(() => _type = ClientType.particulier);
-        // revenir à l'écran précédent
-        await Future.delayed(const Duration(milliseconds: 400));
-        if (mounted) Get.back();
+        if (mounted) setState(() => _type = ClientType.particulier);
+
+        // Retour à l'écran précédent (on signale true si on veut)
+        if (mounted) {
+          await Future.delayed(const Duration(milliseconds: 300));
+          Get.back(result: true);
+        }
       }
     } catch (e) {
       _showErrorSnackBar('Erreur lors de l\'ajout du client: ${e.toString()}');
@@ -343,13 +352,14 @@ if (token == null || token.isEmpty) {
         backgroundColor: _primaryBlue,
       ),
       body: FadeTransition(
-        opacity: _fadeAnimation!,
+        opacity: _fadeAnimation ?? kAlwaysCompleteAnimation,
         child: SafeArea(
           child: SingleChildScrollView(
             physics: const BouncingScrollPhysics(),
             padding: const EdgeInsets.all(20),
             child: Form(
               key: _formKey,
+              autovalidateMode: AutovalidateMode.onUserInteraction,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [

@@ -8,7 +8,7 @@ import 'package:garagelink/configurations/app_routes.dart';
 import 'package:garagelink/providers/ficheClient_provider.dart';
 import 'package:garagelink/models/ficheClient.dart';
 import 'package:garagelink/models/vehicule.dart';
-import 'package:garagelink/providers/orders_provider.dart';
+import 'package:garagelink/providers/ordres_provider.dart';
 import 'package:garagelink/providers/vehicule_provider.dart';
 import 'package:garagelink/vehicules/add_veh.dart';
 import 'package:garagelink/vehicules/vehicule_info.dart';
@@ -38,18 +38,177 @@ class _ClientDashState extends ConsumerState<ClientDash>
 
   // --- nouveau champ pour éviter de recharger plusieurs fois ---
   bool _hasLoaded = false;
-
   int selectedIndex = 0;
   String nomFilter = '';
   String immatFilter = '';
   DateTimeRange? dateRangeFilter;
+
   final vinCtrl = TextEditingController();
   final numLocalCtrl = TextEditingController();
 
+  // ----------------- utilitaires pour gérer orders/date -----------------
+  List _extractOrdersList(dynamic state) {
+    if (state == null) return [];
+    if (state is List) return state;
+
+    // tenter accès map-like
+    try {
+      if (state is Map) {
+        if (state['orders'] is List) return state['orders'] as List;
+        if (state['ordres'] is List) return state['ordres'] as List;
+        if (state['items'] is List) return state['items'] as List;
+        if (state['list'] is List) return state['list'] as List;
+        if (state['data'] is List) return state['data'] as List;
+      }
+    } catch (_) {}
+
+    // getters dynamiques (chaque try capture NoSuchMethodError)
+    try {
+      final maybe = (state as dynamic).orders;
+      if (maybe is List) return maybe;
+    } catch (_) {}
+    try {
+      final maybe = (state as dynamic).ordres;
+      if (maybe is List) return maybe;
+    } catch (_) {}
+    try {
+      final maybe = (state as dynamic).items;
+      if (maybe is List) return maybe;
+    } catch (_) {}
+    try {
+      final maybe = (state as dynamic).list;
+      if (maybe is List) return maybe;
+    } catch (_) {}
+    try {
+      final maybe = (state as dynamic).data;
+      if (maybe is List) return maybe;
+    } catch (_) {}
+
+    // fallback : toJson()
+    try {
+      final json = (state as dynamic).toJson();
+      if (json is Map) {
+        if (json['orders'] is List) return json['orders'] as List;
+        if (json['ordres'] is List) return json['ordres'] as List;
+        if (json['items'] is List) return json['items'] as List;
+        if (json['list'] is List) return json['list'] as List;
+      }
+    } catch (_) {}
+
+    return [];
+  }
+
+  DateTime? _parseDate(dynamic d) {
+    if (d == null) return null;
+    try {
+      if (d is DateTime) return d;
+      if (d is int) return DateTime.fromMillisecondsSinceEpoch(d);
+      if (d is num) return DateTime.fromMillisecondsSinceEpoch(d.toInt());
+      if (d is String) {
+        final parsed = DateTime.tryParse(d);
+        if (parsed != null) return parsed;
+        final asInt = int.tryParse(d);
+        if (asInt != null) {
+          if (d.length <= 10) return DateTime.fromMillisecondsSinceEpoch(asInt * 1000);
+          return DateTime.fromMillisecondsSinceEpoch(asInt);
+        }
+      }
+      if (d is Map) {
+        if (d['date'] != null) return _parseDate(d['date']);
+        if (d['createdAt'] != null) return _parseDate(d['createdAt']);
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  // ----------------- méthode unique et robuste de building -----------------
+  Widget _buildClientsList(List<FicheClient> clientsList, dynamic vehState, dynamic ordersState) {
+    final allOrders = _extractOrdersList(ordersState);
+
+    final filtered = clientsList.where((c) {
+      bool matches = true;
+      if (selectedIndex == 0) {
+        matches = nomFilter.isEmpty || c.nom.toLowerCase().contains(nomFilter.toLowerCase());
+      } else if (selectedIndex == 1) {
+        if (immatFilter.isEmpty) {
+          matches = true;
+        } else {
+          final clientVehs = (vehState is List)
+              ? vehState.where((v) => (v.proprietaireId ?? '') == (c.id ?? '')).toList()
+              : ((vehState?.vehicules as List?) ?? [])
+                  .where((v) => (v.proprietaireId ?? '') == (c.id ?? ''))
+                  .toList();
+          matches = clientVehs.any((v) => ((v.immatriculation ?? '')).toLowerCase().contains(immatFilter.toLowerCase()));
+        }
+      } else if (selectedIndex == 2) {
+        final clientOrders = allOrders.where((o) {
+          try {
+            if (o == null) return false;
+            if (o is Map) {
+              final cid = (o['clientId'] ?? o['client_id'] ?? o['client'] ?? '').toString();
+              return cid == (c.id ?? '');
+            } else {
+              final cid = (o as dynamic).clientId ?? (o as dynamic).clientID ?? (o as dynamic).client;
+              return cid != null && cid.toString() == (c.id ?? '');
+            }
+          } catch (_) {
+            return false;
+          }
+        }).toList();
+
+        if (dateRangeFilter == null) {
+          matches = true;
+        } else {
+          final start = dateRangeFilter!.start.subtract(const Duration(days: 1));
+          final end = dateRangeFilter!.end.add(const Duration(days: 1));
+          matches = clientOrders.any((o) {
+            try {
+              dynamic rawDate;
+              if (o is Map) {
+                rawDate = o['date'] ?? o['createdAt'] ?? o['dateCommande'];
+              } else {
+                rawDate = (o as dynamic).date ?? (o as dynamic).createdAt;
+              }
+              final od = _parseDate(rawDate);
+              if (od == null) return false;
+              return (od.isAtSameMomentAs(start) || od.isAfter(start)) && (od.isAtSameMomentAs(end) || od.isBefore(end));
+            } catch (_) {
+              return false;
+            }
+          });
+        }
+      }
+      return matches;
+    }).toList();
+
+    if (filtered.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.person_search, size: 64, color: Colors.grey[400]),
+            const SizedBox(height: 16),
+            Text('Aucun client trouvé', style: TextStyle(fontSize: 18, color: Colors.grey[600])),
+          ],
+        ),
+      );
+    }
+
+    return ListView.separated(
+      itemCount: filtered.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 8),
+      itemBuilder: (context, idx) {
+        final c = filtered[idx];
+        final clientVeh = ref.watch(vehiculesProvider).vehicules.where((v) => (v.proprietaireId ?? '') == (c.id ?? '')).toList();
+        return ClientCard(client: c, vehicules: clientVeh, index: idx);
+      },
+    );
+  }
+
+  // ----------------- lifecycle & UI -----------------
   @override
   void initState() {
     super.initState();
-
     _animationController = AnimationController(
       duration: const Duration(milliseconds: 800),
       vsync: this,
@@ -61,14 +220,11 @@ class _ClientDashState extends ConsumerState<ClientDash>
       begin: const Offset(0, 0.3),
       end: Offset.zero,
     ).animate(CurvedAnimation(parent: _animationController, curve: Curves.easeOut));
-
     _animationController.forward();
 
-    // Charger automatiquement les clients une seule fois après le premier rendu
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_hasLoaded) {
         _hasLoaded = true;
-        // Appel non bloquant — le provider gère l'état loading / erreur
         ref.read(ficheClientsProvider.notifier).loadAll();
       }
     });
@@ -88,10 +244,7 @@ class _ClientDashState extends ConsumerState<ClientDash>
       child: FilterChip(
         avatar: Icon(icon, size: 18, color: selected ? Colors.white : primaryColor),
         label: Text(label,
-            style: TextStyle(
-              color: selected ? Colors.white : primaryColor,
-              fontWeight: FontWeight.w600,
-            )),
+            style: TextStyle(color: selected ? Colors.white : primaryColor, fontWeight: FontWeight.w600)),
         selected: selected,
         selectedColor: primaryColor,
         backgroundColor: cardColor,
@@ -162,7 +315,7 @@ class _ClientDashState extends ConsumerState<ClientDash>
   Widget build(BuildContext context) {
     final clientsState = ref.watch(ficheClientsProvider);
     final clientsList = clientsState.clients;
-    final vehState = ref.watch(vehiculesProvider); // VehiculesState
+    final vehState = ref.watch(vehiculesProvider);
     final ordersState = ref.watch(ordresProvider);
 
     return Scaffold(
@@ -213,9 +366,11 @@ class _ClientDashState extends ConsumerState<ClientDash>
                                 children: [
                                   _buildFilterChip('Nom', Icons.person, selectedIndex == 0, () => setState(() => selectedIndex = 0)),
                                   const SizedBox(width: 8),
-                                  _buildFilterChip('Immatriculation', Icons.directions_car, selectedIndex == 1, () => setState(() => selectedIndex = 1)),
+                                  _buildFilterChip('Immatriculation', Icons.directions_car, selectedIndex == 1,
+                                      () => setState(() => selectedIndex = 1)),
                                   const SizedBox(width: 8),
-                                  _buildFilterChip('Période', Icons.date_range, selectedIndex == 2, () => setState(() => selectedIndex = 2)),
+                                  _buildFilterChip('Période', Icons.date_range, selectedIndex == 2,
+                                      () => setState(() => selectedIndex = 2)),
                                 ],
                               ),
                             ),
@@ -237,7 +392,8 @@ class _ClientDashState extends ConsumerState<ClientDash>
                             children: [
                               const Icon(Icons.date_range, color: primaryColor, size: 16),
                               const SizedBox(width: 8),
-                              Text('${DateFormat('dd/MM/yyyy').format(dateRangeFilter!.start)} → ${DateFormat('dd/MM/yyyy').format(dateRangeFilter!.end)}',
+                              Text(
+                                  '${DateFormat('dd/MM/yyyy').format(dateRangeFilter!.start)} → ${DateFormat('dd/MM/yyyy').format(dateRangeFilter!.end)}',
                                   style: const TextStyle(color: primaryColor, fontWeight: FontWeight.w600)),
                               const Spacer(),
                               IconButton(
@@ -251,7 +407,6 @@ class _ClientDashState extends ConsumerState<ClientDash>
                           ),
                         ),
                       if (dateRangeFilter != null) const SizedBox(height: 16),
-                      // Zone principale: contenu selon l'état du provider
                       Expanded(
                         child: clientsState.loading
                             ? const Center(child: CircularProgressIndicator())
@@ -264,54 +419,6 @@ class _ClientDashState extends ConsumerState<ClientDash>
                 ),
               ),
             ),
-    );
-  }
-
-  Widget _buildClientsList(List<FicheClient> clientsList, dynamic vehState, dynamic ordersState) {
-    // filtre des clients selon le mode
-    final filtered = clientsList.where((c) {
-      bool matches = true;
-      if (selectedIndex == 0) {
-        matches = nomFilter.isEmpty || c.nom.toLowerCase().contains(nomFilter.toLowerCase());
-      } else if (selectedIndex == 1) {
-        if (immatFilter.isEmpty) {
-          matches = true;
-        } else {
-          final clientVehs = vehState.vehicules.where((v) => (v.proprietaireId ?? '') == (c.id ?? '')).toList();
-          matches = clientVehs.any((v) => (v.immatriculation ?? '').toLowerCase().contains(immatFilter.toLowerCase()));
-        }
-      } else if (selectedIndex == 2) {
-        final clientOrders = (ordersState is List) ? ordersState.where((o) => o.clientId == c.id).toList() : [];
-        matches = dateRangeFilter == null ||
-            clientOrders.any((o) =>
-                (o.date != null) &&
-                o.date.isAfter(dateRangeFilter!.start.subtract(const Duration(days: 1))) &&
-                o.date.isBefore(dateRangeFilter!.end.add(const Duration(days: 1))));
-      }
-      return matches;
-    }).toList();
-
-    if (filtered.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.person_search, size: 64, color: Colors.grey[400]),
-            const SizedBox(height: 16),
-            Text('Aucun client trouvé', style: TextStyle(fontSize: 18, color: Colors.grey[600])),
-          ],
-        ),
-      );
-    }
-
-    return ListView.separated(
-      itemCount: filtered.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 8),
-      itemBuilder: (context, idx) {
-        final c = filtered[idx];
-        final clientVeh = ref.watch(vehiculesProvider).vehicules.where((v) => (v.proprietaireId ?? '') == (c.id ?? '')).toList();
-        return ClientCard(client: c, vehicules: clientVeh, index: idx);
-      },
     );
   }
 
@@ -334,7 +441,9 @@ class _ClientDashState extends ConsumerState<ClientDash>
             padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
           ),
           icon: const Icon(Icons.date_range),
-          label: Text(dateRangeFilter == null ? 'Sélectionner période' : '${DateFormat('dd/MM/yyyy').format(dateRangeFilter!.start)} - ${DateFormat('dd/MM/yyyy').format(dateRangeFilter!.end)}'),
+          label: Text(dateRangeFilter == null
+              ? 'Sélectionner période'
+              : '${DateFormat('dd/MM/yyyy').format(dateRangeFilter!.start)} - ${DateFormat('dd/MM/yyyy').format(dateRangeFilter!.end)}'),
           onPressed: () => _pickDateRange(),
         );
       default:
@@ -344,11 +453,11 @@ class _ClientDashState extends ConsumerState<ClientDash>
 }
 
 // --------------------- ClientCard ---------------------
+// (La classe ClientCard est inchangée — colle simplement la version que tu avais)
 class ClientCard extends ConsumerStatefulWidget {
   final FicheClient client;
   final List<Vehicule> vehicules;
   final int index;
-
   const ClientCard({required this.client, required this.vehicules, required this.index, Key? key}) : super(key: key);
 
   @override
@@ -511,9 +620,9 @@ class _ClientCardState extends ConsumerState<ClientCard> with SingleTickerProvid
       );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           content: Row(
-            children: [Icon(Icons.error, color: Colors.white), SizedBox(width: 8), Text("Erreur lors de la suppression")],
+            children: [const Icon(Icons.error, color: Colors.white), const SizedBox(width: 8), Flexible(child: Text("Erreur lors de la suppression: ${e.toString()}"))],
           ),
           backgroundColor: errorColor,
         ),
@@ -600,7 +709,8 @@ class _ClientCardState extends ConsumerState<ClientCard> with SingleTickerProvid
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    _buildActionButton(Icons.edit, primaryColor, () => Get.toNamed(AppRoutes.editClientScreen, arguments: widget.client), tooltip: 'Modifier'),
+                    _buildActionButton(Icons.edit, primaryColor, () => Get.toNamed(AppRoutes.editClientScreen, arguments: widget.client),
+                        tooltip: 'Modifier'),
                     const SizedBox(width: 6),
                     _buildActionButton(Icons.delete, errorColor, _showDeleteDialog, tooltip: 'Supprimer'),
                     const SizedBox(width: 6),

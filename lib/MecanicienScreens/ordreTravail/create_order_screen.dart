@@ -7,7 +7,7 @@ import 'package:garagelink/MecanicienScreens/devis/devis_widgets/modern_text_fie
 import 'package:garagelink/MecanicienScreens/devis/devis_widgets/num_serie_input.dart';
 import 'package:garagelink/MecanicienScreens/ordreTravail/work_order_page.dart';
 import 'package:garagelink/models/ordre.dart';
-import 'package:garagelink/providers/orders_provider.dart';
+import 'package:garagelink/providers/ordres_provider.dart';
 import 'package:get/get.dart';
 
 class CreateOrderScreen extends ConsumerStatefulWidget {
