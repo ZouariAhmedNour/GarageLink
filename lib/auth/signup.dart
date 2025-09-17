@@ -14,11 +14,29 @@ class SignUpPage extends ConsumerStatefulWidget {
 
   @override
   ConsumerState<SignUpPage> createState() => _SignUpPageState();
+  
 }
+
 
 class _SignUpPageState extends ConsumerState<SignUpPage> {
   bool _isLoading = false;
 
+
+  
+@override
+void initState() {
+  super.initState();
+
+  // Réinitialiser tous les champs
+  ref.read(firstNameControllerProvider).clear();
+  ref.read(lastNameControllerProvider).clear();
+  ref.read(garageNameControllerProvider).clear();
+  ref.read(matriculeFiscalControllerProvider).clear();
+  ref.read(emailControllerProvider).clear();
+  ref.read(phoneControllerProvider).clear();
+  ref.read(passwordControllerProvider).clear();
+  ref.read(confirmPasswordControllerProvider).clear();
+}
   void _showSnackBar(String message, {bool isError = true}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(

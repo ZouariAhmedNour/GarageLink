@@ -219,6 +219,8 @@ class _MecaHomePageState extends ConsumerState<MecaHomePage> {
 
   @override
   Widget build(BuildContext context) {
+     final token = ref.read(authNotifierProvider).token;
+  print('Token actuel: $token'); // pour debug
     // tant que l'auth est vérifiée, affiche loader
     if (_checkingAuth) {
       return const Scaffold(

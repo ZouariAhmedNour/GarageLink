@@ -1,10 +1,13 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:collection/collection.dart';
 import 'package:garagelink/models/ficheClient.dart';
+import 'package:garagelink/providers/auth_provider.dart';
 import 'package:garagelink/services/ficheClient_api.dart';
 
-// Provider pour le token d'authentification (partagé avec autres providers)
-final authTokenProvider = StateProvider<String?>((ref) => null);
+final authTokenFromAuthProvider = Provider<String?>((ref) {
+  final authState = ref.watch(authNotifierProvider);
+  return authState.token;
+});
 
 // État des fiches clients
 class FicheClientsState {
@@ -36,7 +39,7 @@ class FicheClientsNotifier extends StateNotifier<FicheClientsState> {
   final Ref ref;
 
   // Récupérer le token depuis le provider
-  String? get _token => ref.read(authTokenProvider);
+  String? get _token => ref.read(authTokenFromAuthProvider);
 
   // Vérifier si le token est disponible
   bool get _hasToken => _token != null && _token!.isNotEmpty;

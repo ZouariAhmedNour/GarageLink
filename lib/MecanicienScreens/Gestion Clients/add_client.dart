@@ -119,6 +119,11 @@ class _AddClientScreenState extends ConsumerState<AddClientScreen>
 
   // Envoi du formulaire
   Future<void> _handleSubmit() async {
+    final token = ref.read(authTokenFromAuthProvider);
+if (token == null || token.isEmpty) {
+  _showErrorSnackBar('Token manquant. Veuillez vous reconnecter.');
+  return;
+}
     HapticFeedback.mediumImpact();
 
     if (!(_formKey.currentState?.validate() ?? false)) {
