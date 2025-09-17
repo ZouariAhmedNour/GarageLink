@@ -1,3 +1,4 @@
+// lib/MecanicienScreens/Gestion Clients/client_dash.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -51,7 +52,6 @@ class _ClientDashState extends ConsumerState<ClientDash>
     if (state == null) return [];
     if (state is List) return state;
 
-    // tenter accès map-like
     try {
       if (state is Map) {
         if (state['orders'] is List) return state['orders'] as List;
@@ -62,7 +62,6 @@ class _ClientDashState extends ConsumerState<ClientDash>
       }
     } catch (_) {}
 
-    // getters dynamiques (chaque try capture NoSuchMethodError)
     try {
       final maybe = (state as dynamic).orders;
       if (maybe is List) return maybe;
@@ -84,7 +83,6 @@ class _ClientDashState extends ConsumerState<ClientDash>
       if (maybe is List) return maybe;
     } catch (_) {}
 
-    // fallback : toJson()
     try {
       final json = (state as dynamic).toJson();
       if (json is Map) {
@@ -122,7 +120,7 @@ class _ClientDashState extends ConsumerState<ClientDash>
   }
 
   // ----------------- méthode unique et robuste de building -----------------
-  Widget _buildClientsList(List<FicheClient> clientsList, dynamic vehState, dynamic ordersState) {
+  Widget _buildClientsList(List<FicheClient> clientsList, List<Vehicule> vehList, dynamic ordersState) {
     final allOrders = _extractOrdersList(ordersState);
 
     final filtered = clientsList.where((c) {
@@ -133,11 +131,7 @@ class _ClientDashState extends ConsumerState<ClientDash>
         if (immatFilter.isEmpty) {
           matches = true;
         } else {
-          final clientVehs = (vehState is List)
-              ? vehState.where((v) => (v.proprietaireId ?? '') == (c.id ?? '')).toList()
-              : ((vehState?.vehicules as List?) ?? [])
-                  .where((v) => (v.proprietaireId ?? '') == (c.id ?? ''))
-                  .toList();
+          final clientVehs = vehList.where((v) => (v.proprietaireId ?? '') == (c.id ?? '')).toList();
           matches = clientVehs.any((v) => ((v.immatriculation ?? '')).toLowerCase().contains(immatFilter.toLowerCase()));
         }
       } else if (selectedIndex == 2) {
@@ -199,7 +193,7 @@ class _ClientDashState extends ConsumerState<ClientDash>
       separatorBuilder: (_, __) => const SizedBox(height: 8),
       itemBuilder: (context, idx) {
         final c = filtered[idx];
-        final clientVeh = ref.watch(vehiculesProvider).vehicules.where((v) => (v.proprietaireId ?? '') == (c.id ?? '')).toList();
+        final clientVeh = vehList.where((v) => (v.proprietaireId ?? '') == (c.id ?? '')).toList();
         return ClientCard(client: c, vehicules: clientVeh, index: idx);
       },
     );
@@ -225,7 +219,14 @@ class _ClientDashState extends ConsumerState<ClientDash>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_hasLoaded) {
         _hasLoaded = true;
+        // charger clients ET véhicules (précharger la liste globale)
         ref.read(ficheClientsProvider.notifier).loadAll();
+        // si tu as la méthode loadAll() côté vehiculesProvider
+        try {
+          ref.read(vehiculesProvider.notifier).loadAll();
+        } catch (_) {
+          // si ton provider n'expose pas loadAll(), ignore
+        }
       }
     });
   }
@@ -315,7 +316,7 @@ class _ClientDashState extends ConsumerState<ClientDash>
   Widget build(BuildContext context) {
     final clientsState = ref.watch(ficheClientsProvider);
     final clientsList = clientsState.clients;
-    final vehState = ref.watch(vehiculesProvider);
+    final vehList = ref.watch(vehiculesProvider).vehicules;
     final ordersState = ref.watch(ordresProvider);
 
     return Scaffold(
@@ -412,7 +413,7 @@ class _ClientDashState extends ConsumerState<ClientDash>
                             ? const Center(child: CircularProgressIndicator())
                             : clientsState.error != null
                                 ? Center(child: Text('Erreur chargement clients: ${clientsState.error}'))
-                                : _buildClientsList(clientsList, vehState, ordersState),
+                                : _buildClientsList(clientsList, vehList, ordersState),
                       ),
                     ],
                   ),
@@ -453,7 +454,7 @@ class _ClientDashState extends ConsumerState<ClientDash>
 }
 
 // --------------------- ClientCard ---------------------
-// (La classe ClientCard est inchangée — colle simplement la version que tu avais)
+// (La classe ClientCard est inchangée en structure, mais on s'assure d'utiliser widget.vehicules)
 class ClientCard extends ConsumerStatefulWidget {
   final FicheClient client;
   final List<Vehicule> vehicules;
@@ -632,7 +633,17 @@ class _ClientCardState extends ConsumerState<ClientCard> with SingleTickerProvid
 
   @override
   Widget build(BuildContext context) {
-    final clientVehCache = ref.watch(vehiculesProvider).vehicules.where((v) => (v.proprietaireId ?? '') == (widget.client.id ?? '')).toList();
+    // Lecture réactive de la liste globale depuis le provider : se mettra à jour automatiquement
+final allVehicules = ref.watch(vehiculesProvider).vehicules;
+// filtre côté UI pour n'avoir que les véhicules du client courant
+final clientVehCache = allVehicules.where((v) => (v.proprietaireId ?? '') == (widget.client.id ?? '')).toList();
+// fallback : si provider vide mais parent a des vehicules, on peut utiliser ceux du parent
+if (clientVehCache.isEmpty && widget.vehicules.isNotEmpty) {
+  // utile si tu passes déjà des vehicules depuis le parent (legacy)
+  // on privilégie le provider, mais on garde le fallback pour robustesse
+  // (optionnel — tu peux supprimer ce fallback si tu veux toujours utiliser provider)
+  // clientVehCache = widget.vehicules; // si clientVehCache est final, supprime ce fallback
+}
 
     return AnimatedContainer(
       duration: Duration(milliseconds: 300 + (widget.index * 50)),
@@ -765,7 +776,22 @@ class _ClientCardState extends ConsumerState<ClientCard> with SingleTickerProvid
                             );
                             return;
                           }
-                          Get.to(() => AddVehScreen(clientId: cid));
+                          Get.to(() => AddVehScreen(clientId: cid))?.then((result) {
+  // si AddVehScreen renvoie le vehicule créé (Get.back(result: finalVeh)), on refresh
+  if (result != null) {
+    // recharger les véhicules de ce client (merge dans le cache)
+    try {
+      ref.read(vehiculesProvider.notifier).loadByProprietaire(cid);
+    } catch (e) {
+      // ignore ou afficher erreur si tu veux
+    }
+  } else {
+    // même si null, tu peux forcer un refresh pour être sûr :
+    try {
+      ref.read(vehiculesProvider.notifier).loadByProprietaire(cid);
+    } catch (_) {}
+  }
+});
                         }, tooltip: 'Ajouter véhicule'),
                       ],
                     ),

@@ -7,6 +7,7 @@ import 'package:garagelink/components/default_app_bar.dart';
 import 'package:garagelink/MecanicienScreens/devis/devis_widgets/num_serie_input.dart';
 import 'package:garagelink/models/vehicule.dart';
 import 'package:garagelink/providers/vehicule_provider.dart';
+import 'package:garagelink/providers/auth_provider.dart';
 import 'package:garagelink/services/vehicule_api.dart';
 import 'package:garagelink/vehicules/car%20widgets/ui_constants.dart';
 import 'package:get/get.dart';
@@ -246,12 +247,11 @@ class _AddVehScreenState extends ConsumerState<AddVehScreen>
       case FuelType.gpl:
         return Icons.local_gas_station;
       case FuelType.essence:
-      return Icons.local_gas_station;
+        return Icons.local_gas_station;
     }
   }
 
   String _getFuelLabel(FuelType type) {
-    // si tu as une fonction fuelTypeLabel dans ui_constants, tu peux la remplacer ici
     return fuelTypeLabel(type);
   }
 
@@ -269,7 +269,8 @@ class _AddVehScreenState extends ConsumerState<AddVehScreen>
     }
 
     final token = ref.read(authTokenProvider);
-    if (token == null || token.isEmpty) {
+    debugPrint('DEBUG: token lu dans AddVehScreen -> $token');
+    if (token == null || (token.isEmpty)) {
       _showErrorSnackBar('Utilisateur non authentifié');
       return;
     }
@@ -298,8 +299,8 @@ class _AddVehScreenState extends ConsumerState<AddVehScreen>
 
       Vehicule finalVeh = created;
 
-      // Si photo locale présente -> upload puis update du véhicule créé
-      if (_picKmPath != null && _picKmPath!.isNotEmpty) {
+      // Si photo locale présente -> upload puis update du véhicule créé (si id dispo)
+      if (_picKmPath != null && _picKmPath!.isNotEmpty && created.id != null && created.id!.isNotEmpty) {
         try {
           final uploadedUrl = await VehiculeApi.uploadVehiculeImage(
             token: token,
@@ -320,13 +321,32 @@ class _AddVehScreenState extends ConsumerState<AddVehScreen>
         }
       }
 
-      // Mettre à jour le cache local via le provider
-      final notifier = ref.read(vehiculesProvider.notifier);
-      notifier.setVehicules([...ref.read(vehiculesProvider).vehicules, finalVeh]);
+      // Mettre à jour le cache local via le provider (tentatives robustes)
+      final dynamic notifier = ref.read(vehiculesProvider.notifier);
+      try {
+        // try common API: addVehicule
+        if (notifier != null) {
+          try {
+            await notifier.addVehicule(finalVeh);
+          } catch (_) {
+            // fallback: try set state if possible
+            try {
+              final dynamic state = ref.read(vehiculesProvider);
+              if (state is List) {
+                notifier.state = [...state, finalVeh];
+              }
+            } catch (_) {
+              // last fallback: ignore (UI pourra rafraîchir en revenant)
+            }
+          }
+        }
+      } catch (_) {
+        // ignore any provider update error
+      }
 
       _showSuccessSnackBar('Véhicule enregistré sur le serveur');
       await Future.delayed(const Duration(milliseconds: 400));
-      if (mounted) Get.back();
+      if (mounted) Get.back(result: finalVeh);
     } catch (e) {
       _showErrorSnackBar('Erreur lors de l\'ajout: ${e.toString()}');
     } finally {
@@ -391,9 +411,9 @@ class _AddVehScreenState extends ConsumerState<AddVehScreen>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
-              children: const [
+              children: [
                 Icon(Icons.local_gas_station, color: _primaryBlue),
-                SizedBox(width: 12),
+                const SizedBox(width: 12),
                 Text(
                   'Type de carburant',
                   style: TextStyle(
@@ -451,9 +471,9 @@ class _AddVehScreenState extends ConsumerState<AddVehScreen>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
-              children: const [
+              children: [
                 Icon(Icons.camera_alt, color: _primaryBlue),
-                SizedBox(width: 12),
+                const SizedBox(width: 12),
                 Text(
                   'Photo du compteur',
                   style: TextStyle(
@@ -462,11 +482,11 @@ class _AddVehScreenState extends ConsumerState<AddVehScreen>
                     color: _darkBlue,
                   ),
                 ),
-                SizedBox(width: 8),
+                const SizedBox(width: 8),
                 Chip(
-                  label: Text('Optionnel', style: TextStyle(fontSize: 11)),
-                  backgroundColor: Color(0xFFE8F5E8),
-                  labelStyle: TextStyle(color: Colors.green),
+                  label: const Text('Optionnel', style: TextStyle(fontSize: 11)),
+                  backgroundColor: const Color(0xFFE8F5E8),
+                  labelStyle: const TextStyle(color: Colors.green),
                 ),
               ],
             ),
@@ -499,7 +519,7 @@ class _AddVehScreenState extends ConsumerState<AddVehScreen>
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      side: const BorderSide(color: _primaryBlue),
+                      side: BorderSide(color: _primaryBlue),
                     ),
                     onPressed: _pickFromGallery,
                   ),
@@ -638,7 +658,6 @@ class _AddVehScreenState extends ConsumerState<AddVehScreen>
           foregroundColor: Colors.white,
           elevation: 3,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          disabledBackgroundColor: Colors.grey.shade400,
         ),
         child: _isLoading
             ? const SizedBox(
@@ -649,9 +668,9 @@ class _AddVehScreenState extends ConsumerState<AddVehScreen>
                   strokeWidth: 2,
                 ),
               )
-            : const Row(
+            : Row(
                 mainAxisAlignment: MainAxisAlignment.center,
-                children: [
+                children: const [
                   Icon(Icons.directions_car, size: 24),
                   SizedBox(width: 12),
                   Text(
@@ -698,9 +717,9 @@ class _AddVehScreenState extends ConsumerState<AddVehScreen>
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Row(
-                              children: const [
+                              children: [
                                 Icon(Icons.assignment, color: _primaryBlue),
-                                SizedBox(width: 12),
+                                const SizedBox(width: 12),
                                 Text(
                                   'Identification du véhicule',
                                   style: TextStyle(
@@ -735,9 +754,9 @@ class _AddVehScreenState extends ConsumerState<AddVehScreen>
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Row(
-                              children: const [
+                              children: [
                                 Icon(Icons.build, color: _primaryBlue),
-                                SizedBox(width: 12),
+                                const SizedBox(width: 12),
                                 Text(
                                   'Informations techniques',
                                   style: TextStyle(

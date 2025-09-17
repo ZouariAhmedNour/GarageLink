@@ -1,9 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:garagelink/models/vehicule.dart';
 import 'package:garagelink/services/vehicule_api.dart';
-
-// Provider pour le token d'authentification
-final authTokenProvider = StateProvider<String?>((ref) => null);
+import 'package:garagelink/providers/auth_provider.dart';
 
 // État des véhicules
 class VehiculesState {
