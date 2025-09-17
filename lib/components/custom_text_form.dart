@@ -7,6 +7,8 @@ class CustomTextForm extends StatelessWidget {
   final bool obscureText;
   final String? Function(String?)? validator;
   final List<TextInputFormatter>? inputFormatters;
+  final TextInputType keyboardType; // <-- ajouté ici
+
   const CustomTextForm({
     Key? key,
     required this.hinttext,
@@ -14,6 +16,7 @@ class CustomTextForm extends StatelessWidget {
     this.obscureText = false,
     this.validator,
     this.inputFormatters,
+    this.keyboardType = TextInputType.text, // <-- valeur par défaut
   }) : super(key: key);
 
   @override
@@ -22,7 +25,8 @@ class CustomTextForm extends StatelessWidget {
       controller: mycontroller,
       obscureText: obscureText,
       validator: validator,
-       inputFormatters: inputFormatters,
+      inputFormatters: inputFormatters,
+      keyboardType: keyboardType, // <-- utilisé ici
       decoration: InputDecoration(
         hintText: hinttext,
         border: OutlineInputBorder(

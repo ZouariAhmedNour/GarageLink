@@ -1,13 +1,13 @@
-// lib/MecanicienScreens/edit_localisation.dart
+import 'dart:async';
 import 'package:awesome_dialog/awesome_dialog.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:garagelink/models/cite.dart'; // City, City.location (Geo)
 import 'package:garagelink/models/governorate.dart';
-import 'package:garagelink/models/user.dart' as user_model; // alias pour éviter l'ambiguïté Location
+import 'package:garagelink/models/user.dart'
+    as user_model; // alias pour éviter l'ambiguïté Location
 import 'package:garagelink/providers/auth_provider.dart';
 import 'package:garagelink/providers/client_map_provider.dart';
 import 'package:garagelink/providers/localisation_provider.dart';
@@ -51,52 +51,71 @@ class _EditLocalisationState extends ConsumerState<EditLocalisation>
   String? _selectedGovernorateId;
   String? _selectedCityId;
 
+  bool _didInitDependencies = false; // <-- guard
+
   @override
   void initState() {
     super.initState();
 
-    // Initialize controllers with data from arguments or provider
+    // Animation (ne dépend pas du context)
+    _animationController = AnimationController(
+      duration: const Duration(milliseconds: 800),
+      vsync: this,
+    );
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
+    );
+    _animationController.forward();
+
+    // NE PAS initialiser ici tout ce qui dépend du BuildContext / providers / Get.arguments.
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_didInitDependencies) return;
+    _didInitDependencies = true;
+
     final args = Get.arguments as Map<String, dynamic>? ?? <String, dynamic>{};
     _registrationData = args;
+
     final localisation = ref.read(localisationProvider);
 
+    // Initialisation des controllers (sûr ici avant build)
     nomController = TextEditingController(
-        text: args['username']?.toString() ?? localisation.nomGarage);
+      text: args['username']?.toString() ?? localisation.nomGarage,
+    );
     emailController = TextEditingController(
-        text: args['email']?.toString() ?? localisation.email);
+      text: args['email']?.toString() ?? localisation.email,
+    );
     telController = TextEditingController(
-        text: args['phone']?.toString() ?? localisation.telephone);
+      text: args['phone']?.toString() ?? localisation.telephone,
+    );
     adresseController = TextEditingController(text: localisation.adresse);
     matriculeController = TextEditingController(
-        text: args['matriculefiscal']?.toString() ?? localisation.matriculefiscal);
+      text: args['matriculefiscal']?.toString() ?? localisation.matriculefiscal,
+    );
 
-    // Set initial governorate and city IDs
-    _selectedGovernorateId = (args['governorateId']?.toString().isNotEmpty == true)
+    _selectedGovernorateId =
+        (args['governorateId']?.toString().isNotEmpty == true)
         ? args['governorateId'].toString()
         : localisation.governorateId;
     _selectedCityId = (args['cityId']?.toString().isNotEmpty == true)
         ? args['cityId'].toString()
         : localisation.cityId;
 
-    // Center map on existing position
-    final initialPosition = ref.read(clientLocationProvider).position ??
-        localisation.position ??
-        LatLng(36.8065, 10.1815);
+    // déplacer la carte après le premier frame (sécurise l'accès au mapController/élément)
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      final initialPosition =
+          ref.read(clientLocationProvider).position ??
+          localisation.position ??
+          LatLng(36.8065, 10.1815);
       try {
         mapController.move(initialPosition, 14);
       } catch (_) {}
     });
 
-    // Initialize animation
-    _animationController =
-        AnimationController(duration: const Duration(milliseconds: 800), vsync: this);
-    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
-    );
-    _animationController.forward();
-
-    // Load governorates
+    // Charger les gouvernorats (async) ; _loadGovernorates() gère token==null et dialogues via post-frame.
     _loadGovernorates();
   }
 
@@ -115,13 +134,19 @@ class _EditLocalisationState extends ConsumerState<EditLocalisation>
     setState(() => _isLoading = true);
     try {
       final token = ref.read(authNotifierProvider).token;
+
+      List<Governorate> governorates;
       if (token == null) {
-        throw Exception('Token manquant. Veuillez vous reconnecter.');
+        // Utiliser la route publique si pas de token
+        governorates = await GovernorateApi.getAllGovernoratesPublic();
+      } else {
+        governorates = await GovernorateApi.getAllGovernorates(token);
       }
-      final governorates = await GovernorateApi.getAllGovernorates(token);
+
       setState(() => _governorates = governorates);
 
-      if (_selectedGovernorateId != null && _selectedGovernorateId!.isNotEmpty) {
+      if (_selectedGovernorateId != null &&
+          _selectedGovernorateId!.isNotEmpty) {
         final sel = governorates.firstWhere(
           (g) => g.id == _selectedGovernorateId,
           orElse: () => Governorate(id: '', name: ''),
@@ -132,22 +157,29 @@ class _EditLocalisationState extends ConsumerState<EditLocalisation>
               .read(localisationProvider.notifier)
               .setGovernorate(id: _selectedGovernorateId!, name: selName);
         }
-        await _loadCitiesForGovernorate(_selectedGovernorateId!, clearSelectedCity: false);
+        await _loadCitiesForGovernorate(
+          _selectedGovernorateId!,
+          clearSelectedCity: false,
+        );
       }
-    } catch (e) {
-      debugPrint('Exception _loadGovernorates: $e');
-      _showLocationDialog(
-        DialogType.error,
-        'Erreur',
-        'Erreur lors du chargement des gouvernorats : $e',
-      );
+    } catch (e, st) {
+      debugPrint('Exception _loadGovernorates: $e\n$st');
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _showLocationDialog(
+          DialogType.error,
+          'Erreur',
+          'Erreur lors du chargement des gouvernorats : $e',
+        );
+      });
     } finally {
       setState(() => _isLoading = false);
     }
   }
 
-  Future<void> _loadCitiesForGovernorate(String governorateId,
-      {bool clearSelectedCity = true}) async {
+  Future<void> _loadCitiesForGovernorate(
+    String governorateId, {
+    bool clearSelectedCity = true,
+  }) async {
     setState(() {
       _cities = [];
       if (clearSelectedCity) _selectedCityId = null;
@@ -156,10 +188,13 @@ class _EditLocalisationState extends ConsumerState<EditLocalisation>
 
     try {
       final token = ref.read(authNotifierProvider).token;
+      List<City> cities;
       if (token == null) {
-        throw Exception('Token manquant. Veuillez vous reconnecter.');
+        cities = await CityApi.getCitiesByGovernoratePublic(governorateId);
+      } else {
+        cities = await CityApi.getCitiesByGovernorate(token, governorateId);
       }
-      final cities = await CityApi.getCitiesByGovernorate(token, governorateId);
+
       setState(() => _cities = cities);
 
       if (!clearSelectedCity &&
@@ -171,16 +206,20 @@ class _EditLocalisationState extends ConsumerState<EditLocalisation>
         );
         final selName = sel.name ?? '';
         if (selName.isNotEmpty) {
-          ref.read(localisationProvider.notifier).setCity(id: _selectedCityId!, name: selName);
+          ref
+              .read(localisationProvider.notifier)
+              .setCity(id: _selectedCityId!, name: selName);
         }
       }
-    } catch (e) {
-      debugPrint('Exception _loadCitiesForGovernorate: $e');
-      _showLocationDialog(
-        DialogType.error,
-        'Erreur',
-        'Erreur lors du chargement des villes : $e',
-      );
+    } catch (e, st) {
+      debugPrint('Exception _loadCitiesForGovernorate: $e\n$st');
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _showLocationDialog(
+          DialogType.error,
+          'Erreur',
+          'Erreur lors du chargement des villes : $e',
+        );
+      });
     } finally {
       setState(() => _isLoading = false);
     }
@@ -222,7 +261,8 @@ class _EditLocalisationState extends ConsumerState<EditLocalisation>
       }
 
       Position position = await Geolocator.getCurrentPosition(
-          desiredAccuracy: LocationAccuracy.high);
+        desiredAccuracy: LocationAccuracy.high,
+      );
       final latlng = LatLng(position.latitude, position.longitude);
 
       ref.read(clientLocationProvider.notifier).setPosition(latlng);
@@ -261,113 +301,86 @@ class _EditLocalisationState extends ConsumerState<EditLocalisation>
   }
 
   Future<void> _saveLocation() async {
-    if (!_formKey.currentState!.validate()) return;
-    if (_selectedGovernorateId == null || _selectedCityId == null) {
-      _showLocationDialog(
-        DialogType.error,
-        'Champs manquants',
-        'Veuillez sélectionner un gouvernorat et une ville.',
-      );
-      return;
-    }
+  if (!_formKey.currentState!.validate()) return;
 
-    setState(() => _isLoading = true);
-
-    try {
-      // Prepare data using localisationProvider
-      final localisation = ref.read(localisationProvider);
-      final garagenom = _registrationData['garagenom']?.toString() ?? 'Mon Garage';
-
-      // Use localisation.toPayload if available (LocalisationNotifier defines it)
-      final payload = ref.read(localisationProvider.notifier).toPayload(garagenom: garagenom);
-
-      // Validate required fields
-      if ((payload['username'] as String?)?.isEmpty == true ||
-          (payload['email'] as String?)?.isEmpty == true ||
-          (payload['phone'] as String?)?.isEmpty == true ||
-          (payload['matriculefiscal'] as String?)?.isEmpty == true) {
-        _showLocationDialog(
-          DialogType.error,
-          'Champs manquants',
-          'Veuillez vérifier : nom, email, téléphone et matricule fiscal sont requis.',
-        );
-        return;
-      }
-
-      // Get token
-      final token = ref.read(authNotifierProvider).token;
-      if (token == null) {
-        throw Exception('Token manquant. Veuillez vous reconnecter.');
-      }
-
-      // Convert location map -> user_model.Location? (user model attendu par UserApi)
-      user_model.Location? locationObj;
-      final locRaw = payload['location'];
-      if (locRaw != null) {
-        if (locRaw is user_model.Location) {
-          locationObj = locRaw;
-        } else if (locRaw is Map) {
-          // safe cast to Map<String, dynamic>
-          final map = Map<String, dynamic>.from(locRaw);
-          locationObj = user_model.Location.fromJson(map);
-        }
-      }
-
-      // Call completeProfile
-      final user = await UserApi.completeProfile(
-        token: token,
-        username: payload['username'] as String,
-        garagenom: payload['garagenom'] as String,
-        matriculefiscal: payload['matriculefiscal'] as String,
-        email: payload['email'] as String,
-        phone: payload['phone'] as String,
-        governorateId: payload['governorateId'] as String,
-        cityId: payload['cityId'] as String,
-        governorateName: payload['governorateName'] as String?,
-        cityName: payload['cityName'] as String?,
-        streetAddress: (payload['streetAddress'] as String?)?.isNotEmpty == true
-            ? (payload['streetAddress'] as String)
-            : null,
-        location: locationObj, // user_model.Location? (correct type)
-      );
-
-      // Update auth provider
-      await ref.read(authNotifierProvider.notifier).setUser(user);
-
-      AwesomeDialog(
-        context: context,
-        dialogType: DialogType.success,
-        animType: AnimType.bottomSlide,
-        title: 'Profil complété',
-        desc: 'Votre profil a été mis à jour avec succès.',
-        btnOkText: 'Continuer',
-        btnOkColor: primaryColor,
-        btnOkOnPress: () {
-          Get.offAllNamed(
-            AppRoutes.mecaHome,
-            arguments: {
-              'justLoggedIn': true,
-              'message': 'Profil complété avec succès.',
-            },
-          );
-        },
-      ).show();
-    } catch (e) {
-      _showLocationDialog(
-        DialogType.error,
-        'Erreur',
-        'Erreur lors de la mise à jour : $e',
-      );
-    } finally {
-      setState(() => _isLoading = false);
-    }
+  if (_selectedGovernorateId == null || _selectedCityId == null) {
+    _showLocationDialog(
+      DialogType.error,
+      'Champs manquants',
+      'Veuillez sélectionner un gouvernorat et une ville.',
+    );
+    return;
   }
+
+  setState(() => _isLoading = true);
+
+  try {
+    // Récupérer token et user depuis Get.arguments
+    final args = Get.arguments as Map<String, dynamic>;
+    final token = args['token'] as String?;
+    final user = args['user'] as user_model.User?;
+
+    if (token == null || user == null) {
+      throw Exception('Token ou utilisateur manquant');
+    }
+
+    // Vérifier la position
+    final localisation = ref.read(localisationProvider);
+    if (localisation.position == null) {
+      throw Exception('Localisation non définie');
+    }
+    final latitude = localisation.position!.latitude;
+    final longitude = localisation.position!.longitude;
+
+    // Appel API pour compléter le profil
+    await UserApi.completeProfile(
+      token: token,
+      username: user.username,
+      garagenom: user.garagenom ?? '',
+      matriculefiscal: user.matriculefiscal ?? '',
+      email: user.email,
+      phone: user.phone ?? '',
+      governorateId: _selectedGovernorateId!,
+      cityId: _selectedCityId!,
+      governorateName: localisation.governorateName,
+      cityName: localisation.cityName,
+      streetAddress: adresseController.text,
+      location: user_model.Location(
+        type: 'Point',
+        coordinates: [longitude, latitude],
+      ),
+    );
+
+    // Succès et redirection
+    AwesomeDialog(
+      context: context,
+      dialogType: DialogType.success,
+      animType: AnimType.bottomSlide,
+      title: 'Profil complété',
+      desc: 'Votre profil a été mis à jour avec succès.',
+      btnOkText: 'Continuer',
+      btnOkColor: primaryColor,
+      btnOkOnPress: () {
+        Get.offAllNamed(AppRoutes.mecaHome);
+      },
+    ).show();
+  } catch (e) {
+    _showLocationDialog(
+      DialogType.error,
+      'Erreur',
+      'Erreur lors de la mise à jour : $e',
+    );
+  } finally {
+    setState(() => _isLoading = false);
+  }
+}
+
 
   Future<void> _showSelectionSheet({
     required String title,
     required List<dynamic> options,
     required String? selectedId,
-    required void Function(String id) onSelect,
+    required FutureOr<void> Function(String id) onSelect, // <-- futureOr
   }) async {
     if (options.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -388,7 +401,10 @@ class _EditLocalisationState extends ConsumerState<EditLocalisation>
             mainAxisSize: MainAxisSize.min,
             children: [
               Padding(
-                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                padding: const EdgeInsets.symmetric(
+                  vertical: 12,
+                  horizontal: 16,
+                ),
                 child: Row(
                   children: [
                     Text(
@@ -422,9 +438,23 @@ class _EditLocalisationState extends ConsumerState<EditLocalisation>
                       trailing: isSelected
                           ? const Icon(Icons.check, color: primaryColor)
                           : null,
-                      onTap: () {
-                        onSelect(id);
-                        Navigator.of(ctx).pop();
+                      onTap: () async {
+                        try {
+                          final res = onSelect(id);
+                          if (res is Future) await res;
+                        } catch (e) {
+                          // Si onSelect échoue, log et laisser le sheet ouvert ou fermer selon ton choix
+                          debugPrint('_showSelectionSheet onSelect error: $e');
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            _showLocationDialog(
+                              DialogType.error,
+                              'Erreur',
+                              'Erreur interne : $e',
+                            );
+                          });
+                        } finally {
+                          Navigator.of(ctx).pop();
+                        }
                       },
                     );
                   },
@@ -513,7 +543,9 @@ class _EditLocalisationState extends ConsumerState<EditLocalisation>
                                   ),
                                 )
                               : const Icon(Icons.save),
-                          label: const Text('Sauvegarder et compléter le profil'),
+                          label: const Text(
+                            'Sauvegarder et compléter le profil',
+                          ),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: primaryColor,
                             padding: const EdgeInsets.symmetric(vertical: 16),
@@ -557,11 +589,7 @@ class _EditLocalisationState extends ConsumerState<EditLocalisation>
                     color: primaryColor.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Icon(
-                    Icons.map,
-                    color: primaryColor,
-                    size: 24,
-                  ),
+                  child: const Icon(Icons.map, color: primaryColor, size: 24),
                 ),
                 const SizedBox(width: 16),
                 const Text(
@@ -597,7 +625,9 @@ class _EditLocalisationState extends ConsumerState<EditLocalisation>
                       clientLocation.position ?? LatLng(36.8065, 10.1815),
                   initialZoom: 13,
                   onTap: (tapPosition, latlng) {
-                    ref.read(clientLocationProvider.notifier).setPosition(latlng);
+                    ref
+                        .read(clientLocationProvider.notifier)
+                        .setPosition(latlng);
                     ref.read(localisationProvider.notifier).setPosition(latlng);
                     try {
                       mapController.move(latlng, 16);
@@ -609,7 +639,8 @@ class _EditLocalisationState extends ConsumerState<EditLocalisation>
                 ),
                 children: [
                   TileLayer(
-                    urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                    urlTemplate:
+                        'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                     userAgentPackageName: 'com.garagelink.app',
                   ),
                   if (clientLocation.position != null)
@@ -655,11 +686,7 @@ class _EditLocalisationState extends ConsumerState<EditLocalisation>
               ),
               child: Row(
                 children: [
-                  const Icon(
-                    Icons.location_on,
-                    color: primaryColor,
-                    size: 20,
-                  ),
+                  const Icon(Icons.location_on, color: primaryColor, size: 20),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -700,7 +727,9 @@ class _EditLocalisationState extends ConsumerState<EditLocalisation>
                       )
                     : const Icon(Icons.my_location, size: 22),
                 label: Text(
-                  _isLoading ? 'Localisation...' : 'Utiliser ma position actuelle',
+                  _isLoading
+                      ? 'Localisation...'
+                      : 'Utiliser ma position actuelle',
                   style: const TextStyle(
                     fontWeight: FontWeight.w600,
                     fontSize: 16,
@@ -745,14 +774,16 @@ class _EditLocalisationState extends ConsumerState<EditLocalisation>
   }
 
   Widget _buildFormCard() {
-    final selectedGovernorateName = _governorates
+    final selectedGovernorateName =
+        _governorates
             .firstWhere(
               (g) => g.id == _selectedGovernorateId,
               orElse: () => Governorate(id: '', name: ''),
             )
             .name ??
         '';
-    final selectedCityName = _cities
+    final selectedCityName =
+        _cities
             .firstWhere(
               (c) => c.id == _selectedCityId,
               orElse: () => City(id: '', name: ''),
@@ -784,11 +815,7 @@ class _EditLocalisationState extends ConsumerState<EditLocalisation>
                   color: primaryColor.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Icon(
-                  Icons.edit,
-                  color: primaryColor,
-                  size: 24,
-                ),
+                child: const Icon(Icons.edit, color: primaryColor, size: 24),
               ),
               const SizedBox(width: 16),
               const Text(
@@ -832,7 +859,8 @@ class _EditLocalisationState extends ConsumerState<EditLocalisation>
             matriculeController,
             'Matricule fiscal',
             Icons.badge,
-            (v) => ref.read(localisationProvider.notifier).setMatriculeFiscal(v),
+            (v) =>
+                ref.read(localisationProvider.notifier).setMatriculeFiscal(v),
             'Veuillez saisir le matricule fiscal',
             TextInputType.text,
           ),
@@ -844,8 +872,10 @@ class _EditLocalisationState extends ConsumerState<EditLocalisation>
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 12,
+              ),
             ),
             child: InkWell(
               onTap: () async {
@@ -853,22 +883,27 @@ class _EditLocalisationState extends ConsumerState<EditLocalisation>
                   title: 'Choisir un gouvernorat',
                   options: _governorates,
                   selectedId: _selectedGovernorateId,
-                  onSelect: (id) {
+                  onSelect: (id) async {
                     setState(() {
                       _selectedGovernorateId = id;
                       _selectedCityId = null;
                       _cities = [];
                     });
-                    _loadCitiesForGovernorate(id);
+
+                    // Charger les villes pour ce gouvernorat (attendu par le sheet)
+                    await _loadCitiesForGovernorate(id);
+
+                    // mettre à jour le provider avec le nom
                     final sel = _governorates.firstWhere(
                       (g) => g.id == id,
                       orElse: () => Governorate(id: '', name: ''),
                     );
                     final selName = sel.name ?? '';
-                    ref
-                        .read(localisationProvider.notifier)
-                        .setGovernorate(id: id, name: selName);
-                    // No coordinates in Governorate model, so skip map move
+                    if (selName.isNotEmpty) {
+                      ref
+                          .read(localisationProvider.notifier)
+                          .setGovernorate(id: id, name: selName);
+                    }
                   },
                 );
               },
@@ -894,15 +929,19 @@ class _EditLocalisationState extends ConsumerState<EditLocalisation>
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 12,
+              ),
             ),
             child: InkWell(
               onTap: () async {
                 if (_selectedGovernorateId == null) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
-                      content: Text('Veuillez d\'abord sélectionner un gouvernorat'),
+                      content: Text(
+                        'Veuillez d\'abord sélectionner un gouvernorat',
+                      ),
                       backgroundColor: Color(0xFFe74c3c),
                     ),
                   );
@@ -984,7 +1023,10 @@ class _EditLocalisationState extends ConsumerState<EditLocalisation>
         ),
         filled: true,
         fillColor: primaryColor.withOpacity(0.02),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 16,
+        ),
       ),
     );
   }

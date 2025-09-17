@@ -13,11 +13,15 @@ final cityIdProvider = StateProvider<String>((ref) => '');
 final governorateNameProvider = StateProvider<String?>((ref) => null);
 final cityNameProvider = StateProvider<String?>((ref) => null);
 final streetAddressProvider = StateProvider<String?>((ref) => null);
+// Permet de suspendre temporairement les alertes/behaviors déclenchés par un listener global d'auth
+final suspendAuthAlertsProvider = StateProvider<bool>((ref) => false);
 
-final usernameControllerProvider = Provider<TextEditingController>((ref) {
-  final controller = TextEditingController();
-  ref.onDispose(() => controller.dispose());
-  return controller;
+final firstNameControllerProvider = Provider<TextEditingController>((ref) {
+  return TextEditingController();
+});
+
+final lastNameControllerProvider = Provider<TextEditingController>((ref) {
+  return TextEditingController();
 });
 
 final garageNameControllerProvider = Provider<TextEditingController>((ref) {
