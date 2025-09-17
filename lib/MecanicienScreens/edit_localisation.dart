@@ -70,54 +70,60 @@ class _EditLocalisationState extends ConsumerState<EditLocalisation>
     // NE PAS initialiser ici tout ce qui dépend du BuildContext / providers / Get.arguments.
   }
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (_didInitDependencies) return;
-    _didInitDependencies = true;
+ @override
+void didChangeDependencies() {
+  super.didChangeDependencies();
+  if (_didInitDependencies) return;
+  _didInitDependencies = true;
 
-    final args = Get.arguments as Map<String, dynamic>? ?? <String, dynamic>{};
-    _registrationData = args;
+  final args = Get.arguments as Map<String, dynamic>? ?? <String, dynamic>{};
+  _registrationData = args;
 
-    final localisation = ref.read(localisationProvider);
+  // initial local snapshot (sera écrasé par _initFromArgsAndUser si on a un user)
+  final localisation = ref.read(localisationProvider);
 
-    // Initialisation des controllers (sûr ici avant build)
-    nomController = TextEditingController(
-      text: args['username']?.toString() ?? localisation.nomGarage,
-    );
-    emailController = TextEditingController(
-      text: args['email']?.toString() ?? localisation.email,
-    );
-    telController = TextEditingController(
-      text: args['phone']?.toString() ?? localisation.telephone,
-    );
-    adresseController = TextEditingController(text: localisation.adresse);
-    matriculeController = TextEditingController(
-      text: args['matriculefiscal']?.toString() ?? localisation.matriculefiscal,
-    );
+  // Initialisation des controllers (valeurs par défaut)
+  nomController = TextEditingController(
+    text: args['username']?.toString() ?? localisation.nomGarage,
+  );
+  emailController = TextEditingController(
+    text: args['email']?.toString() ?? localisation.email,
+  );
+  telController = TextEditingController(
+    text: args['phone']?.toString() ?? localisation.telephone,
+  );
+  adresseController = TextEditingController(text: localisation.adresse);
+  matriculeController = TextEditingController(
+    text: args['matriculefiscal']?.toString() ?? localisation.matriculefiscal,
+  );
 
-    _selectedGovernorateId =
-        (args['governorateId']?.toString().isNotEmpty == true)
-        ? args['governorateId'].toString()
-        : localisation.governorateId;
-    _selectedCityId = (args['cityId']?.toString().isNotEmpty == true)
-        ? args['cityId'].toString()
-        : localisation.cityId;
+  _selectedGovernorateId =
+      (args['governorateId']?.toString().isNotEmpty == true)
+          ? args['governorateId'].toString()
+          : localisation.governorateId;
+  _selectedCityId = (args['cityId']?.toString().isNotEmpty == true)
+      ? args['cityId'].toString()
+      : localisation.cityId;
 
-    // déplacer la carte après le premier frame (sécurise l'accès au mapController/élément)
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final initialPosition =
-          ref.read(clientLocationProvider).position ??
-          localisation.position ??
-          LatLng(36.8065, 10.1815);
-      try {
-        mapController.move(initialPosition, 14);
-      } catch (_) {}
-    });
+  // déplacer la carte après le premier frame (sécurise l'accès au mapController/élément)
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    final initialPosition =
+        ref.read(clientLocationProvider).position ??
+        localisation.position ??
+        LatLng(36.8065, 10.1815);
+    try {
+      mapController.move(initialPosition, 14);
+    } catch (_) {}
+  });
 
-    // Charger les gouvernorats (async) ; _loadGovernorates() gère token==null et dialogues via post-frame.
-    _loadGovernorates();
-  }
+  // lance l'initialisation asynchrone qui récupère l'utilisateur si besoin
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    _initFromArgsAndUser(args);
+  });
+
+  // Charger les gouvernorats (async)
+  _loadGovernorates();
+}
 
   @override
   void dispose() {
@@ -129,6 +135,97 @@ class _EditLocalisationState extends ConsumerState<EditLocalisation>
     matriculeController.dispose();
     super.dispose();
   }
+
+  /// Initialise les controllers / provider depuis :
+/// 1) Get.arguments (si fourni) sinon
+/// 2) l'utilisateur présent dans auth provider
+/// 3) si token présent mais pas d'user, appelle UserApi.getProfile(token) et met à jour auth provider
+Future<void> _initFromArgsAndUser(Map<String, dynamic> args) async {
+  try {
+    // 1) si args contient déjà des valeurs, on les garde (déjà assignées)
+    // 2) sinon, essayer d'utiliser l'user du provider
+    var user = args['user'] as user_model.User?;
+    var token = args['token'] as String?;
+
+    final authState = ref.read(authNotifierProvider);
+    token ??= authState.token;
+    user ??= authState.user;
+
+    // Si on a un token mais pas d'user : charger le profile depuis l'API et persister
+    if (token != null && user == null) {
+      try {
+        final fetched = await UserApi.getProfile(token);
+        await ref.read(authNotifierProvider.notifier).setUser(fetched);
+        user = fetched;
+      } catch (e) {
+        // ignore : on continue sans user (la page fonctionnera mais champs vides)
+        debugPrint('Could not fetch profile in _initFromArgsAndUser: $e');
+      }
+    }
+
+    if (user != null) {
+      // Remplir les controllers si vides / non fournis via args
+      if ((args['username'] == null || args['username'].toString().isEmpty) && nomController.text.trim().isEmpty) {
+        nomController.text = user.username;
+        ref.read(localisationProvider.notifier).setNomGarage(user.username);
+      }
+      if ((args['email'] == null || args['email'].toString().isEmpty) && emailController.text.trim().isEmpty) {
+        emailController.text = user.email;
+        ref.read(localisationProvider.notifier).setEmail(user.email);
+      }
+      if ((args['phone'] == null || args['phone'].toString().isEmpty) && telController.text.trim().isEmpty) {
+        if (user.phone != null) {
+          telController.text = user.phone!;
+          ref.read(localisationProvider.notifier).setTelephone(user.phone!);
+        }
+      }
+      if ((args['matriculefiscal'] == null || args['matriculefiscal'].toString().isEmpty) && matriculeController.text.trim().isEmpty) {
+        if (user.matriculefiscal != null) {
+          matriculeController.text = user.matriculefiscal!;
+          ref.read(localisationProvider.notifier).setMatriculeFiscal(user.matriculefiscal!);
+        }
+      }
+      // governorate / city / streetAddress
+      if ((user.governorateId?.isNotEmpty ?? false)) {
+        _selectedGovernorateId ??= user.governorateId;
+        ref.read(localisationProvider.notifier).setGovernorate(
+          id: user.governorateId!,
+          name: user.governorateName ?? '',
+        );
+      }
+      if ((user.cityId?.isNotEmpty ?? false)) {
+        _selectedCityId ??= user.cityId;
+        ref.read(localisationProvider.notifier).setCity(
+          id: user.cityId!,
+          name: user.cityName ?? '',
+        );
+      }
+      if ((user.streetAddress?.isNotEmpty ?? false) && adresseController.text.trim().isEmpty) {
+        adresseController.text = user.streetAddress;
+        ref.read(localisationProvider.notifier).setAdresse(user.streetAddress);
+      }
+
+      // Si l'utilisateur a une location GeoJSON, positionner la carte
+      if (user.location?.coordinates != null && user.location!.coordinates.length >= 2) {
+        final lng = user.location!.coordinates[0];
+        final lat = user.location!.coordinates[1];
+        final latlng = LatLng(lat, lng);
+        ref.read(clientLocationProvider.notifier).setPosition(latlng);
+        ref.read(localisationProvider.notifier).setPosition(latlng);
+        // déplacer la carte après frame
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          try {
+            mapController.move(latlng, 14);
+          } catch (e) {
+            debugPrint('mapController.move in initFromUser failed: $e');
+          }
+        });
+      }
+    }
+  } catch (e, st) {
+    debugPrint('_initFromArgsAndUser error: $e\n$st');
+  }
+}
 
   Future<void> _loadGovernorates() async {
     setState(() => _isLoading = true);
@@ -300,7 +397,7 @@ class _EditLocalisationState extends ConsumerState<EditLocalisation>
     ).show();
   }
 
-  Future<void> _saveLocation() async {
+ Future<void> _saveLocation() async {
   if (!_formKey.currentState!.validate()) return;
 
   if (_selectedGovernorateId == null || _selectedCityId == null) {
@@ -315,10 +412,15 @@ class _EditLocalisationState extends ConsumerState<EditLocalisation>
   setState(() => _isLoading = true);
 
   try {
-    // Récupérer token et user depuis Get.arguments
-    final args = Get.arguments as Map<String, dynamic>;
-    final token = args['token'] as String?;
-    final user = args['user'] as user_model.User?;
+    // Récupérer token et user depuis Get.arguments si présents, sinon depuis le provider
+    final args = (Get.arguments as Map<String, dynamic>?) ?? <String, dynamic>{};
+    String? token = args['token'] as String?;
+    user_model.User? user = args['user'] as user_model.User?;
+
+    // fallback : prendre depuis auth provider si absent dans args
+    final authState = ref.read(authNotifierProvider);
+    if (token == null) token = authState.token;
+    if (user == null) user = authState.user;
 
     if (token == null || user == null) {
       throw Exception('Token ou utilisateur manquant');
@@ -332,8 +434,8 @@ class _EditLocalisationState extends ConsumerState<EditLocalisation>
     final latitude = localisation.position!.latitude;
     final longitude = localisation.position!.longitude;
 
-    // Appel API pour compléter le profil
-    await UserApi.completeProfile(
+    // Appel API pour compléter le profil -> récupère l'utilisateur mis à jour
+    final updatedUser = await UserApi.completeProfile(
       token: token,
       username: user.username,
       garagenom: user.garagenom ?? '',
@@ -351,7 +453,10 @@ class _EditLocalisationState extends ConsumerState<EditLocalisation>
       ),
     );
 
-    // Succès et redirection
+    // Mettre à jour le auth provider avec le token + user mis à jour
+    await ref.read(authNotifierProvider.notifier).setToken(token, userToSave: updatedUser);
+
+    // Succès et redirection (dialog puis navigation)
     AwesomeDialog(
       context: context,
       dialogType: DialogType.success,
@@ -361,10 +466,12 @@ class _EditLocalisationState extends ConsumerState<EditLocalisation>
       btnOkText: 'Continuer',
       btnOkColor: primaryColor,
       btnOkOnPress: () {
+        // Remplacer la pile et aller à la home
         Get.offAllNamed(AppRoutes.mecaHome);
       },
     ).show();
-  } catch (e) {
+  } catch (e, st) {
+    debugPrint('_saveLocation error: $e\n$st');
     _showLocationDialog(
       DialogType.error,
       'Erreur',
@@ -374,6 +481,7 @@ class _EditLocalisationState extends ConsumerState<EditLocalisation>
     setState(() => _isLoading = false);
   }
 }
+
 
 
   Future<void> _showSelectionSheet({
