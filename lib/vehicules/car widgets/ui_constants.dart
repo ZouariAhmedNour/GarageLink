@@ -17,32 +17,32 @@ String formatDate(DateTime? d) {
   return '$dd/$mm/$yyyy';
 }
 
-String carburantLabel(Carburant carburant) {
-  switch (carburant) {
-    case Carburant.essence:
+String fuelTypeLabel(FuelType fuelType) {
+  switch (fuelType) {
+    case FuelType.essence:
       return 'Essence';
-    case Carburant.diesel:
+    case FuelType.diesel:
       return 'Diesel';
-    case Carburant.gpl:
+    case FuelType.gpl:
       return 'GPL';
-    case Carburant.electrique:
+    case FuelType.electrique:
       return 'Électrique';
-    case Carburant.hybride:
+    case FuelType.hybride:
       return 'Hybride';
-    }
+  }
 }
 
-IconData carburantIcon(Carburant carburant) {
-  switch (carburant) {
-    case Carburant.essence:
+IconData fuelTypeIcon(FuelType fuelType) {
+  switch (fuelType) {
+    case FuelType.essence:
       return Icons.local_gas_station;
-    case Carburant.diesel:
+    case FuelType.diesel:
       return Icons.oil_barrel;
-    case Carburant.gpl:
+    case FuelType.gpl:
       return Icons.propane_tank;
-    case Carburant.electrique:
+    case FuelType.electrique:
       return Icons.electric_bolt;
-    case Carburant.hybride:
+    case FuelType.hybride:
       return Icons.electric_car;
-    }
+  }
 }

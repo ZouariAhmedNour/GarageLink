@@ -1,17 +1,19 @@
-import 'dart:convert';
+// lib/MecanicienScreens/edit_localisation.dart
 import 'package:awesome_dialog/awesome_dialog.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:garagelink/models/cite.dart';
+import 'package:garagelink/models/cite.dart'; // City, City.location (Geo)
 import 'package:garagelink/models/governorate.dart';
+import 'package:garagelink/models/user.dart' as user_model; // alias pour éviter l'ambiguïté Location
+import 'package:garagelink/providers/auth_provider.dart';
+import 'package:garagelink/providers/client_map_provider.dart';
 import 'package:garagelink/providers/localisation_provider.dart';
 import 'package:garagelink/services/cite_api.dart';
 import 'package:garagelink/services/gouvernorat_api.dart';
 import 'package:garagelink/services/user_api.dart';
-import 'package:garagelink/services/api_client.dart';
 import 'package:garagelink/configurations/app_routes.dart';
 import 'package:get/get.dart';
 import 'package:latlong2/latlong.dart';
@@ -26,6 +28,9 @@ class EditLocalisation extends ConsumerStatefulWidget {
 
 class _EditLocalisationState extends ConsumerState<EditLocalisation>
     with TickerProviderStateMixin {
+  static const primaryColor = Color(0xFF357ABD);
+  static const backgroundColor = Color(0xFFF8FAFC);
+
   final MapController mapController = MapController();
   late TextEditingController nomController;
   late TextEditingController emailController;
@@ -37,65 +42,63 @@ class _EditLocalisationState extends ConsumerState<EditLocalisation>
   late Animation<double> _fadeAnimation;
   bool _isLoading = false;
 
-  // data passed from signup page
+  // Data passed from signup page
   late final Map<String, dynamic> _registrationData;
 
-  // governorates / cities lists (list of maps with keys: _id,name,nameAr,...)
-  List<Map<String, dynamic>> _governorates = [];
-  List<Map<String, dynamic>> _cities = [];
+  // Governorates and cities lists
+  List<Governorate> _governorates = [];
+  List<City> _cities = [];
   String? _selectedGovernorateId;
   String? _selectedCityId;
 
-  final ApiClient _apiClient = ApiClient();
+  @override
+  void initState() {
+    super.initState();
 
-@override
-void initState() {
-  super.initState();
+    // Initialize controllers with data from arguments or provider
+    final args = Get.arguments as Map<String, dynamic>? ?? <String, dynamic>{};
+    _registrationData = args;
+    final localisation = ref.read(localisationProvider);
 
-  final localisation = ref.read(localisationProvider);
+    nomController = TextEditingController(
+        text: args['username']?.toString() ?? localisation.nomGarage);
+    emailController = TextEditingController(
+        text: args['email']?.toString() ?? localisation.email);
+    telController = TextEditingController(
+        text: args['phone']?.toString() ?? localisation.telephone);
+    adresseController = TextEditingController(text: localisation.adresse);
+    matriculeController = TextEditingController(
+        text: args['matriculefiscal']?.toString() ?? localisation.matriculefiscal);
 
-  final args = Get.arguments as Map<String, dynamic>? ?? <String, dynamic>{};
-  _registrationData = args;
+    // Set initial governorate and city IDs
+    _selectedGovernorateId = (args['governorateId']?.toString().isNotEmpty == true)
+        ? args['governorateId'].toString()
+        : localisation.governorateId;
+    _selectedCityId = (args['cityId']?.toString().isNotEmpty == true)
+        ? args['cityId'].toString()
+        : localisation.cityId;
 
-  // Priorité : données passées via arguments (signup) -> sinon valeurs du provider
-  final initialName = (args['username'] ?? localisation.nomGarage ?? '').toString();
-  final initialEmail = (args['email'] ?? localisation.email ?? '').toString();
-  final initialPhone = (args['phone'] ?? localisation.telephone ?? '').toString();
-  final initialAddress = (localisation.adresse).toString();
-  final initialMatricule = (args['matriculefiscal'] ?? localisation.matriculefiscal ?? '').toString();
-
-  nomController = TextEditingController(text: initialName);
-  emailController = TextEditingController(text: initialEmail);
-  telController = TextEditingController(text: initialPhone);
-  adresseController = TextEditingController(text: initialAddress);
-  matriculeController = TextEditingController(text: initialMatricule);
-
-  // Pré-remplir les ids si fournis par args / provider
-  _selectedGovernorateId = (args['governorateId']?.toString().isNotEmpty == true)
-      ? args['governorateId'].toString()
-      : (localisation.governorateId);
-
-  _selectedCityId = (args['cityId']?.toString().isNotEmpty == true)
-      ? args['cityId'].toString()
-      : (localisation.cityId);
-
-  // Si provider contient une position, recentrer la carte dessus
-  if (localisation.position != null) {
+    // Center map on existing position
+    final initialPosition = ref.read(clientLocationProvider).position ??
+        localisation.position ??
+        LatLng(36.8065, 10.1815);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       try {
-        mapController.move(localisation.position!, 14);
+        mapController.move(initialPosition, 14);
       } catch (_) {}
     });
+
+    // Initialize animation
+    _animationController =
+        AnimationController(duration: const Duration(milliseconds: 800), vsync: this);
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _animationController, curve: Curves.easeInOut),
+    );
+    _animationController.forward();
+
+    // Load governorates
+    _loadGovernorates();
   }
-
-  _animationController = AnimationController(duration: const Duration(milliseconds: 800), vsync: this);
-  _fadeAnimation = CurvedAnimation(parent: _animationController, curve: Curves.easeInOut);
-  _animationController.forward();
-
-  // Charge gouvernorats -> si un gouvernorat était déjà sélectionné,
-  // _loadGovernorates le détectera et chargera les villes automatiquement.
-  _loadGovernorates();
-}
 
   @override
   void dispose() {
@@ -108,164 +111,83 @@ void initState() {
     super.dispose();
   }
 
-Future<void> _loadGovernorates() async {
-  setState(() => _isLoading = true);
-  try {
-    final res = await GouvernoratApi().getGovernorates();
-    if (res['success'] == true && res['data'] is List) {
-      final List data = res['data'];
-      final parsed = <Map<String, dynamic>>[];
-      for (final e in data) {
-        String id = '';
-        String name = '';
-        String? nameAr;
-        double? lat;
-        double? lng;
-
-        if (e is Governorate) {
-          id = e.id;
-          name = e.name;
-          nameAr = e.nameAr;
-        } else if (e is Map) {
-          id = (e['_id'] ?? e['id'] ?? '').toString();
-          name = (e['name'] ?? e['title'] ?? '').toString();
-          nameAr = e['nameAr']?.toString();
-
-          final loc = e['location'];
-          if (loc is Map &&
-              loc['coordinates'] is List &&
-              (loc['coordinates'] as List).length >= 2) {
-            final coords = (loc['coordinates'] as List);
-            lng = double.tryParse(coords[0].toString());
-            lat = double.tryParse(coords[1].toString());
-          }
-
-          lat ??= double.tryParse((e['lat'] ?? e['latitude'] ?? e['y'] ?? '').toString());
-          lng ??= double.tryParse((e['lng'] ?? e['longitude'] ?? e['lon'] ?? e['x'] ?? '').toString());
-        } else {
-          id = e.toString();
-          name = e.toString();
-        }
-
-        parsed.add({
-          "_id": id,
-          "name": name,
-          "nameAr": nameAr,
-          "lat": lat,
-          "lng": lng,
-        });
+  Future<void> _loadGovernorates() async {
+    setState(() => _isLoading = true);
+    try {
+      final token = ref.read(authNotifierProvider).token;
+      if (token == null) {
+        throw Exception('Token manquant. Veuillez vous reconnecter.');
       }
+      final governorates = await GovernorateApi.getAllGovernorates(token);
+      setState(() => _governorates = governorates);
 
-      setState(() => _governorates = parsed);
-
-      // Si un gouvernorat était déjà sélectionné (args ou provider), on cherche son nom et on met à jour le provider
       if (_selectedGovernorateId != null && _selectedGovernorateId!.isNotEmpty) {
-        final sel = _governorates.firstWhere(
-          (g) => (g['_id'] ?? '') == _selectedGovernorateId,
-          orElse: () => <String, dynamic>{},
+        final sel = governorates.firstWhere(
+          (g) => g.id == _selectedGovernorateId,
+          orElse: () => Governorate(id: '', name: ''),
         );
-        final selName = (sel['name'] ?? '').toString();
+        final selName = sel.name ?? '';
         if (selName.isNotEmpty) {
-          // mettre à jour le provider pour garder l'état cohérent
-          ref.read(localisationProvider.notifier).setGovernorate(id: _selectedGovernorateId!, name: selName);
+          ref
+              .read(localisationProvider.notifier)
+              .setGovernorate(id: _selectedGovernorateId!, name: selName);
         }
-        // charger les villes pour ce gouvernorat (ne pas effacer _selectedCityId si il était passé en args)
         await _loadCitiesForGovernorate(_selectedGovernorateId!, clearSelectedCity: false);
       }
-    } else {
-      debugPrint('Erreur chargement gouvernorats: ${res['message']}');
+    } catch (e) {
+      debugPrint('Exception _loadGovernorates: $e');
+      _showLocationDialog(
+        DialogType.error,
+        'Erreur',
+        'Erreur lors du chargement des gouvernorats : $e',
+      );
+    } finally {
+      setState(() => _isLoading = false);
     }
-  } catch (e) {
-    debugPrint('Exception _loadGovernorates: $e');
-  } finally {
-    setState(() => _isLoading = false);
   }
-}
 
- Future<void> _loadCitiesForGovernorate(String governorateId, {bool clearSelectedCity = true}) async {
-  setState(() {
-    _cities = [];
-    if (clearSelectedCity) _selectedCityId = null;
-    _isLoading = true;
-  });
+  Future<void> _loadCitiesForGovernorate(String governorateId,
+      {bool clearSelectedCity = true}) async {
+    setState(() {
+      _cities = [];
+      if (clearSelectedCity) _selectedCityId = null;
+      _isLoading = true;
+    });
 
-  try {
-    final res = await CiteApi().getCities(governorateId);
-    if (res['success'] == true && res['data'] is List) {
-      final List data = res['data'];
-      final parsed = <Map<String, dynamic>>[];
-      for (final e in data) {
-        String id = '';
-        String name = '';
-        String? nameAr;
-        String? postalCode;
-        double? lat;
-        double? lng;
-
-        if (e is City) {
-          id = e.id;
-          name = e.name;
-          nameAr = e.nameAr;
-          postalCode = e.postalCode;
-          if (e.coordinates != null && e.coordinates!.length >= 2) {
-            lng = e.coordinates![0];
-            lat = e.coordinates![1];
-          }
-        } else if (e is Map) {
-          id = (e['_id'] ?? e['id'] ?? '').toString();
-          name = (e['name'] ?? '').toString();
-          nameAr = e['nameAr']?.toString();
-          postalCode = e['postalCode']?.toString();
-
-          final loc = e['location'];
-          if (loc is Map && loc['coordinates'] is List && (loc['coordinates'] as List).length >= 2) {
-            final coords = (loc['coordinates'] as List);
-            lng = double.tryParse(coords[0].toString());
-            lat = double.tryParse(coords[1].toString());
-          }
-
-          lat ??= double.tryParse((e['lat'] ?? e['latitude'] ?? e['y'] ?? '').toString());
-          lng ??= double.tryParse((e['lng'] ?? e['longitude'] ?? e['lon'] ?? e['x'] ?? '').toString());
-        } else {
-          id = e.toString();
-          name = e.toString();
-        }
-
-        parsed.add({
-          "_id": id,
-          "name": name,
-          "nameAr": nameAr,
-          "postalCode": postalCode,
-          "lat": lat,
-          "lng": lng,
-        });
+    try {
+      final token = ref.read(authNotifierProvider).token;
+      if (token == null) {
+        throw Exception('Token manquant. Veuillez vous reconnecter.');
       }
-      setState(() => _cities = parsed);
+      final cities = await CityApi.getCitiesByGovernorate(token, governorateId);
+      setState(() => _cities = cities);
 
-      // si on conserve la selection et qu'il y avait une cityId passée en args/provider, on met à jour le provider
-      if (!clearSelectedCity && _selectedCityId != null && _selectedCityId!.isNotEmpty) {
-        final sel = _cities.firstWhere(
-          (c) => (c['_id'] ?? '') == _selectedCityId,
-          orElse: () => <String, dynamic>{},
+      if (!clearSelectedCity &&
+          _selectedCityId != null &&
+          _selectedCityId!.isNotEmpty) {
+        final sel = cities.firstWhere(
+          (c) => c.id == _selectedCityId,
+          orElse: () => City(id: '', name: ''),
         );
-        final selName = (sel['name'] ?? '').toString();
+        final selName = sel.name ?? '';
         if (selName.isNotEmpty) {
           ref.read(localisationProvider.notifier).setCity(id: _selectedCityId!, name: selName);
         }
       }
-    } else {
-      debugPrint('Erreur chargement villes: ${res['message']}');
+    } catch (e) {
+      debugPrint('Exception _loadCitiesForGovernorate: $e');
+      _showLocationDialog(
+        DialogType.error,
+        'Erreur',
+        'Erreur lors du chargement des villes : $e',
+      );
+    } finally {
+      setState(() => _isLoading = false);
     }
-  } catch (e) {
-    debugPrint('Exception _loadCitiesForGovernorate: $e');
-  } finally {
-    setState(() => _isLoading = false);
   }
-}
 
   Future<void> _useCurrentLocation() async {
     setState(() => _isLoading = true);
-
     try {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) {
@@ -300,29 +222,28 @@ Future<void> _loadGovernorates() async {
       }
 
       Position position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
-      );
+          desiredAccuracy: LocationAccuracy.high);
       final latlng = LatLng(position.latitude, position.longitude);
 
+      ref.read(clientLocationProvider.notifier).setPosition(latlng);
       ref.read(localisationProvider.notifier).setPosition(latlng);
       try {
         mapController.move(latlng, 16);
       } catch (e) {
-        // mapController peut ne pas être prêt selon timing
-        if (kDebugMode) debugPrint('mapController.move error: $e');
+        debugPrint('mapController.move error: $e');
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Position actuelle détectée avec succès ✓'),
-          backgroundColor: Color(0xFF357ABD),
+          backgroundColor: primaryColor,
         ),
       );
     } catch (e) {
       _showLocationDialog(
         DialogType.error,
         'Erreur',
-        'Impossible d\'obtenir votre position.',
+        'Impossible d\'obtenir votre position : $e',
       );
     } finally {
       setState(() => _isLoading = false);
@@ -339,183 +260,116 @@ Future<void> _loadGovernorates() async {
     ).show();
   }
 
-Future<void> _saveLocation() async {
-  if (!_formKey.currentState!.validate()) return;
-
-  setState(() => _isLoading = true);
-
-  try {
-    // Valeurs prioritaires : controllers > args > provider
-    final username = nomController.text.trim().isNotEmpty
-        ? nomController.text.trim()
-        : (_registrationData['username']?.toString() ?? '');
-    final email = emailController.text.trim().isNotEmpty
-        ? emailController.text.trim()
-        : (_registrationData['email']?.toString() ?? '');
-    final phone = telController.text.trim().isNotEmpty
-        ? telController.text.trim()
-        : (_registrationData['phone']?.toString() ?? '');
-    final password = (_registrationData['password'] ?? '').toString();
-
-    // Validation minimale côté client
-    if (username.isEmpty || email.isEmpty || phone.isEmpty || password.isEmpty) {
+  Future<void> _saveLocation() async {
+    if (!_formKey.currentState!.validate()) return;
+    if (_selectedGovernorateId == null || _selectedCityId == null) {
       _showLocationDialog(
         DialogType.error,
         'Champs manquants',
-        'Veuillez vérifier : nom, email, téléphone et mot de passe sont requis.',
+        'Veuillez sélectionner un gouvernorat et une ville.',
       );
-      setState(() => _isLoading = false);
       return;
     }
 
-    // Récupère l'état du provider
-    final localisationState = ref.read(localisationProvider);
-    final LatLng? pos = localisationState.position;
+    setState(() => _isLoading = true);
 
-    Map<String, dynamic>? location;
-    if (pos != null) {
-      location = {
-        "type": "Point",
-        "coordinates": [pos.longitude, pos.latitude], // lng, lat
-      };
-    }
+    try {
+      // Prepare data using localisationProvider
+      final localisation = ref.read(localisationProvider);
+      final garagenom = _registrationData['garagenom']?.toString() ?? 'Mon Garage';
 
-    // Fallback pour gouvernorat / ville (provider si écran n'a pas été modifié)
-    final governorateIdToSend = _selectedGovernorateId ?? localisationState.governorateId;
-    final cityIdToSend = _selectedCityId ?? localisationState.cityId;
+      // Use localisation.toPayload if available (LocalisationNotifier defines it)
+      final payload = ref.read(localisationProvider.notifier).toPayload(garagenom: garagenom);
 
-    // Récupérer aussi les noms : d'abord args > provider > essayer lookup dans listes chargées
-    String? governorateNameToSend = _registrationData['governorateName']?.toString();
-    governorateNameToSend ??= localisationState.governorateName;
-    if ((governorateNameToSend == null || governorateNameToSend.isEmpty) && governorateIdToSend != null) {
-      final sel = _governorates.firstWhere(
-        (g) => (g['_id'] ?? '') == governorateIdToSend,
-        orElse: () => <String, dynamic>{},
-      );
-      governorateNameToSend = (sel['name'] ?? '').toString();
-    }
-
-    String? cityNameToSend = _registrationData['cityName']?.toString();
-    cityNameToSend ??= localisationState.cityName;
-    if ((cityNameToSend == null || cityNameToSend.isEmpty) && cityIdToSend != null) {
-      final sel = _cities.firstWhere(
-        (c) => (c['_id'] ?? '') == cityIdToSend,
-        orElse: () => <String, dynamic>{},
-      );
-      cityNameToSend = (sel['name'] ?? '').toString();
-    }
-
-    // fallback pour streetAddress : controller > provider > ''
-    final street = adresseController.text.trim().isNotEmpty
-        ? adresseController.text.trim()
-        : (localisationState.adresse ?? '');
-
-    // Prépare le payload sans inclure de null explicite, inclut les names
-    final payload = <String, dynamic>{
-      "username": username,
-      "garagenom": (_registrationData['garagenom']?.toString().isNotEmpty == true)
-          ? _registrationData['garagenom'].toString()
-          : "Mon Garage",
-      "matriculefiscal": matriculeController.text.trim(),
-      "email": email,
-      "password": password,
-      "phone": phone,
-      if (street.isNotEmpty) "streetAddress": street,
-      if (governorateIdToSend != null && governorateIdToSend.isNotEmpty) "governorateId": governorateIdToSend,
-      if (governorateNameToSend != null && governorateNameToSend.isNotEmpty) "governorateName": governorateNameToSend,
-      if (cityIdToSend != null && cityIdToSend.isNotEmpty) "cityId": cityIdToSend,
-      if (cityNameToSend != null && cityNameToSend.isNotEmpty) "cityName": cityNameToSend,
-      if (location != null) "location": location,
-    };
-
-    if (kDebugMode) {
-      debugPrint('[REGISTER PAYLOAD] ${jsonEncode(payload)}');
-    }
-
-    // Appel au service
-    final userService = UserService();
-    final res = await userService.register(
-      username: payload['username'],
-      garagenom: payload['garagenom'],
-      matriculefiscal: payload['matriculefiscal'],
-      email: payload['email'],
-      password: payload['password'],
-      phone: payload['phone'],
-      streetAddress: payload.containsKey('streetAddress') ? payload['streetAddress'] as String : null,
-      location: payload.containsKey('location') ? payload['location'] as Map<String, dynamic> : null,
-      governorateId: payload.containsKey('governorateId') ? payload['governorateId'] as String : null,
-      cityId: payload.containsKey('cityId') ? payload['cityId'] as String : null,
-    );
-
-    if (kDebugMode) debugPrint('[REGISTER RESPONSE] $res');
-
-    if (res['success'] == true) {
-      // extraction du token possible selon différentes structures
-      String? token;
-      if (res.containsKey('token') && res['token'] is String) {
-        token = res['token'] as String;
-      } else if (res.containsKey('accessToken') && res['accessToken'] is String) {
-        token = res['accessToken'] as String;
-      } else if (res.containsKey('data') && res['data'] is Map && (res['data']['token'] != null)) {
-        token = res['data']['token'] as String?;
+      // Validate required fields
+      if ((payload['username'] as String?)?.isEmpty == true ||
+          (payload['email'] as String?)?.isEmpty == true ||
+          (payload['phone'] as String?)?.isEmpty == true ||
+          (payload['matriculefiscal'] as String?)?.isEmpty == true) {
+        _showLocationDialog(
+          DialogType.error,
+          'Champs manquants',
+          'Veuillez vérifier : nom, email, téléphone et matricule fiscal sont requis.',
+        );
+        return;
       }
 
-      if (token != null && token.isNotEmpty) {
-        try {
-          await _apiClient.saveToken(token);
-          if (kDebugMode) debugPrint('Token saved after register.');
-        } catch (e) {
-          if (kDebugMode) debugPrint('Saving token failed: $e');
+      // Get token
+      final token = ref.read(authNotifierProvider).token;
+      if (token == null) {
+        throw Exception('Token manquant. Veuillez vous reconnecter.');
+      }
+
+      // Convert location map -> user_model.Location? (user model attendu par UserApi)
+      user_model.Location? locationObj;
+      final locRaw = payload['location'];
+      if (locRaw != null) {
+        if (locRaw is user_model.Location) {
+          locationObj = locRaw;
+        } else if (locRaw is Map) {
+          // safe cast to Map<String, dynamic>
+          final map = Map<String, dynamic>.from(locRaw);
+          locationObj = user_model.Location.fromJson(map);
         }
       }
+
+      // Call completeProfile
+      final user = await UserApi.completeProfile(
+        token: token,
+        username: payload['username'] as String,
+        garagenom: payload['garagenom'] as String,
+        matriculefiscal: payload['matriculefiscal'] as String,
+        email: payload['email'] as String,
+        phone: payload['phone'] as String,
+        governorateId: payload['governorateId'] as String,
+        cityId: payload['cityId'] as String,
+        governorateName: payload['governorateName'] as String?,
+        cityName: payload['cityName'] as String?,
+        streetAddress: (payload['streetAddress'] as String?)?.isNotEmpty == true
+            ? (payload['streetAddress'] as String)
+            : null,
+        location: locationObj, // user_model.Location? (correct type)
+      );
+
+      // Update auth provider
+      await ref.read(authNotifierProvider.notifier).setUser(user);
 
       AwesomeDialog(
         context: context,
         dialogType: DialogType.success,
         animType: AnimType.bottomSlide,
-        title: "Compte créé",
-        desc: "Votre compte a été créé avec succès.",
-        btnOkText: "Continuer",
-        btnOkColor: const Color(0xFF357ABD),
+        title: 'Profil complété',
+        desc: 'Votre profil a été mis à jour avec succès.',
+        btnOkText: 'Continuer',
+        btnOkColor: primaryColor,
         btnOkOnPress: () {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            Get.offAllNamed(
-              AppRoutes.mecaHome,
-              arguments: {
-                'justLoggedIn': true,
-                'message': token != null ? 'Compte créé et connecté.' : 'Compte créé. Connectez-vous.',
-              },
-            );
-          });
+          Get.offAllNamed(
+            AppRoutes.mecaHome,
+            arguments: {
+              'justLoggedIn': true,
+              'message': 'Profil complété avec succès.',
+            },
+          );
         },
       ).show();
-    } else {
+    } catch (e) {
       _showLocationDialog(
         DialogType.error,
         'Erreur',
-        res['message'] ?? 'Impossible de créer le compte',
+        'Erreur lors de la mise à jour : $e',
       );
+    } finally {
+      setState(() => _isLoading = false);
     }
-  } catch (e) {
-    _showLocationDialog(
-      DialogType.error,
-      'Erreur',
-      'Erreur lors de la communication : $e',
-    );
-  } finally {
-    setState(() => _isLoading = false);
   }
-}
 
-  // ---------- Helper: open selection sheet ----------
   Future<void> _showSelectionSheet({
     required String title,
-    required List<Map<String, dynamic>> options,
+    required List<dynamic> options,
     required String? selectedId,
     required void Function(String id) onSelect,
   }) async {
     if (options.isEmpty) {
-      // nothing to select
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Aucune option disponible'),
@@ -534,10 +388,7 @@ Future<void> _saveLocation() async {
             mainAxisSize: MainAxisSize.min,
             children: [
               Padding(
-                padding: const EdgeInsets.symmetric(
-                  vertical: 12,
-                  horizontal: 16,
-                ),
+                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
                 child: Row(
                   children: [
                     Text(
@@ -563,13 +414,13 @@ Future<void> _saveLocation() async {
                   separatorBuilder: (_, __) => const Divider(height: 1),
                   itemBuilder: (c, i) {
                     final opt = options[i];
-                    final id = (opt['_id'] ?? opt['id'] ?? '').toString();
-                    final name = (opt['name'] ?? opt['title'] ?? id).toString();
+                    final id = opt.id?.toString() ?? '';
+                    final name = opt.name?.toString() ?? id;
                     final isSelected = id == selectedId;
                     return ListTile(
                       title: Text(name),
                       trailing: isSelected
-                          ? const Icon(Icons.check, color: Color(0xFF357ABD))
+                          ? const Icon(Icons.check, color: primaryColor)
                           : null,
                       onTap: () {
                         onSelect(id);
@@ -586,31 +437,15 @@ Future<void> _saveLocation() async {
     );
   }
 
-  // helper : déplace la carte et met à jour le provider
-  // helper : déplace la carte et met à jour le provider
   void _moveToCoordinates(double lat, double lng, {double zoom = 14}) {
     final latlng = LatLng(lat, lng);
-
-    // Mettre à jour le provider en premier (met le marker)
+    ref.read(clientLocationProvider.notifier).setPosition(latlng);
     ref.read(localisationProvider.notifier).setPosition(latlng);
-
-    // Exécuter le move après la frame pour être sûr que la carte est prête
     WidgetsBinding.instance.addPostFrameCallback((_) {
       try {
-        if (kDebugMode) debugPrint('[MAP] moving to $lat,$lng (zoom $zoom)');
         mapController.move(latlng, zoom);
       } catch (e) {
-        if (kDebugMode)
-          debugPrint('[MAP] mapController.move failed: $e — retrying in 150ms');
-        // retry court délai si la carte n'était pas prête
-        Future.delayed(const Duration(milliseconds: 150), () {
-          try {
-            if (kDebugMode) debugPrint('[MAP] retry move to $lat,$lng');
-            mapController.move(latlng, zoom);
-          } catch (e2) {
-            if (kDebugMode) debugPrint('[MAP] retry failed: $e2');
-          }
-        });
+        debugPrint('mapController.move failed: $e');
       }
     });
   }
@@ -618,10 +453,10 @@ Future<void> _saveLocation() async {
   @override
   Widget build(BuildContext context) {
     final localisation = ref.watch(localisationProvider);
-    final notifier = ref.read(localisationProvider.notifier);
+    final clientLocation = ref.watch(clientLocationProvider);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: backgroundColor,
       body: CustomScrollView(
         slivers: [
           SliverAppBar(
@@ -629,7 +464,7 @@ Future<void> _saveLocation() async {
             expandedHeight: 120,
             floating: false,
             pinned: true,
-            backgroundColor: const Color(0xFF357ABD),
+            backgroundColor: primaryColor,
             flexibleSpace: const FlexibleSpaceBar(
               title: Text(
                 'Éditer Localisation',
@@ -643,7 +478,7 @@ Future<void> _saveLocation() async {
                   gradient: LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
-                    colors: [Color(0xFF357ABD), Color(0xFF2A5A8A)],
+                    colors: [primaryColor, Color(0xFF2A5A8A)],
                   ),
                 ),
               ),
@@ -658,11 +493,11 @@ Future<void> _saveLocation() async {
                   padding: const EdgeInsets.all(16),
                   child: Column(
                     children: [
-                      _buildMapCard(localisation, notifier),
+                      _buildMapCard(clientLocation),
                       const SizedBox(height: 20),
                       _buildInfoCard(),
                       const SizedBox(height: 20),
-                      _buildFormCard(notifier),
+                      _buildFormCard(),
                       const SizedBox(height: 30),
                       SizedBox(
                         width: double.infinity,
@@ -678,9 +513,9 @@ Future<void> _saveLocation() async {
                                   ),
                                 )
                               : const Icon(Icons.save),
-                          label: const Text('Sauvegarder et créer le compte'),
+                          label: const Text('Sauvegarder et compléter le profil'),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF357ABD),
+                            backgroundColor: primaryColor,
                             padding: const EdgeInsets.symmetric(vertical: 16),
                           ),
                         ),
@@ -696,7 +531,7 @@ Future<void> _saveLocation() async {
     );
   }
 
-  Widget _buildMapCard(dynamic localisation, dynamic notifier) {
+  Widget _buildMapCard(ClientLocationState clientLocation) {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -719,12 +554,12 @@ Future<void> _saveLocation() async {
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF357ABD).withOpacity(0.1),
+                    color: primaryColor.withOpacity(0.1),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Icon(
                     Icons.map,
-                    color: Color(0xFF357ABD),
+                    color: primaryColor,
                     size: 24,
                   ),
                 ),
@@ -759,34 +594,34 @@ Future<void> _saveLocation() async {
                 mapController: mapController,
                 options: MapOptions(
                   initialCenter:
-                      localisation.position ?? LatLng(36.8065, 10.1815),
+                      clientLocation.position ?? LatLng(36.8065, 10.1815),
                   initialZoom: 13,
                   onTap: (tapPosition, latlng) {
-                    notifier.setPosition(latlng);
+                    ref.read(clientLocationProvider.notifier).setPosition(latlng);
+                    ref.read(localisationProvider.notifier).setPosition(latlng);
                     try {
                       mapController.move(latlng, 16);
                     } catch (e) {
-                      if (kDebugMode) debugPrint('map move error on tap: $e');
+                      debugPrint('map move error on tap: $e');
                     }
                     HapticFeedback.lightImpact();
                   },
                 ),
                 children: [
                   TileLayer(
-                    urlTemplate:
-                        "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+                    urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                     userAgentPackageName: 'com.garagelink.app',
                   ),
-                  if (localisation.position != null)
+                  if (clientLocation.position != null)
                     MarkerLayer(
                       markers: [
                         Marker(
-                          point: localisation.position!,
+                          point: clientLocation.position!,
                           width: 50,
                           height: 50,
                           child: Container(
                             decoration: BoxDecoration(
-                              color: const Color(0xFF357ABD),
+                              color: primaryColor,
                               shape: BoxShape.circle,
                               boxShadow: [
                                 BoxShadow(
@@ -809,31 +644,29 @@ Future<void> _saveLocation() async {
               ),
             ),
           ),
-          if (localisation.position != null)
+          if (clientLocation.position != null)
             Container(
               margin: const EdgeInsets.fromLTRB(20, 0, 20, 20),
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: const Color(0xFF357ABD).withOpacity(0.05),
+                color: primaryColor.withOpacity(0.05),
                 borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: const Color(0xFF357ABD).withOpacity(0.2),
-                ),
+                border: Border.all(color: primaryColor.withOpacity(0.2)),
               ),
               child: Row(
                 children: [
                   const Icon(
                     Icons.location_on,
-                    color: Color(0xFF357ABD),
+                    color: primaryColor,
                     size: 20,
                   ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      "📍 ${localisation.position!.latitude.toStringAsFixed(6)}, ${localisation.position!.longitude.toStringAsFixed(6)}",
+                      '📍 ${clientLocation.position!.latitude.toStringAsFixed(6)}, ${clientLocation.position!.longitude.toStringAsFixed(6)}',
                       style: const TextStyle(
                         fontWeight: FontWeight.w600,
-                        color: Color(0xFF357ABD),
+                        color: primaryColor,
                         fontSize: 14,
                       ),
                     ),
@@ -848,7 +681,7 @@ Future<void> _saveLocation() async {
               child: ElevatedButton.icon(
                 onPressed: _isLoading ? null : _useCurrentLocation,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF357ABD),
+                  backgroundColor: primaryColor,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   shape: RoundedRectangleBorder(
@@ -867,9 +700,7 @@ Future<void> _saveLocation() async {
                       )
                     : const Icon(Icons.my_location, size: 22),
                 label: Text(
-                  _isLoading
-                      ? "Localisation..."
-                      : "Utiliser ma position actuelle",
+                  _isLoading ? 'Localisation...' : 'Utiliser ma position actuelle',
                   style: const TextStyle(
                     fontWeight: FontWeight.w600,
                     fontSize: 16,
@@ -890,7 +721,7 @@ Future<void> _saveLocation() async {
         gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [Color(0xFF357ABD), Color(0xFF4A90E2)],
+          colors: [primaryColor, Color(0xFF4A90E2)],
         ),
         borderRadius: BorderRadius.circular(16),
       ),
@@ -913,20 +744,20 @@ Future<void> _saveLocation() async {
     );
   }
 
-  Widget _buildFormCard(dynamic notifier) {
-    final selectedGovernorateName =
-        _governorates.firstWhere(
-              (g) => (g['_id'] ?? '') == (_selectedGovernorateId ?? ''),
-              orElse: () => {},
-            )['name']
-            as String? ??
+  Widget _buildFormCard() {
+    final selectedGovernorateName = _governorates
+            .firstWhere(
+              (g) => g.id == _selectedGovernorateId,
+              orElse: () => Governorate(id: '', name: ''),
+            )
+            .name ??
         '';
-    final selectedCityName =
-        _cities.firstWhere(
-              (c) => (c['_id'] ?? '') == (_selectedCityId ?? ''),
-              orElse: () => {},
-            )['name']
-            as String? ??
+    final selectedCityName = _cities
+            .firstWhere(
+              (c) => c.id == _selectedCityId,
+              orElse: () => City(id: '', name: ''),
+            )
+            .name ??
         '';
 
     return Container(
@@ -950,12 +781,12 @@ Future<void> _saveLocation() async {
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF357ABD).withOpacity(0.1),
+                  color: primaryColor.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Icon(
                   Icons.edit,
-                  color: Color(0xFF357ABD),
+                  color: primaryColor,
                   size: 24,
                 ),
               ),
@@ -975,42 +806,46 @@ Future<void> _saveLocation() async {
             nomController,
             'Nom du garage',
             Icons.garage,
-            (v) => notifier.setNomGarage(v),
+            (v) => ref.read(localisationProvider.notifier).setNomGarage(v),
             'Veuillez saisir le nom du garage',
+          ),
+          const SizedBox(height: 16),
+          _buildTextField(
+            emailController,
+            'Email',
+            Icons.email,
+            (v) => ref.read(localisationProvider.notifier).setEmail(v),
+            'Veuillez saisir l\'email',
+            TextInputType.emailAddress,
+          ),
+          const SizedBox(height: 16),
+          _buildTextField(
+            telController,
+            'Téléphone',
+            Icons.phone,
+            (v) => ref.read(localisationProvider.notifier).setTelephone(v),
+            'Veuillez saisir le numéro de téléphone',
+            TextInputType.phone,
           ),
           const SizedBox(height: 16),
           _buildTextField(
             matriculeController,
             'Matricule fiscal',
             Icons.badge,
-            (v) {},
+            (v) => ref.read(localisationProvider.notifier).setMatriculeFiscal(v),
             'Veuillez saisir le matricule fiscal',
             TextInputType.text,
           ),
           const SizedBox(height: 16),
-
-          // Debug badges to see counts
-          Row(
-            children: [
-              Chip(label: Text('Gouvernorats: ${_governorates.length}')),
-              const SizedBox(width: 8),
-              Chip(label: Text('Villes: ${_cities.length}')),
-            ],
-          ),
-          const SizedBox(height: 8),
-
-          // Custom select for Gouvernorat (modal sheet)
           InputDecorator(
             decoration: InputDecoration(
               labelText: 'Gouvernorat',
-              prefixIcon: const Icon(Icons.map),
+              prefixIcon: const Icon(Icons.map, color: primaryColor),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 12,
-              ),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
             ),
             child: InkWell(
               onTap: () async {
@@ -1025,48 +860,15 @@ Future<void> _saveLocation() async {
                       _cities = [];
                     });
                     _loadCitiesForGovernorate(id);
-
                     final sel = _governorates.firstWhere(
-                      (g) => (g['_id'] ?? '') == id,
-                      orElse: () => <String, dynamic>{},
+                      (g) => g.id == id,
+                      orElse: () => Governorate(id: '', name: ''),
                     );
-
-                    final selName = (sel['name'] ?? '').toString();
-                    // mettre à jour le provider (utile pour garder l'état cohérent)
+                    final selName = sel.name ?? '';
                     ref
                         .read(localisationProvider.notifier)
                         .setGovernorate(id: id, name: selName);
-
-                    // parser lat/lng de façon sûre
-                    double? lat;
-                    double? lng;
-                    final rawLat = sel['lat'];
-                    final rawLng = sel['lng'];
-                    if (rawLat != null) {
-                      if (rawLat is num)
-                        lat = rawLat.toDouble();
-                      else
-                        lat = double.tryParse(rawLat.toString());
-                    }
-                    if (rawLng != null) {
-                      if (rawLng is num)
-                        lng = rawLng.toDouble();
-                      else
-                        lng = double.tryParse(rawLng.toString());
-                    }
-
-                    if (lat != null && lng != null) {
-                      if (kDebugMode)
-                        debugPrint(
-                          '[MAP] gouvernorat selected -> lat:$lat lng:$lng',
-                        );
-                      _moveToCoordinates(lat, lng, zoom: 10);
-                    } else {
-                      if (kDebugMode)
-                        debugPrint(
-                          '[MAP] gouvernorat selected but no coords found for id=$id',
-                        );
-                    }
+                    // No coordinates in Governorate model, so skip map move
                   },
                 );
               },
@@ -1085,28 +887,23 @@ Future<void> _saveLocation() async {
             ),
           ),
           const SizedBox(height: 16),
-
-          // Custom select for City (modal sheet)
           InputDecorator(
             decoration: InputDecoration(
               labelText: 'Ville / Délégation',
-              prefixIcon: const Icon(Icons.location_city),
+              prefixIcon: const Icon(Icons.location_city, color: primaryColor),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 12,
-                vertical: 12,
-              ),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
             ),
             child: InkWell(
               onTap: () async {
                 if (_selectedGovernorateId == null) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
-                      content: Text(
-                        'Veuillez d\'abord sélectionner un gouvernorat',
-                      ),
+                      content: Text('Veuillez d\'abord sélectionner un gouvernorat'),
+                      backgroundColor: Color(0xFFe74c3c),
                     ),
                   );
                   return;
@@ -1116,46 +913,19 @@ Future<void> _saveLocation() async {
                   options: _cities,
                   selectedId: _selectedCityId,
                   onSelect: (id) {
-                    setState(() {
-                      _selectedCityId = id;
-                    });
-
+                    setState(() => _selectedCityId = id);
                     final sel = _cities.firstWhere(
-                      (c) => (c['_id'] ?? '') == id,
-                      orElse: () => <String, dynamic>{},
+                      (c) => c.id == id,
+                      orElse: () => City(id: '', name: ''),
                     );
-
-                    final selName = (sel['name'] ?? '').toString();
+                    final selName = sel.name ?? '';
                     ref
                         .read(localisationProvider.notifier)
                         .setCity(id: id, name: selName);
-
-                    double? lat;
-                    double? lng;
-                    final rawLat = sel['lat'];
-                    final rawLng = sel['lng'];
-                    if (rawLat != null) {
-                      if (rawLat is num)
-                        lat = rawLat.toDouble();
-                      else
-                        lat = double.tryParse(rawLat.toString());
-                    }
-                    if (rawLng != null) {
-                      if (rawLng is num)
-                        lng = rawLng.toDouble();
-                      else
-                        lng = double.tryParse(rawLng.toString());
-                    }
-
-                    if (lat != null && lng != null) {
-                      if (kDebugMode)
-                        debugPrint('[MAP] city selected -> lat:$lat lng:$lng');
+                    if (sel.location?.coordinates.isNotEmpty == true) {
+                      final lng = sel.location!.coordinates[0];
+                      final lat = sel.location!.coordinates[1];
                       _moveToCoordinates(lat, lng, zoom: 14);
-                    } else {
-                      if (kDebugMode)
-                        debugPrint(
-                          '[MAP] city selected but no coords found for id=$id',
-                        );
                     }
                   },
                 );
@@ -1174,13 +944,12 @@ Future<void> _saveLocation() async {
               ),
             ),
           ),
-
           const SizedBox(height: 16),
           _buildTextField(
             adresseController,
             'Rue / Adresse complète',
             Icons.location_on,
-            (v) => notifier.setAdresse(v),
+            (v) => ref.read(localisationProvider.notifier).setAdresse(v),
             'Veuillez saisir l\'adresse',
             TextInputType.streetAddress,
           ),
@@ -1201,24 +970,21 @@ Future<void> _saveLocation() async {
       controller: controller,
       keyboardType: keyboardType,
       onChanged: onChanged,
-      validator: (value) => value?.isEmpty == true ? validation : null,
+      validator: (value) => value?.trim().isEmpty == true ? validation : null,
       decoration: InputDecoration(
         labelText: label,
-        prefixIcon: Icon(icon, color: const Color(0xFF357ABD)),
+        prefixIcon: Icon(icon, color: primaryColor),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(color: Colors.grey.shade300),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: Color(0xFF357ABD), width: 2),
+          borderSide: const BorderSide(color: primaryColor, width: 2),
         ),
         filled: true,
-        fillColor: const Color(0xFF357ABD).withOpacity(0.02),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 16,
-        ),
+        fillColor: primaryColor.withOpacity(0.02),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       ),
     );
   }

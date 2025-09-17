@@ -97,7 +97,7 @@ class User {
       'location': location?.toJson(),
       'createdAt': createdAt?.toIso8601String(),
       'updatedAt': updatedAt?.toIso8601String(),
-    }..removeWhere((key, value) => value == null); // Remove null values
+    }..removeWhere((key, value) => value == null); 
   }
 }
 

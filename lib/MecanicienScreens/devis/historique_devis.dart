@@ -1,4 +1,4 @@
-// lib/MecanicienScreens/devis/historique_devis.dart
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -23,8 +23,6 @@ class HistoriqueDevisPage extends ConsumerStatefulWidget {
 
 class _HistoriqueDevisPageState extends ConsumerState<HistoriqueDevisPage>
     with SingleTickerProviderStateMixin {
-
-      
   static const Color primaryBlue = Color(0xFF357ABD);
   static const Color lightBlue = Color(0xFFE3F2FD);
   static const Color darkGrey = Color(0xFF2C3E50);
@@ -72,20 +70,17 @@ class _HistoriqueDevisPageState extends ConsumerState<HistoriqueDevisPage>
     _animationController.forward();
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
-  // charger l'historique
-  ref.read(historiqueDevisProvider.notifier).loadAll();
+      // charger l'historique
+      ref.read(historiqueDevisProvider.notifier).loadAll();
 
-  // précharger explicitement la liste clients (utilise la méthode refresh du AsyncNotifier)
-  try {
-    // await n'est pas possible ici directement — on déclenche la refresh asynchrone
-    ref.read(clientsProvider.notifier).refresh();
-  } catch (_) {
-    // si ton provider n'expose pas refresh, tu peux appeler ref.refresh(clientsProvider)
+      // précharger explicitement la liste clients (si le provider expose refresh ailleurs)
+      try {
+        ref.read(ficheClientsProvider.notifier).loadNoms();
+      } catch (_) {
+        // si la méthode n'existe pas, ignore
+      }
+    });
   }
-});
-  }
-
-
 
   @override
   void dispose() {
@@ -96,9 +91,6 @@ class _HistoriqueDevisPageState extends ConsumerState<HistoriqueDevisPage>
     super.dispose();
   }
 
-  // --- le reste du fichier est inchangé (copie exacte de ton implémentation)
-  // Je laisse tout le reste tel quel pour éviter toute régression.
-  // (Assure-toi d'avoir importé ce fichier à la place de l'ancien)
   Widget _buildModernAppBar() {
     return Container(
       decoration: const BoxDecoration(
@@ -219,7 +211,7 @@ class _HistoriqueDevisPageState extends ConsumerState<HistoriqueDevisPage>
                 elevation: 2),
             onPressed: () {
               HapticFeedback.mediumImpact();
-              // Mettre à jour le provider de filtre
+              // Mettre à jour le provider de filtre (string)
               ref.read(filtreProvider.notifier).state = valeurFiltre;
             },
           ),
@@ -330,7 +322,6 @@ class _HistoriqueDevisPageState extends ConsumerState<HistoriqueDevisPage>
             statusColor = Colors.grey;
             break;
           case DevisStatus.envoye:
-          case DevisStatus.enAttente:
             statusLabel = 'Envoyé';
             statusColor = Colors.orange;
             break;
@@ -342,19 +333,24 @@ class _HistoriqueDevisPageState extends ConsumerState<HistoriqueDevisPage>
             statusLabel = 'Refusé';
             statusColor = Colors.red;
             break;
-          default:
-            statusLabel = 'Inconnu';
-            statusColor = Colors.grey;
-        }
+          }
 
-        // --- Date safe ---
-        final DateTime displayDate = devis.inspectionDate ?? devis.createdAt ?? DateTime.now();
+        // --- Date safe: inspectionDate is a String in your model ---
+        DateTime? parsed;
+        if (devis.inspectionDate.isNotEmpty) {
+          try {
+            parsed = DateTime.tryParse(devis.inspectionDate);
+          } catch (_) {
+            parsed = null;
+          }
+        }
+        final DateTime displayDate = parsed ?? devis.createdAt ?? DateTime.now();
         final String dateStr = displayDate.toLocal().toString().split(" ")[0];
 
         // --- Montant safe ---
         final double montant = devis.totalTTC;
 
-        // Construction dynamique des boutons d'actions (corrige l'Expanded problématique)
+        // Construction dynamique des boutons d'actions
         final List<Widget> actionButtons = [];
 
         if (devis.status == DevisStatus.brouillon) {
@@ -362,20 +358,27 @@ class _HistoriqueDevisPageState extends ConsumerState<HistoriqueDevisPage>
             IconButton(
               icon: const Icon(Icons.send, color: Colors.orange, size: 18),
               tooltip: 'Envoyer par e-mail',
-             onPressed: () async {
-  // Essayer de récupérer l'email du client depuis le provider si chargé
+            onPressed: () async {
+  // Essayer de récupérer l'email du client depuis le provider ficheClientsProvider
   String? clientEmail;
-  final clientsAsync = ref.read(clientsProvider);
-  final clientsList = (clientsAsync is AsyncValue<List<Client>>) ? (clientsAsync.value ?? []) : [];
-  if (clientsList.isNotEmpty) {
-    try {
-      final found = clientsList.firstWhere((c) => (c.id ?? '') == (devis.clientId ?? ''), orElse: () => null);
-      if (found != null && found.mail.trim().isNotEmpty) clientEmail = found.mail.trim();
-    } catch (_) { /* ignore */ }
+  final ficheState = ref.read(ficheClientsProvider);
+  final clientsList = ficheState.clients;
+  try {
+    final found = clientsList.firstWhere(
+      (c) => (c.id ?? '') == (devis.clientId),
+      orElse: () => FicheClient(
+        id: null,
+        nom: '',
+        type: ClientType.particulier,
+        adresse: '',
+        telephone: '',
+        email: '',
+      ),
+    );
+    if (found.email.trim().isNotEmpty) clientEmail = found.email.trim();
+  } catch (_) {
+    // ignore
   }
-
-  // DEBUG: log pour voir la valeur avant envoi
-  print('DEBUG Historique -> clientEmail for devis ${devis.id}: $clientEmail');
 
   // Si pas d'email connu, demander à l'utilisateur de le saisir
   if (clientEmail == null || clientEmail.isEmpty) {
@@ -398,54 +401,54 @@ class _HistoriqueDevisPageState extends ConsumerState<HistoriqueDevisPage>
       },
     );
     if (typed == null || typed.isEmpty) {
-      // L'utilisateur a annulé ou rien entré -> on annule l'envoi
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Envoi annulé — aucun e-mail fourni'), backgroundColor: Colors.orange));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Envoi annulé — aucun e-mail fourni'),
+          backgroundColor: Colors.orange,
+        ),
+      );
       return;
     }
     clientEmail = typed;
   }
 
-  // Appel en passant explicitement l'email (obligatoire pour que FlutterEmailSender tente de le remplir)
-  await generateAndSendDevis(ref, context, devisToSend: devis,);
+  // Appel utilitaire pour envoyer le devis (utilise ton helper generateAndSendDevis)
+  await generateAndSendDevis(ref, context, devisToSend: devis);
 },
             ),
             IconButton(
               icon: const Icon(Icons.check, color: Colors.green, size: 18),
               tooltip: 'Accepter (local)',
               onPressed: () {
-                if (devis.id != null) {
-                  ref.read(historiqueDevisProvider.notifier).updateStatusById(devis.id!, DevisStatus.accepte);
-                }
+                final idToUse = (devis.id != null && devis.id!.isNotEmpty) ? devis.id! : devis.devisId;
+                ref.read(historiqueDevisProvider.notifier).updateStatusById(idToUse, DevisStatus.accepte);
               },
             ),
             IconButton(
               icon: const Icon(Icons.close, color: Colors.red, size: 18),
               tooltip: 'Refuser',
               onPressed: () {
-                if (devis.id != null) {
-                  ref.read(historiqueDevisProvider.notifier).updateStatusById(devis.id!, DevisStatus.refuse);
-                }
+                final idToUse = (devis.id != null && devis.id!.isNotEmpty) ? devis.id! : devis.devisId;
+                ref.read(historiqueDevisProvider.notifier).updateStatusById(idToUse, DevisStatus.refuse);
               },
             ),
           ]);
-        } else if (devis.status == DevisStatus.envoye || devis.status == DevisStatus.enAttente) {
+        } else if (devis.status == DevisStatus.envoye) {
           actionButtons.addAll([
             IconButton(
               icon: const Icon(Icons.check, color: Colors.green, size: 18),
               tooltip: 'Accepter',
               onPressed: () {
-                if (devis.id != null) {
-                  ref.read(historiqueDevisProvider.notifier).updateStatusById(devis.id!, DevisStatus.accepte);
-                }
+                final idToUse = (devis.id != null && devis.id!.isNotEmpty) ? devis.id! : devis.devisId;
+                ref.read(historiqueDevisProvider.notifier).updateStatusById(idToUse, DevisStatus.accepte);
               },
             ),
             IconButton(
               icon: const Icon(Icons.close, color: Colors.red, size: 18),
               tooltip: 'Refuser',
               onPressed: () {
-                if (devis.id != null) {
-                  ref.read(historiqueDevisProvider.notifier).updateStatusById(devis.id!, DevisStatus.refuse);
-                }
+                final idToUse = (devis.id != null && devis.id!.isNotEmpty) ? devis.id! : devis.devisId;
+                ref.read(historiqueDevisProvider.notifier).updateStatusById(idToUse, DevisStatus.refuse);
               },
             ),
           ]);
@@ -456,8 +459,8 @@ class _HistoriqueDevisPageState extends ConsumerState<HistoriqueDevisPage>
               tooltip: 'Télécharger la facture (PDF)',
               onPressed: () async {
                 try {
-                  final bytes = await PdfService.buildDevisPdf(devis, title: 'Facture');
-                  await Printing.sharePdf(bytes: bytes, filename: 'facture_${devis.id}.pdf');
+                  final bytes = await PdfService.instance.buildDevisPdfBytes(devis, footerNote: 'Facture');
+                  await Printing.sharePdf(bytes: bytes, filename: 'facture_${devis.id ?? devis.devisId}.pdf');
                 } catch (e) {
                   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur génération facture : $e')));
                 }
@@ -484,7 +487,7 @@ class _HistoriqueDevisPageState extends ConsumerState<HistoriqueDevisPage>
           child: ListTile(
             contentPadding: const EdgeInsets.all(16),
             leading: Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: lightBlue, borderRadius: BorderRadius.circular(12)), child: const Icon(Icons.description, color: primaryBlue, size: 24)),
-            title: Text(devis.client, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: darkGrey)),
+            title: Text(devis.clientName.isNotEmpty ? devis.clientName : 'Client non spécifié', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: darkGrey)),
             subtitle: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               const SizedBox(height: 4),
               Row(children: [
@@ -496,41 +499,40 @@ class _HistoriqueDevisPageState extends ConsumerState<HistoriqueDevisPage>
               Row(children: [
                 Icon(Icons.money, size: 14, color: darkGrey.withOpacity(0.6)),
                 const SizedBox(width: 4),
-                Expanded(child: Text('${montant.toStringAsFixed(2)}DT', style: const TextStyle(fontWeight: FontWeight.w600, color: primaryBlue), overflow: TextOverflow.ellipsis)),
+                Expanded(child: Text('${montant.toStringAsFixed(2)} DT', style: const TextStyle(fontWeight: FontWeight.w600, color: primaryBlue), overflow: TextOverflow.ellipsis)),
               ]),
             ]),
-          trailing: SizedBox(
-  width: 110,
-  child: Column(
-    mainAxisSize: MainAxisSize.min,
-    crossAxisAlignment: CrossAxisAlignment.end,
-    children: [
-      Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: statusColor.withOpacity(0.12),
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Text(
-          statusLabel,
-          style: TextStyle(color: statusColor, fontWeight: FontWeight.bold),
-          overflow: TextOverflow.ellipsis,
-        ),
-      ),
-      const SizedBox(height: 8),
-      // Utiliser Flexible pour éviter overflow
-      Flexible(
-        child: SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: actionButtons,
-          ),
-        ),
-      ),
-    ],
-  ),
-),
+            trailing: SizedBox(
+              width: 140,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: statusColor.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text(
+                      statusLabel,
+                      style: TextStyle(color: statusColor, fontWeight: FontWeight.bold),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Flexible(
+                    child: SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: actionButtons,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
             onTap: () {
               Navigator.push(context, MaterialPageRoute(builder: (_) => DevisPreviewPage(devis: devis)));
             },

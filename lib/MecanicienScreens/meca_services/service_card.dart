@@ -1,7 +1,9 @@
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:garagelink/models/service.dart';
 import 'package:garagelink/providers/service_provider.dart';
+import 'package:garagelink/vehicules/car%20widgets/ui_constants.dart';
 
 class ServiceCard extends ConsumerWidget {
   final Service service;
@@ -17,54 +19,112 @@ class ServiceCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final isActif = service.status == ServiceStatus.actif;
+    final isActif = service.statut == ServiceStatut.actif;
 
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: Colors.grey.withOpacity(0.1), blurRadius: 10)],
-      ),
-      padding: const EdgeInsets.all(10), // Reduced from 12 to 10
-      child: LimitedBox(
-        maxHeight: 150, // Optional: Set a reasonable max height
+    return Card(
+      elevation: 3,
+      color: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min, // Minimize height
+          mainAxisSize: MainAxisSize.min,
           children: [
-            // Nom + statut
+            // Name and Status
             Row(
               children: [
-                Expanded(child: Text(service.nomService, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16))),
+                Expanded(
+                  child: Text(
+                    service.name,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 16,
+                      color: darkBlue,
+                    ),
+                  ),
+                ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), // Reduced from 8,4 to 6,2
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
-                    color: isActif ? Colors.green.withOpacity(0.12) : Colors.red.withOpacity(0.12),
+                    color: isActif ? successGreen.withOpacity(0.2) : errorRed.withOpacity(0.2),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Text(isActif ? 'Actif' : 'Inactif', style: TextStyle(color: isActif ? Colors.green : Colors.red, fontSize: 12)),
+                  child: Text(
+                    isActif ? 'Actif' : 'Désactivé',
+                    style: TextStyle(
+                      color: isActif ? successGreen : errorRed,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
                 ),
               ],
             ),
-            const SizedBox(height: 4), // Reduced from 6 to 4
+            const SizedBox(height: 8),
             // Description
-            Text(service.description, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.grey[700], fontSize: 12)),
-            const SizedBox(height: 4), // Reduced from 6 to 4
+            Text(
+              service.description,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: Colors.grey.shade600,
+                fontSize: 14,
+              ),
+            ),
+            const SizedBox(height: 12),
             // Actions
             Row(
               children: [
                 Expanded(
                   child: OutlinedButton(
-                    onPressed: () => ref.read(serviceProvider.notifier).toggleStatus(service.id),
+                    onPressed: service.id == null
+                        ? null
+                        : () async {
+                            try {
+                              await ref.read(serviceProvider.notifier).toggleStatus(service.id!);
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    'Service ${isActif ? 'désactivé' : 'activé'} avec succès',
+                                  ),
+                                  backgroundColor: successGreen,
+                                  behavior: SnackBarBehavior.floating,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                ),
+                              );
+                            } catch (e) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Erreur: $e'),
+                                  backgroundColor: errorRed,
+                                  behavior: SnackBarBehavior.floating,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                ),
+                              );
+                            }
+                          },
                     style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 4), // Reduced from 6 to 4
+                      foregroundColor: primaryBlue,
+                      side: const BorderSide(color: primaryBlue),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
-                    child: Text(isActif ? 'Désact.' : 'Activer', style: const TextStyle(fontSize: 12)), // Shortened text and reduced font size
+                    child: Text(
+                      isActif ? 'Désactiver' : 'Activer',
+                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                    ),
                   ),
                 ),
-                const SizedBox(width: 6), // Reduced from 8 to 6
-                IconButton(onPressed: onEdit, icon: const Icon(Icons.edit, size: 16)), // Reduced icon size
-                IconButton(onPressed: onDelete, icon: const Icon(Icons.delete, color: Colors.red, size: 16)), // Reduced icon size
+                const SizedBox(width: 12),
+                IconButton(
+                  onPressed: onEdit,
+                  icon: const Icon(Icons.edit, size: 20, color: primaryBlue),
+                ),
+                IconButton(
+                  onPressed: onDelete,
+                  icon: const Icon(Icons.delete, size: 20, color: errorRed),
+                ),
               ],
             ),
           ],

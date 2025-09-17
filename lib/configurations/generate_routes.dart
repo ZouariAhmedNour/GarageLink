@@ -1,6 +1,6 @@
-import 'package:garagelink/Clients%20Screens/clientHome.dart';
+// import 'package:garagelink/Clients%20Screens/clientHome.dart';
 import 'package:garagelink/Clients%20Screens/clientMapScreen.dart';
-import 'package:garagelink/Clients%20Screens/client_vehicles_screen.dart';
+// import 'package:garagelink/Clients%20Screens/client_vehicles_screen.dart';
 import 'package:garagelink/MecanicienScreens/stock/stockPieceForm.dart';
 import 'package:garagelink/auth/login.dart';
 import 'package:garagelink/auth/reset_password.dart';
@@ -27,16 +27,12 @@ import 'package:garagelink/MecanicienScreens/mecaHome.dart';
 import 'package:garagelink/MecanicienScreens/meca_services/add_edit_service_screen.dart';
 import 'package:garagelink/MecanicienScreens/meca_services/meca_services.dart';
 import 'package:garagelink/MecanicienScreens/stock/stock_dashboard.dart';
-import 'package:garagelink/MecanicienScreens/work%20order/create_order_screen.dart';
-import 'package:garagelink/MecanicienScreens/work%20order/notif_screen.dart';
-import 'package:garagelink/MecanicienScreens/work%20order/rapport_screen.dart';
-import 'package:garagelink/MecanicienScreens/work%20order/work_order_page.dart';
+import 'package:garagelink/MecanicienScreens/ordreTravail/create_order_screen.dart';
+import 'package:garagelink/MecanicienScreens/ordreTravail/work_order_page.dart';
 import 'package:garagelink/models/ficheClient.dart';
 import 'package:garagelink/models/facture.dart';
-import 'package:garagelink/models/ordre.dart';
 import 'package:garagelink/splash_screen.dart';
 import 'package:get/get.dart';
-import 'package:http/http.dart';
 
 class GenerateRoutes {
   static final getPages = [
@@ -55,14 +51,6 @@ class GenerateRoutes {
     GetPage(name: AppRoutes.devisPreviewPage, page: () => DevisPreviewPage()),
     GetPage(name: AppRoutes.historiqueDevis, page: () => HistoriqueDevisPage()),
     // GetPage(name: AppRoutes.workOrderPage, page: () => WorkOrderPage()),
-    GetPage(name: AppRoutes.notifScreen, page: () => NotifScreen()),
-    GetPage(
-      name: AppRoutes.rapportScreen,
-      page: () {
-        final order = Get.arguments as WorkOrder;
-        return RapportScreen(order: order);
-      },
-    ),
     // GetPage(name: AppRoutes.createOrderScreen, page: () => CreateOrderScreen()),
     GetPage(
       name: AppRoutes.addEditServiceScreen,
@@ -98,7 +86,7 @@ class GenerateRoutes {
     GetPage(
       name: AppRoutes.editClientScreen,
       page: () {
-        final client = Get.arguments as Client;
+        final client = Get.arguments as FicheClient;
         return EditClientScreen(client: client);
       },
     ),
@@ -113,10 +101,10 @@ class GenerateRoutes {
       name: AppRoutes.reservationScreen,
       page: () => const ReservationScreen(),
     ),
-    GetPage(
-      name: AppRoutes.clientVehiclesScreen,
-      page: () => const ClientVehiclesScreen(),
-    ),
+    // GetPage(
+    //   name: AppRoutes.clientVehiclesScreen,
+    //   page: () => const ClientVehiclesScreen(),
+    // ),
     GetPage(name: AppRoutes.clientMapScreen, page: () => ClientMapScreen()),
   ];
 }

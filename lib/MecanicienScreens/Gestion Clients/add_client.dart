@@ -25,7 +25,7 @@ class _AddClientScreenState extends ConsumerState<AddClientScreen>
   late AnimationController _animationController;
   Animation<double>? _fadeAnimation;
 
-  Categorie _cat = Categorie.particulier;
+  ClientType _type = ClientType.particulier;
   bool _isLoading = false;
 
   // Palette locale (utilisée dans le widget)
@@ -69,7 +69,7 @@ class _AddClientScreenState extends ConsumerState<AddClientScreen>
 
   String? _phoneValidator(String? v) {
     if (v == null || v.isEmpty) return 'Numéro de téléphone requis';
-    final phoneRegex = RegExp(r'^[\+]?[0-9\s\-\(\)]{8,15}$');
+    final phoneRegex = RegExp(r'^[\+]?[0-9\s\-\(\)]{6,20}$');
     return phoneRegex.hasMatch(v) ? null : 'Format de téléphone invalide';
   }
 
@@ -128,28 +128,40 @@ class _AddClientScreenState extends ConsumerState<AddClientScreen>
 
     setState(() => _isLoading = true);
 
-    final client = Client(
-      id: null, // le backend génère l'_id
-      nomComplet: _nomCtrl.text.trim(),
-      mail: _mailCtrl.text.trim(),
-      telephone: _telCtrl.text.trim(),
-      adresse: _adrCtrl.text.trim(),
-      categorie: _cat,
-    );
+    final nom = _nomCtrl.text.trim();
+    final email = _mailCtrl.text.trim();
+    final telephone = _telCtrl.text.trim();
+    final adresse = _adrCtrl.text.trim();
 
     try {
-      final created =
-          await ref.read(clientsProvider.notifier).addClient(client);
-      if (created != null) {
+      // Appel du provider (signature: addFicheClient({required String nom, required ClientType type, required String adresse, required String telephone, required String email})
+      await ref.read(ficheClientsProvider.notifier).addFicheClient(
+        nom: nom,
+        type: _type,
+        adresse: adresse,
+        telephone: telephone,
+        email: email,
+      );
+
+      // Vérifier si le provider a signalé une erreur
+      final err = ref.read(ficheClientsProvider).error;
+      if (err != null) {
+        _showErrorSnackBar('Erreur: $err');
+      } else {
         HapticFeedback.heavyImpact();
         _showSuccessSnackBar();
-        await Future.delayed(const Duration(milliseconds: 500));
+        // Réinitialiser le formulaire si besoin
+        _formKey.currentState?.reset();
+        _nomCtrl.clear();
+        _mailCtrl.clear();
+        _telCtrl.clear();
+        _adrCtrl.clear();
+        setState(() => _type = ClientType.particulier);
+        // revenir à l'écran précédent
+        await Future.delayed(const Duration(milliseconds: 400));
         if (mounted) Get.back();
-      } else {
-        _showErrorSnackBar('Impossible d\'ajouter le client (réponse serveur).');
       }
     } catch (e) {
-      // le provider réémettra l'exception si besoin
       _showErrorSnackBar('Erreur lors de l\'ajout du client: ${e.toString()}');
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -207,7 +219,7 @@ class _AddClientScreenState extends ConsumerState<AddClientScreen>
     );
   }
 
-  Widget _buildCategorySelector() {
+  Widget _buildTypeSelector() {
     return Card(
       elevation: 2,
       color: Colors.white,
@@ -222,7 +234,7 @@ class _AddClientScreenState extends ConsumerState<AddClientScreen>
                 Icon(Icons.category, color: _primaryBlue),
                 const SizedBox(width: 12),
                 Text(
-                  'Catégorie de client',
+                  'Type de client',
                   style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
@@ -241,28 +253,24 @@ class _AddClientScreenState extends ConsumerState<AddClientScreen>
                 border: Border.all(color: _primaryBlue.withOpacity(0.3)),
               ),
               child: DropdownButtonHideUnderline(
-                child: DropdownButton<Categorie>(
-                  value: _cat,
+                child: DropdownButton<ClientType>(
+                  value: _type,
                   isExpanded: true,
                   icon: Icon(Icons.keyboard_arrow_down, color: _primaryBlue),
                   style: const TextStyle(color: Colors.black87, fontSize: 16),
-                  items: Categorie.values.map((categorie) {
+                  items: ClientType.values.map((t) {
                     return DropdownMenuItem(
-                      value: categorie,
+                      value: t,
                       child: Row(
                         children: [
                           Icon(
-                            categorie == Categorie.particulier
-                                ? Icons.person
-                                : Icons.business,
+                            t == ClientType.particulier ? Icons.person : Icons.business,
                             color: _primaryBlue,
                             size: 20,
                           ),
                           const SizedBox(width: 12),
                           Text(
-                            categorie == Categorie.particulier
-                                ? 'Particulier'
-                                : 'Professionnel',
+                            t == ClientType.particulier ? 'Particulier' : 'Professionnel',
                             style: const TextStyle(fontWeight: FontWeight.w500),
                           ),
                         ],
@@ -272,7 +280,7 @@ class _AddClientScreenState extends ConsumerState<AddClientScreen>
                   onChanged: (value) {
                     if (value != null) {
                       HapticFeedback.selectionClick();
-                      setState(() => _cat = value);
+                      setState(() => _type = value);
                     }
                   },
                 ),
@@ -323,7 +331,6 @@ class _AddClientScreenState extends ConsumerState<AddClientScreen>
 
   @override
   Widget build(BuildContext context) {
-    // si besoin on peut écouter l'état global : final clientsAsync = ref.watch(clientsProvider);
     return Scaffold(
       backgroundColor: Colors.grey.shade50,
       appBar: CustomAppBar(
@@ -402,7 +409,7 @@ class _AddClientScreenState extends ConsumerState<AddClientScreen>
                     ),
                   ),
                   const SizedBox(height: 20),
-                  _buildCategorySelector(),
+                  _buildTypeSelector(),
                   const SizedBox(height: 32),
                   _buildSubmitButton(),
                   const SizedBox(height: 20),

@@ -9,6 +9,22 @@ class VehicleHeader extends StatelessWidget {
 
   const VehicleHeader({required this.veh, this.onTapImage, Key? key}) : super(key: key);
 
+  // Petite fonction locale pour choisir une icône selon le type de carburant
+  IconData _fuelIcon(FuelType type) {
+    switch (type) {
+      case FuelType.diesel:
+        return Icons.local_gas_station;
+      case FuelType.hybride:
+        return Icons.electric_car; // hybride -> électrique-like icon
+      case FuelType.electrique:
+        return Icons.electric_car;
+      case FuelType.gpl:
+        return Icons.local_gas_station;
+      case FuelType.essence:
+      return Icons.local_gas_station;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -34,28 +50,31 @@ class VehicleHeader extends StatelessWidget {
         padding: const EdgeInsets.all(20),
         child: Row(
           children: [
-            Container(
-              width: 100,
-              height: 100,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(16),
-                color: Colors.white,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 8,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
+            GestureDetector(
+              onTap: onTapImage,
+              child: Container(
+                width: 100,
+                height: 100,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  color: Colors.white,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.1),
+                      blurRadius: 8,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: veh.picKm != null && veh.picKm!.isNotEmpty
+                    ? ClipRRect(
+                        borderRadius: BorderRadius.circular(16),
+                        child: veh.picKm!.startsWith('http')
+                            ? Image.network(veh.picKm!, fit: BoxFit.cover)
+                            : Image.file(File(veh.picKm!), fit: BoxFit.cover),
+                      )
+                    : Icon(Icons.directions_car, size: 50, color: primaryBlue),
               ),
-              child: veh.picKm != null && veh.picKm!.isNotEmpty
-                  ? ClipRRect(
-                      borderRadius: BorderRadius.circular(16),
-                      child: veh.picKm!.startsWith('http')
-                          ? Image.network(veh.picKm!, fit: BoxFit.cover)
-                          : Image.file(File(veh.picKm!), fit: BoxFit.cover),
-                    )
-                  : Icon(Icons.directions_car, size: 50, color: primaryBlue),
             ),
             const SizedBox(width: 20),
             Expanded(
@@ -85,10 +104,11 @@ class VehicleHeader extends StatelessWidget {
                   const SizedBox(height: 8),
                   Row(
                     children: [
-                      Icon(carburantIcon(veh.carburant), color: Colors.white, size: 18),
+                      Icon(_fuelIcon(veh.typeCarburant), color: Colors.white, size: 18),
                       const SizedBox(width: 6),
                       Text(
-                        carburantLabel(veh.carburant),
+                        // utilise la fonction existante fuelTypeLabel pour le libellé
+                        fuelTypeLabel(veh.typeCarburant),
                         style: const TextStyle(fontSize: 14, color: Colors.white, fontWeight: FontWeight.w500),
                       ),
                     ],

@@ -1,12 +1,10 @@
+// lib/mecanicien/devis/devis_widgets/piece_row.dart
 import 'package:flutter/material.dart';
-import 'package:garagelink/models/devis.dart' show DevisService;
-import 'package:garagelink/models/pieces.dart' show PieceRechange;
+import 'package:garagelink/models/devis.dart' show Service;
+import 'package:garagelink/models/pieces.dart';
+
 import 'package:garagelink/utils/format.dart';
 
-/// PieceRow flexible : accepte un `entry` qui peut être :
-/// - DevisService (recommandé, provient du provider)
-/// - PieceRechange (catalogue)
-/// - ou un ancien modèle avec champs nom/quantite/prixUnitaire/total
 class PieceRow extends StatelessWidget {
   final dynamic entry;
   final VoidCallback? onDelete;
@@ -43,21 +41,23 @@ class PieceRow extends StatelessWidget {
     double unitPrice = 0.0;
     double total = 0.0;
 
-    // 1) Known typed models
-    if (entry is DevisService) {
-      final DevisService s = entry as DevisService;
+    // 1) Si c'est ton modèle Service (devis)
+    if (entry is Service) {
+      final Service s = entry as Service;
       name = s.piece;
       quantity = s.quantity;
       unitPrice = s.unitPrice;
       total = s.total;
-    } else if (entry is PieceRechange) {
-      final PieceRechange p = entry as PieceRechange;
+    }
+    // 2) Si c'est ton modèle Piece
+    else if (entry is Piece) {
+      final Piece p = entry as Piece;
       name = p.name;
       quantity = 1;
-      unitPrice = _toDouble(p.prix, 0.0);
+      unitPrice = p.prix;
       total = unitPrice * quantity;
     } else {
-      // 2) Fallback: try dynamic properties (nom, name, piece, quantite, quantity, prixUnitaire, prix, unitPrice, total)
+      // 3) Fallback dynamique (Map ou autre)
       try {
         final dyn = entry as dynamic;
         name = _asString(dyn.nom ?? dyn.name ?? dyn.piece ?? '');
@@ -65,7 +65,7 @@ class PieceRow extends StatelessWidget {
         unitPrice = _toDouble(dyn.prixUnitaire ?? dyn.prix ?? dyn.unitPrice ?? 0.0, 0.0);
         total = _toDouble(dyn.total ?? (quantity * unitPrice), quantity * unitPrice);
       } catch (_) {
-        // if all fails, try toString
+        // Tout échoue -> toString
         name = entry?.toString() ?? '';
         quantity = 1;
         unitPrice = 0.0;
@@ -73,8 +73,8 @@ class PieceRow extends StatelessWidget {
       }
     }
 
-    // ensure total sanity
-    if (total == 0.0 && quantity > 0 && unitPrice > 0.0) {
+    // S'assurer de la cohérence
+    if ((total == 0.0 || total.isNaN) && quantity > 0 && unitPrice > 0.0) {
       total = quantity * unitPrice;
     }
 
@@ -86,7 +86,10 @@ class PieceRow extends StatelessWidget {
       ),
       elevation: 1,
       child: ListTile(
-        title: Text(name.isEmpty ? '(sans désignation)' : name, style: const TextStyle(fontWeight: FontWeight.w600)),
+        title: Text(
+          name.isEmpty ? '(sans désignation)' : name,
+          style: const TextStyle(fontWeight: FontWeight.w600),
+        ),
         subtitle: Text('Qté: $quantity  •  PU: ${Fmt.money(unitPrice)}'),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,

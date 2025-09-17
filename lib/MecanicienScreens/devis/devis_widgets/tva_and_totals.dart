@@ -2,82 +2,106 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:garagelink/MecanicienScreens/devis/devis_widgets/modern_text_field.dart';
-import 'package:garagelink/MecanicienScreens/devis/devis_widgets/totals_card.dart';
 import 'package:garagelink/providers/devis_provider.dart';
 
 class TvaAndTotals extends ConsumerWidget {
   final bool isTablet;
   final TextEditingController tvaCtrl;
-  final TextEditingController remiseCtrl;
+  final TextEditingController maindoeuvreCtrl;
+  final TextEditingController? remiseCtrl; // optionnel (backward compatibility)
 
   const TvaAndTotals({
-    super.key,
+    Key? key,
     required this.isTablet,
     required this.tvaCtrl,
-    required this.remiseCtrl,
-  });
+    required this.maindoeuvreCtrl,
+    this.remiseCtrl,
+  }) : super(key: key);
+
+  double _parsePercent(String v) {
+    final raw = v.replaceAll(',', '.').trim();
+    if (raw.isEmpty) return 0.0;
+    return double.tryParse(raw) ?? 0.0;
+  }
+
+  double _parseDouble(String v) {
+    final raw = v.replaceAll(',', '.').trim();
+    if (raw.isEmpty) return 0.0;
+    return double.tryParse(raw) ?? 0.0;
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // provider
+    final notifier = ref.read(devisProvider.notifier);
+
+    // copy nullable public field to a local variable so the analyzer can promote it
+    final TextEditingController? remiseLocal = remiseCtrl;
+
+    final leftColumn = Column(
+      children: [
+        ModernTextField(
+          controller: tvaCtrl,
+          label: 'TVA %',
+          icon: Icons.percent,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          onChanged: (v) {
+            // on stocke le taux en pourcentage (ex: 19.0)
+            final t = _parsePercent(v);
+            notifier.setTvaRate(t);
+          },
+        ),
+        const SizedBox(height: 12),
+        ModernTextField(
+          controller: maindoeuvreCtrl,
+          label: 'Main d\'œuvre (HT)',
+          icon: Icons.work_outline,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          onChanged: (v) {
+            final m = _parseDouble(v);
+            notifier.setMaindoeuvre(m);
+          },
+        ),
+      ],
+    );
+
+    final rightColumn = Column(
+      children: [
+        // Remise est optionnelle : si tu veux activer la remise côté provider,
+        // il faudra ajouter setRemise(...) au provider. Ici on propose simplement le champ.
+        if (remiseLocal != null) ...[
+          ModernTextField(
+            controller: remiseLocal,
+            label: 'Remise %',
+            icon: Icons.discount,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            onChanged: (v) {
+              // par défaut on ne met pas à jour le provider pour la remise
+              // Si tu ajoutes setRemise(double) dans le provider, appelle-le ici :
+              // final r = _parsePercent(v);
+              // notifier.setRemise(r);
+            },
+          ),
+          const SizedBox(height: 12),
+        ],
+        // TotalsCard (séparé) lira déjà l'état du provider pour afficher les montants
+      ],
+    );
+
     return isTablet
         ? Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: Column(
-                  children: [
-                    ModernTextField(
-                      controller: tvaCtrl,
-                      label: 'TVA %',
-                      icon: Icons.percent,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      onChanged: (v) {
-                        final t = (double.tryParse(v) ?? 0) / 100.0;
-                        ref.read(devisProvider.notifier).setTva(t);
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    ModernTextField(
-                      controller: remiseCtrl,
-                      label: 'Remise %',
-                      icon: Icons.discount,
-                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      onChanged: (v) {
-                        final r = (double.tryParse(v) ?? 0) / 100.0;
-                        ref.read(devisProvider.notifier).setRemise(r);
-                      },
-                    ),
-                  ],
-                ),
-              ),
+              Expanded(child: leftColumn),
               const SizedBox(width: 16),
-              Expanded(child: TotalsCard()),
+              Expanded(child: rightColumn),
             ],
           )
         : Column(
             children: [
-              ModernTextField(
-                controller: tvaCtrl,
-                label: 'TVA %',
-                icon: Icons.percent,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                onChanged: (v) {
-                  final t = (double.tryParse(v) ?? 0) / 100.0;
-                  ref.read(devisProvider.notifier).setTva(t);
-                },
-              ),
+              leftColumn,
               const SizedBox(height: 12),
-              ModernTextField(
-                controller: remiseCtrl,
-                label: 'Remise %',
-                icon: Icons.discount,
-                keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                onChanged: (v) {
-                  final r = (double.tryParse(v) ?? 0) / 100.0;
-                  ref.read(devisProvider.notifier).setRemise(r);
-                },
-              ),
-              const SizedBox(height: 16),
-              TotalsCard(),
+              rightColumn,
             ],
           );
   }

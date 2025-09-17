@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:garagelink/models/devis.dart';
-import 'package:garagelink/global.dart'; // Importer la constante UrlApi
+import 'package:garagelink/global.dart'; 
 
 // Modèle pour OrdreTravail (simplifié, à ajuster selon le modèle backend)
 class OrdreTravail {

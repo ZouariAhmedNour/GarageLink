@@ -5,12 +5,11 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:garagelink/components/default_app_bar.dart';
 import 'package:garagelink/MecanicienScreens/devis/devis_widgets/num_serie_input.dart';
-import 'package:garagelink/global.dart';
 import 'package:garagelink/models/vehicule.dart';
-import 'package:garagelink/providers/vehicule_provider.dart'; // si tu as renommé le provider, adapte le path
+import 'package:garagelink/providers/vehicule_provider.dart';
 import 'package:garagelink/services/vehicule_api.dart';
+import 'package:garagelink/vehicules/car%20widgets/ui_constants.dart';
 import 'package:get/get.dart';
-import 'package:uuid/uuid.dart';
 import 'package:image_picker/image_picker.dart';
 
 class AddVehScreen extends ConsumerStatefulWidget {
@@ -41,7 +40,7 @@ class _AddVehScreenState extends ConsumerState<AddVehScreen>
   final ImagePicker _picker = ImagePicker();
   bool _isLoading = false;
 
-  Carburant _selectedCarburant = Carburant.essence;
+  FuelType _selectedFuelType = FuelType.essence;
 
   // Palette de couleurs unifiée
   static const Color _primaryBlue = Color(0xFF357ABD);
@@ -236,96 +235,104 @@ class _AddVehScreenState extends ConsumerState<AddVehScreen>
     );
   }
 
-Future<void> _handleSubmit() async {
-  HapticFeedback.mediumImpact();
-
-  if (!(_formKey.currentState?.validate() ?? false)) {
-    _showErrorSnackBar('Veuillez corriger les erreurs du formulaire');
-    return;
+  IconData _getFuelIcon(FuelType type) {
+    switch (type) {
+      case FuelType.diesel:
+        return Icons.local_gas_station;
+      case FuelType.hybride:
+        return Icons.electric_car;
+      case FuelType.electrique:
+        return Icons.electric_car;
+      case FuelType.gpl:
+        return Icons.local_gas_station;
+      case FuelType.essence:
+      return Icons.local_gas_station;
+    }
   }
 
-  if (!_validateImmatriculation()) {
-    _showErrorSnackBar('Veuillez saisir le numéro local ou le VIN');
-    return;
+  String _getFuelLabel(FuelType type) {
+    // si tu as une fonction fuelTypeLabel dans ui_constants, tu peux la remplacer ici
+    return fuelTypeLabel(type);
   }
 
-  setState(() => _isLoading = true);
+  Future<void> _handleSubmit() async {
+    HapticFeedback.mediumImpact();
 
-  // création d'un id temporaire (optimistic UI)
-  final tempId = const Uuid().v4();
-  final immat = _numLocalCtrl.text.trim().isNotEmpty
-      ? _numLocalCtrl.text.trim()
-      : _vinCtrl.text.trim();
+    if (!(_formKey.currentState?.validate() ?? false)) {
+      _showErrorSnackBar('Veuillez corriger les erreurs du formulaire');
+      return;
+    }
 
-  final tempVehicule = Vehicule(
-    id: tempId,
-    immatriculation: immat,
-    marque: _marque.text.trim(),
-    modele: _modele.text.trim(),
-    carburant: _selectedCarburant,
-    annee: _annee.text.trim().isEmpty ? null : int.tryParse(_annee.text.trim()),
-    kilometrage: _km.text.trim().isEmpty ? null : int.tryParse(_km.text.trim()),
-    picKm: _picKmPath,
-    dateCirculation: _dateCirculation,
-    proprietaireId: widget.clientId,
-    proprietaireNom: null,
-    image: null,
-  );
+    if (!_validateImmatriculation()) {
+      _showErrorSnackBar('Veuillez saisir le numéro local ou le VIN');
+      return;
+    }
 
-  // ajout local optimiste
-  ref.read(vehiculesProvider.notifier).addVehicule(tempVehicule);
-  _showSuccessSnackBar('Véhicule ajouté localement…');
+    final token = ref.read(authTokenProvider);
+    if (token == null || token.isEmpty) {
+      _showErrorSnackBar('Utilisateur non authentifié');
+      return;
+    }
 
-  try {
-    final vehApi = VehiculeApi(baseUrl: UrlApi);
+    setState(() => _isLoading = true);
 
-    // Appel à l'API pour créer le véhicule côté serveur
-    final res = await vehApi.createVehicule(tempVehicule);
+    final immat = _numLocalCtrl.text.trim().isNotEmpty
+        ? _numLocalCtrl.text.trim()
+        : _vinCtrl.text.trim();
 
-    if (res['success'] == true && res['data'] != null) {
-      final created = res['data'] is Vehicule
-          ? res['data'] as Vehicule
-          : Vehicule.fromMap(Map<String, dynamic>.from(res['data']));
+    try {
+      // Appel API : création véhicule
+      final created = await VehiculeApi.createVehicule(
+        token: token,
+        proprietaireId: widget.clientId,
+        marque: _marque.text.trim(),
+        modele: _modele.text.trim(),
+        immatriculation: immat,
+        annee: _annee.text.trim().isEmpty ? null : int.tryParse(_annee.text.trim()),
+        couleur: null,
+        typeCarburant: _selectedFuelType,
+        kilometrage: _km.text.trim().isEmpty ? null : int.tryParse(_km.text.trim()),
+        picKm: null,
+        images: [],
+      );
 
-      // remplacer le vehicule temporaire par celui du serveur
-      ref.read(vehiculesProvider.notifier).removeVehicule(tempId);
-      ref.read(vehiculesProvider.notifier).addVehicule(created);
+      Vehicule finalVeh = created;
 
-      // si on a une photo du compteur, upload ensuite (endpoint attend un id existant)
+      // Si photo locale présente -> upload puis update du véhicule créé
       if (_picKmPath != null && _picKmPath!.isNotEmpty) {
-        final uploadRes = await vehApi.uploadVehiculeImage(created.id, File(_picKmPath!));
-        if (uploadRes['success'] == true && uploadRes['data'] != null) {
-          final body = uploadRes['data'];
-          // backend peut renvoyer { vehicule: {...} } ou { imageUrl: '...' }
-          if (body is Map && body['vehicule'] != null) {
-            final updatedVeh = Vehicule.fromMap(Map<String, dynamic>.from(body['vehicule']));
-            ref.read(vehiculesProvider.notifier).updateVehicule(created.id, updatedVeh);
-          } else if (body is Map && body['imageUrl'] != null) {
-            final withImage = created.copyWith(image: body['imageUrl']?.toString());
-            ref.read(vehiculesProvider.notifier).updateVehicule(created.id, withImage);
-          }
-        } else {
-          // upload failed, on alerte l'utilisateur mais le véhicule est quand même créé
-          _showErrorSnackBar('Téléversement image échoué (${uploadRes['message'] ?? 'erreur'})');
+        try {
+          final uploadedUrl = await VehiculeApi.uploadVehiculeImage(
+            token: token,
+            vehiculeId: created.id!,
+            imageFile: File(_picKmPath!),
+          );
+          // mettre à jour le véhicule côté serveur avec l'URL retournée
+          final updated = await VehiculeApi.updateVehicule(
+            token: token,
+            id: created.id!,
+            picKm: uploadedUrl,
+            images: [uploadedUrl],
+          );
+          finalVeh = updated;
+        } catch (e) {
+          // on continue mais on avertit l'utilisateur
+          _showErrorSnackBar('Upload image échoué: ${e.toString()}');
         }
       }
+
+      // Mettre à jour le cache local via le provider
+      final notifier = ref.read(vehiculesProvider.notifier);
+      notifier.setVehicules([...ref.read(vehiculesProvider).vehicules, finalVeh]);
 
       _showSuccessSnackBar('Véhicule enregistré sur le serveur');
       await Future.delayed(const Duration(milliseconds: 400));
       if (mounted) Get.back();
-    } else {
-      // échec côté serveur : retirer l'objet temporaire et afficher erreur
-      ref.read(vehiculesProvider.notifier).removeVehicule(tempId);
-      _showErrorSnackBar('Erreur création serveur: ${res['message'] ?? 'inconnue'}');
+    } catch (e) {
+      _showErrorSnackBar('Erreur lors de l\'ajout: ${e.toString()}');
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
-  } catch (e) {
-    // en cas d'exception réseau -> rollback local
-    ref.read(vehiculesProvider.notifier).removeVehicule(tempId);
-    _showErrorSnackBar('Erreur lors de l\'ajout: ${e.toString()}');
-  } finally {
-    if (mounted) setState(() => _isLoading = false);
   }
-}
 
   Widget _buildCustomTextField({
     required TextEditingController controller,
@@ -401,10 +408,10 @@ Future<void> _handleSubmit() async {
             Wrap(
               spacing: 12,
               runSpacing: 8,
-              children: Carburant.values.map((carburant) {
-                final isSelected = _selectedCarburant == carburant;
-                final label = _getCarburantLabel(carburant);
-                final icon = _getCarburantIcon(carburant);
+              children: FuelType.values.map((fuel) {
+                final isSelected = _selectedFuelType == fuel;
+                final label = _getFuelLabel(fuel);
+                final icon = _getFuelIcon(fuel);
 
                 return FilterChip(
                   label: Row(
@@ -418,7 +425,7 @@ Future<void> _handleSubmit() async {
                   selected: isSelected,
                   onSelected: (_) {
                     HapticFeedback.selectionClick();
-                    setState(() => _selectedCarburant = carburant);
+                    setState(() => _selectedFuelType = fuel);
                   },
                   selectedColor: _lightBlue,
                   checkmarkColor: _primaryBlue,
@@ -431,36 +438,6 @@ Future<void> _handleSubmit() async {
         ),
       ),
     );
-  }
-
-  String _getCarburantLabel(Carburant carburant) {
-    switch (carburant) {
-      case Carburant.essence:
-        return 'Essence';
-      case Carburant.diesel:
-        return 'Diesel';
-      case Carburant.gpl:
-        return 'GPL';
-      case Carburant.electrique:
-        return 'Électrique';
-      case Carburant.hybride:
-        return 'Hybride';
-    }
-  }
-
-  IconData _getCarburantIcon(Carburant carburant) {
-    switch (carburant) {
-      case Carburant.essence:
-        return Icons.local_gas_station;
-      case Carburant.diesel:
-        return Icons.oil_barrel;
-      case Carburant.gpl:
-        return Icons.propane_tank;
-      case Carburant.electrique:
-        return Icons.electric_bolt;
-      case Carburant.hybride:
-        return Icons.battery_charging_full;
-    }
   }
 
   Widget _buildPhotoSection() {

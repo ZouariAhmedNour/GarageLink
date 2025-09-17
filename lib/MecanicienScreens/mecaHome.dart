@@ -5,18 +5,14 @@ import 'package:garagelink/MecanicienScreens/edit_localisation.dart';
 import 'package:garagelink/MecanicienScreens/gestion%20mec/mec_list_screen.dart';
 import 'package:garagelink/MecanicienScreens/meca_services/meca_services.dart';
 import 'package:garagelink/MecanicienScreens/stock/stock_dashboard.dart';
-import 'package:garagelink/MecanicienScreens/work%20order/work_order_page.dart';
 import 'package:get/get.dart';
 import 'package:garagelink/components/default_app_bar.dart';
 import 'package:garagelink/MecanicienScreens/Facture/facture_screen.dart';
 import 'package:garagelink/MecanicienScreens/Gestion%20Clients/client_dash.dart';
 import 'package:garagelink/MecanicienScreens/R%C3%A9servations/reservation_screen.dart';
 import 'package:garagelink/MecanicienScreens/dashboard/screens/dash_board_screen.dart';
-import 'package:garagelink/MecanicienScreens/work%20order/notif_screen.dart';
 import 'package:garagelink/configurations/app_routes.dart';
-
-// imports pour token & profil
-import 'package:garagelink/services/api_client.dart';
+import 'package:garagelink/providers/auth_provider.dart';
 import 'package:garagelink/services/user_api.dart';
 
 class MecaHomePage extends ConsumerStatefulWidget {
@@ -27,7 +23,6 @@ class MecaHomePage extends ConsumerStatefulWidget {
 }
 
 class _MecaHomePageState extends ConsumerState<MecaHomePage> {
-  final ApiClient _apiClient = ApiClient();
   bool _checkingAuth = true;
   String _userName = 'Utilisateur';
 
@@ -40,26 +35,39 @@ class _MecaHomePageState extends ConsumerState<MecaHomePage> {
 
   Future<void> _initAuth() async {
     try {
-      final token = await _apiClient.getToken();
+      // Charger depuis secure storage si besoin
+      await ref.read(authNotifierProvider.notifier).loadFromStorage();
+
+      final token = ref.read(authTokenProvider);
+      final currentUser = ref.read(currentUserProvider);
+
       if (token == null || token.isEmpty) {
         // pas de token -> redirection vers login
         if (mounted) Get.offAllNamed(AppRoutes.login);
         return;
       }
 
-      // token présent -> tenter de récupérer le profil
-      try {
-        final profile = await UserService().getProfile(token);
-        if (profile != null) {
-          setState(() {
-            // adapte selon les champs de ton UserModel
-            _userName = (profile.username.isNotEmpty) ? profile.username : (profile.email);
-          });
-        } else {
+      // si l'utilisateur n'est pas dans le provider, tenter de récupérer via API
+      if (currentUser == null) {
+        try {
+          final profile = await UserApi.getProfile(token);
+          if (profile != null) {
+            // mettre à jour le provider
+            await ref.read(authNotifierProvider.notifier).setUser(profile);
+            setState(() {
+              _userName = (profile.username.isNotEmpty) ? profile.username : profile.email;
+            });
+          } else {
+            setState(() => _userName = 'Utilisateur');
+          }
+        } catch (_) {
+          // en cas d'erreur on continue avec valeur par défaut
           setState(() => _userName = 'Utilisateur');
         }
-      } catch (e) {
-        if (mounted) setState(() => _userName = 'Utilisateur');
+      } else {
+        setState(() {
+          _userName = (currentUser.username.isNotEmpty) ? currentUser.username : currentUser.email;
+        });
       }
 
       // afficher message si on vient d'un login
@@ -85,7 +93,8 @@ class _MecaHomePageState extends ConsumerState<MecaHomePage> {
   }
 
   Future<void> _handleLogout() async {
-    await _apiClient.deleteToken();
+    // clear state + secure storage
+    await ref.read(authNotifierProvider.notifier).clear();
     if (mounted) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) Get.offAllNamed(AppRoutes.login);
@@ -353,20 +362,6 @@ class _MecaHomePageState extends ConsumerState<MecaHomePage> {
               description: 'Création et gestion des devis',
               color: const Color.fromARGB(255, 243, 228, 20),
               onTap: () => Get.to(() => CreationDevisPage()),
-            ),
-            // buildMenuCard(
-            //   icon: Icons.assignment,
-            //   title: 'Ordres de Travail',
-            //   description: 'Création et gestion des ordres de travail',
-            //   color: const Color.fromARGB(255, 0, 173, 72),
-            //   onTap: () => Get.to(() => WorkOrderPage()),
-            // ),
-            buildMenuCard(
-              icon: Icons.notification_important,
-              title: 'Notifications',
-              description: 'Création et gestion des Norifications',
-              color: const Color.fromARGB(255, 250, 26, 201),
-              onTap: () => Get.to(() => NotifScreen()),
             ),
             buildMenuCard(
               icon: Icons.inventory,

@@ -1,5 +1,6 @@
+// lib/auth/login_page.dart
 import 'package:awesome_dialog/awesome_dialog.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_auth/firebase_auth.dart' as fb;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -8,21 +9,22 @@ import 'package:garagelink/components/custom_button.dart';
 import 'package:garagelink/components/custom_text_form.dart';
 import 'package:garagelink/configurations/app_routes.dart';
 import 'package:garagelink/providers/login_providers.dart';
-import 'package:garagelink/services/api_client.dart';
-import 'package:garagelink/services/auth_service.dart';
+import 'package:garagelink/providers/auth_provider.dart';
 import 'package:garagelink/services/user_api.dart';
 import 'package:garagelink/utils/input_formatters.dart';
 import 'package:get/get.dart';
-
-final authServiceProvider = Provider<AuthService>((ref) => AuthService());
+import 'package:google_sign_in/google_sign_in.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'dart:async';
 
 class LoginPage extends ConsumerStatefulWidget {
+  const LoginPage({Key? key}) : super(key: key);
+
   @override
-  _LoginPageState createState() => _LoginPageState();
+  ConsumerState<LoginPage> createState() => _LoginPageState();
 }
 
-class _LoginPageState extends ConsumerState<LoginPage>
-    with TickerProviderStateMixin {
+class _LoginPageState extends ConsumerState<LoginPage> with TickerProviderStateMixin {
   final RegExp tunisianPhoneRegExp = RegExp(r'^\+216\d{8}$');
 
   bool _usePhoneLogin = false;
@@ -34,38 +36,33 @@ class _LoginPageState extends ConsumerState<LoginPage>
   late Animation<Offset> _emailSlideAnimation;
   late Animation<Offset> _phoneSlideAnimation;
 
+  // controllers
   late final TextEditingController phoneController;
   late final TextEditingController otpController;
   late final TextEditingController emailController;
   late final TextEditingController passwordController;
 
+  // verification id for phone auth
+  String? _verificationId;
+
   @override
   void initState() {
     super.initState();
 
-    _toggleController = AnimationController(
-      duration: const Duration(milliseconds: 300),
-      vsync: this,
-    );
+    _toggleController = AnimationController(duration: const Duration(milliseconds: 300), vsync: this);
+    _slideController = AnimationController(duration: const Duration(milliseconds: 400), vsync: this);
 
-    _slideController = AnimationController(
-      duration: const Duration(milliseconds: 400),
-      vsync: this,
-    );
+    _emailSlideAnimation = Tween<Offset>(begin: Offset.zero, end: const Offset(-1.0, 0.0))
+        .animate(CurvedAnimation(parent: _slideController, curve: Curves.easeInOut));
+    _phoneSlideAnimation = Tween<Offset>(begin: const Offset(1.0, 0.0), end: Offset.zero)
+        .animate(CurvedAnimation(parent: _slideController, curve: Curves.easeInOut));
 
-    _emailSlideAnimation =
-        Tween<Offset>(begin: Offset.zero, end: const Offset(-1.0, 0.0)).animate(
-      CurvedAnimation(parent: _slideController, curve: Curves.easeInOut),
-    );
-
-    _phoneSlideAnimation =
-        Tween<Offset>(begin: const Offset(1.0, 0.0), end: Offset.zero).animate(
-      CurvedAnimation(parent: _slideController, curve: Curves.easeInOut),
-    );
-
+    // controllers from providers for email/password (these providers create & dispose controllers)
     emailController = ref.read(loginEmailControllerProvider);
     passwordController = ref.read(loginPasswordControllerProvider);
-    phoneController = ref.read(numberControllerProvider);
+
+    // local controllers for phone / otp
+    phoneController = TextEditingController();
     otpController = TextEditingController();
 
     emailController.addListener(_updateEmail);
@@ -88,7 +85,13 @@ class _LoginPageState extends ConsumerState<LoginPage>
   void dispose() {
     _toggleController.dispose();
     _slideController.dispose();
+    // remove listeners from provider-managed controllers (we don't dispose them here)
+    emailController.removeListener(_updateEmail);
+    passwordController.removeListener(_updatePassword);
+
+    // dispose local controllers
     otpController.dispose();
+    phoneController.dispose();
     super.dispose();
   }
 
@@ -103,9 +106,7 @@ class _LoginPageState extends ConsumerState<LoginPage>
         _toggleController.forward();
         _slideController.forward();
         phoneController.text = '+216';
-        phoneController.selection = TextSelection.fromPosition(
-          TextPosition(offset: phoneController.text.length),
-        );
+        phoneController.selection = TextSelection.fromPosition(TextPosition(offset: phoneController.text.length));
       } else {
         _toggleController.reverse();
         _slideController.reverse();
@@ -114,6 +115,7 @@ class _LoginPageState extends ConsumerState<LoginPage>
   }
 
   void _showSnackBar(String message, {bool isError = true}) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
@@ -124,7 +126,6 @@ class _LoginPageState extends ConsumerState<LoginPage>
     );
   }
 
-  /// Handle response maps from UserService and show SnackBar + debug print
   void _handleApiResult(
     Map<String, dynamic> res, {
     bool successIsError = false,
@@ -133,8 +134,7 @@ class _LoginPageState extends ConsumerState<LoginPage>
     final msg = (res['message'] as String?) ?? 'Une erreur est survenue.';
     final isError = !(res['success'] == true) || successIsError;
 
-    // ATTENTION : n'appelle pas _showSnackBar avant une navigation; la fonction
-    // reste utile pour afficher des erreurs côté courant.
+    // afficher message
     _showSnackBar(msg, isError: isError);
 
     if (res['success'] == true && onSuccess != null) {
@@ -142,10 +142,10 @@ class _LoginPageState extends ConsumerState<LoginPage>
     }
 
     if (kDebugMode) {
-      print('[API DEBUG] message: $msg');
-      if (res.containsKey('devMessage')) print('[API DEBUG] devMessage: ${res['devMessage']}');
-      if (res.containsKey('statusCode')) print('[API DEBUG] statusCode: ${res['statusCode']}');
-      if (res.containsKey('body')) print('[API DEBUG] body: ${res['body']}');
+      debugPrint('[API DEBUG] message: $msg');
+      if (res.containsKey('devMessage')) debugPrint('[API DEBUG] devMessage: ${res['devMessage']}');
+      if (res.containsKey('statusCode')) debugPrint('[API DEBUG] statusCode: ${res['statusCode']}');
+      if (res.containsKey('body')) debugPrint('[API DEBUG] body: ${res['body']}');
     }
   }
 
@@ -156,13 +156,7 @@ class _LoginPageState extends ConsumerState<LoginPage>
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(25),
         color: Colors.grey[300],
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 2))],
       ),
       child: Stack(
         children: [
@@ -179,13 +173,7 @@ class _LoginPageState extends ConsumerState<LoginPage>
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(25),
                     color: const Color(0xFF4A90E2),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFF4A90E2).withOpacity(0.3),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
+                    boxShadow: [BoxShadow(color: const Color(0xFF4A90E2).withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 2))],
                   ),
                 ),
               );
@@ -202,20 +190,9 @@ class _LoginPageState extends ConsumerState<LoginPage>
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(
-                          Icons.email_outlined,
-                          color: !_usePhoneLogin ? Colors.white : Colors.grey[600],
-                          size: 20,
-                        ),
+                        Icon(Icons.email_outlined, color: !_usePhoneLogin ? Colors.white : Colors.grey[600], size: 20),
                         const SizedBox(width: 8),
-                        Text(
-                          'Email',
-                          style: TextStyle(
-                            color: !_usePhoneLogin ? Colors.white : Colors.grey[600],
-                            fontWeight: FontWeight.w600,
-                            fontSize: 16,
-                          ),
-                        ),
+                        Text('Email', style: TextStyle(color: !_usePhoneLogin ? Colors.white : Colors.grey[600], fontWeight: FontWeight.w600, fontSize: 16)),
                       ],
                     ),
                   ),
@@ -230,20 +207,9 @@ class _LoginPageState extends ConsumerState<LoginPage>
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(
-                          Icons.phone_android,
-                          color: _usePhoneLogin ? Colors.white : Colors.grey[600],
-                          size: 20,
-                        ),
+                        Icon(Icons.phone_android, color: _usePhoneLogin ? Colors.white : Colors.grey[600], size: 20),
                         const SizedBox(width: 8),
-                        Text(
-                          'Téléphone',
-                          style: TextStyle(
-                            color: _usePhoneLogin ? Colors.white : Colors.grey[600],
-                            fontWeight: FontWeight.w600,
-                            fontSize: 16,
-                          ),
-                        ),
+                        Text('Téléphone', style: TextStyle(color: _usePhoneLogin ? Colors.white : Colors.grey[600], fontWeight: FontWeight.w600, fontSize: 16)),
                       ],
                     ),
                   ),
@@ -263,7 +229,7 @@ class _LoginPageState extends ConsumerState<LoginPage>
         children: [
           CustomButton(
             text: 'Connexion avec Google',
-            onPressed: () => ref.read(authServiceProvider).signInWithGoogle(context),
+            onPressed: _handleGoogleSignIn,
             icon: Icons.g_mobiledata,
             backgroundColor: const Color(0xFFDB4437),
           ),
@@ -271,47 +237,26 @@ class _LoginPageState extends ConsumerState<LoginPage>
           const Row(
             children: [
               Expanded(child: Divider(color: Colors.grey)),
-              Padding(
-                padding: EdgeInsets.symmetric(horizontal: 16),
-                child: Text(
-                  'OU',
-                  style: TextStyle(
-                    color: Colors.grey,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ),
+              Padding(padding: EdgeInsets.symmetric(horizontal: 16), child: Text('OU', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.w500))),
               Expanded(child: Divider(color: Colors.grey)),
             ],
           ),
           const SizedBox(height: 30),
-          CustomTextForm(
-            hinttext: 'Adresse email',
-            mycontroller: emailController,
-          ),
+          CustomTextForm(hinttext: 'Adresse email', mycontroller: emailController),
           const SizedBox(height: 20),
-          CustomTextForm(
-            hinttext: 'Mot de passe',
-            mycontroller: passwordController,
-          ),
+          CustomTextForm(hinttext: 'Mot de passe', mycontroller: passwordController),
           const SizedBox(height: 15),
           Align(
             alignment: Alignment.centerRight,
             child: TextButton(
               onPressed: () => Get.toNamed('/resetPassword'),
-              child: const Text(
-                "Mot de passe oublié ?",
-                style: TextStyle(
-                  color: Color(0xFF4A90E2),
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
+              child: const Text("Mot de passe oublié ?", style: TextStyle(color: Color(0xFF4A90E2), fontWeight: FontWeight.w500)),
             ),
           ),
           const SizedBox(height: 25),
           CustomButton(
             text: _isLoading ? 'Connexion...' : 'Se connecter',
-            onPressed: _isLoading ? () {} : () => _handleEmailLogin(),
+            onPressed: _isLoading ? () {} : _handleEmailLogin,
             icon: Icons.login,
             backgroundColor: const Color(0xFF4A90E2),
           ),
@@ -320,8 +265,7 @@ class _LoginPageState extends ConsumerState<LoginPage>
     );
   }
 
-  // Version protégée de ton dialog + snackBar handling
-  void _showVerificationDialogWithCheck(BuildContext context, User user) {
+  void _showVerificationDialogWithCheck(BuildContext context, fb.User user) {
     AwesomeDialog(
       context: context,
       dialogType: DialogType.warning,
@@ -331,18 +275,14 @@ class _LoginPageState extends ConsumerState<LoginPage>
       btnOkText: 'Renvoyer',
       btnCancelOnPress: () async {
         try {
-          await FirebaseAuth.instance.signOut();
+          await fb.FirebaseAuth.instance.signOut();
           if (mounted) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
-              _handleApiResult({
-                'success': true,
-                'message': 'Déconnecté.',
-                'devMessage': 'User signed out after cancelling verification dialog',
-              });
+              _handleApiResult({'success': true, 'message': 'Déconnecté.', 'devMessage': 'User signed out after cancelling verification dialog'});
             });
           }
         } catch (e) {
-          if (kDebugMode) print('[LOGIN DEBUG] signOut error: $e');
+          if (kDebugMode) debugPrint('[LOGIN DEBUG] signOut error: $e');
         }
       },
       btnOkOnPress: () async {
@@ -350,28 +290,19 @@ class _LoginPageState extends ConsumerState<LoginPage>
           await user.sendEmailVerification();
           if (mounted) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
-              _handleApiResult({
-                'success': true,
-                'message': 'Email de vérification renvoyé.',
-                'devMessage': 'Email verification sent via Firebase',
-              }, onSuccess: null);
+              _handleApiResult({'success': true, 'message': 'Email de vérification renvoyé.', 'devMessage': 'Email verification sent via Firebase'});
             });
           }
         } catch (e) {
           if (mounted) {
             WidgetsBinding.instance.addPostFrameCallback((_) {
-              _handleApiResult({
-                'success': false,
-                'message': 'Erreur lors de l\'envoi de l\'email: ${e.toString()}',
-                'devMessage': e.toString(),
-              });
+              _handleApiResult({'success': false, 'message': 'Erreur lors de l\'envoi de l\'email: ${e.toString()}', 'devMessage': e.toString()});
             });
           }
         }
       },
     ).show();
 
-    // Retarder l'affichage du SnackBar pour éviter setState pendant build
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -381,11 +312,9 @@ class _LoginPageState extends ConsumerState<LoginPage>
             label: 'Vérifier',
             onPressed: () async {
               try {
-                await FirebaseAuth.instance.currentUser?.reload();
-                final reloaded = FirebaseAuth.instance.currentUser;
-                if (kDebugMode) {
-                  print('[LOGIN DEBUG] after manual reload: emailVerified=${reloaded?.emailVerified}');
-                }
+                await fb.FirebaseAuth.instance.currentUser?.reload();
+                final reloaded = fb.FirebaseAuth.instance.currentUser;
+                if (kDebugMode) debugPrint('[LOGIN DEBUG] after manual reload: emailVerified=${reloaded?.emailVerified}');
                 if (reloaded != null && reloaded.emailVerified) {
                   WidgetsBinding.instance.addPostFrameCallback((_) {
                     if (mounted) Get.offAllNamed(AppRoutes.mecaHome);
@@ -393,22 +322,14 @@ class _LoginPageState extends ConsumerState<LoginPage>
                 } else {
                   if (mounted) {
                     WidgetsBinding.instance.addPostFrameCallback((_) {
-                      _handleApiResult({
-                        'success': false,
-                        'message': 'Email toujours non vérifié. Vérifiez le lien dans votre boite mail.',
-                        'devMessage': 'emailVerified still false after reload',
-                      });
+                      _handleApiResult({'success': false, 'message': 'Email toujours non vérifié. Vérifiez le lien dans votre boite mail.', 'devMessage': 'emailVerified still false after reload'});
                     });
                   }
                 }
               } catch (e) {
                 if (mounted) {
                   WidgetsBinding.instance.addPostFrameCallback((_) {
-                    _handleApiResult({
-                      'success': false,
-                      'message': 'Erreur lors de la vérification: ${e.toString()}',
-                      'devMessage': e.toString(),
-                    });
+                    _handleApiResult({'success': false, 'message': 'Erreur lors de la vérification: ${e.toString()}', 'devMessage': e.toString()});
                   });
                 }
               }
@@ -430,27 +351,18 @@ class _LoginPageState extends ConsumerState<LoginPage>
             mycontroller: phoneController,
             inputFormatters: [TunisiePhoneFormatter()],
             validator: (value) {
-              if (value == null || value.isEmpty) {
-                return 'Veuillez entrer un numéro';
-              }
-              if (!tunisianPhoneRegExp.hasMatch(value)) {
-                return 'Numéro tunisien invalide. Format: +216********';
-              }
+              if (value == null || value.isEmpty) return 'Veuillez entrer un numéro';
+              if (!tunisianPhoneRegExp.hasMatch(value)) return 'Numéro tunisien invalide. Format: +216********';
               return null;
             },
           ),
           if (_codeSent) ...[
             const SizedBox(height: 20),
-            CustomTextForm(
-              hinttext: 'Code de vérification (6 chiffres)',
-              mycontroller: otpController,
-            ),
+            CustomTextForm(hinttext: 'Code de vérification (6 chiffres)', mycontroller: otpController),
           ],
           const SizedBox(height: 30),
           CustomButton(
-            text: _isLoading
-                ? (_codeSent ? 'Vérification...' : 'Envoi...')
-                : (_codeSent ? 'Vérifier le code' : 'Envoyer le code'),
+            text: _isLoading ? (_codeSent ? 'Vérification...' : 'Envoi...') : (_codeSent ? 'Vérifier le code' : 'Envoyer le code'),
             onPressed: _isLoading ? () {} : _handlePhoneAuth,
             icon: Icons.phone_android,
             backgroundColor: const Color(0xFF4A90E2),
@@ -460,191 +372,161 @@ class _LoginPageState extends ConsumerState<LoginPage>
     );
   }
 
-  // ---------------------- MODIFICATION CLÉ : _handleEmailLogin ----------------------
+  // ---------------------- _handleEmailLogin (utilise UserApi + AuthNotifier) ----------------------
   Future<void> _handleEmailLogin() async {
     final email = emailController.text.trim();
     final password = passwordController.text;
 
     if (email.isEmpty || password.isEmpty) {
-      // afficher erreur sur la même page (pas de navigation)
-      if (mounted) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          _handleApiResult({
-            'success': false,
-            'message': 'Veuillez remplir tous les champs',
-            'devMessage': 'Missing email or password in login form',
-          });
-        });
-      }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _handleApiResult({'success': false, 'message': 'Veuillez remplir tous les champs', 'devMessage': 'Missing email or password in login form'});
+      });
       return;
     }
 
-    // set loading (hors build conflict)
     if (mounted) setState(() => _isLoading = true);
 
     try {
-      final userService = UserService();
-      final apiClient = ApiClient();
+      // login via backend
+      final token = await UserApi.login(email: email, password: password);
 
-      final res = await userService.login(email: email, password: password);
+      // fetch profile
+      final profile = await UserApi.getProfile(token);
 
-      if (kDebugMode) print('[LOGIN DEBUG] backend login response: $res');
+      // persist in auth provider
+      await ref.read(authNotifierProvider.notifier).setToken(token, userToSave: profile);
 
-      if (res['success'] == true) {
-        // On cherche un token sous plusieurs noms communs
-        String? token;
-        if (res.containsKey('token') && res['token'] is String) {
-          token = res['token'] as String;
-        } else if (res.containsKey('accessToken') && res['accessToken'] is String) {
-          token = res['accessToken'] as String;
-        } else if (res.containsKey('data') && res['data'] is Map && (res['data']['token'] != null)) {
-          token = res['data']['token'] as String?;
-        } else if (res.containsKey('jwt') && res['jwt'] is String) {
-          token = res['jwt'] as String;
-        }
-
-        if (token != null && token.isNotEmpty) {
-          await apiClient.saveToken(token);
-
-          // fetch profile optional (non bloquant)
-          try {
-            final profile = await UserService().getProfile(token);
-            if (kDebugMode) print('[LOGIN DEBUG] profile fetched: $profile');
-            // stocke le profile si tu as un provider
-          } catch (e) {
-            if (kDebugMode) print('[LOGIN DEBUG] fetching profile failed: $e');
-          }
-
-          // NAVIGUE d'abord et passe un argument pour afficher le message dans la page cible
-          if (mounted) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              Get.offAllNamed(
-                AppRoutes.mecaHome,
-                arguments: {
-                  'justLoggedIn': true,
-                  'message': 'Connecté avec succès.',
-                },
-              );
-            });
-          }
-        } else {
-          // pas de token mais backend success -> afficher message d'erreur ou naviguer quand même
-          if (mounted) {
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              _handleApiResult({
-                'success': true,
-                'message': 'Connecté (mais aucun token reçu).',
-                'devMessage': 'No token found in backend response: $res',
-              }, onSuccess: () {
-                if (mounted) Get.offAllNamed(AppRoutes.mecaHome);
-              });
-            });
-          }
-        }
-      } else {
-        // Backend returned success=false -> afficher erreur SUR LA PAGE ACTUELLE
-        final message = (res['message'] as String?) ?? 'Erreur d\'authentification.';
-        if (mounted) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            _handleApiResult({
-              'success': false,
-              'message': message,
-              'devMessage': 'Backend returned success=false: $res',
-            });
-          });
-        }
+      // navigate to home
+      if (mounted) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          Get.offAllNamed(AppRoutes.mecaHome, arguments: {'justLoggedIn': true, 'message': 'Connecté avec succès.'});
+        });
       }
     } catch (e) {
-      if (kDebugMode) print('[LOGIN DEBUG] unexpected error during backend login: $e');
-      if (mounted) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          _handleApiResult({
-            'success': false,
-            'message': 'Une erreur inattendue s\'est produite lors de la connexion.',
-            'devMessage': e.toString(),
-          });
-        });
-      }
+      if (kDebugMode) debugPrint('[LOGIN DEBUG] error: $e');
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _handleApiResult({'success': false, 'message': e.toString()});
+      });
     } finally {
-      // setState(false) retardé pour éviter setState during build
-      if (mounted) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) setState(() => _isLoading = false);
-        });
-      }
+      if (mounted) WidgetsBinding.instance.addPostFrameCallback((_) => setState(() => _isLoading = false));
     }
   }
   // ---------------------- FIN _handleEmailLogin ----------------------
 
+  // Google Sign-In using google_sign_in + FirebaseAuth
+  Future<void> _handleGoogleSignIn() async {
+    setState(() => _isLoading = true);
+    try {
+      final GoogleSignInAccount? gUser = await GoogleSignIn().signIn();
+      if (gUser == null) {
+        // cancelled
+        return;
+      }
+      final gAuth = await gUser.authentication;
+      final credential = fb.GoogleAuthProvider.credential(accessToken: gAuth.accessToken, idToken: gAuth.idToken);
+      final userCredential = await fb.FirebaseAuth.instance.signInWithCredential(credential);
+
+      final fb.User? fbUser = userCredential.user;
+      if (fbUser != null) {
+        // TODO: si ton backend nécessite d'échanger Firebase token contre un backend token,
+        // fais l'appel ici (par ex. POST /auth/google avec idToken) et stocke le token via authNotifier.
+        // Pour l'instant, on navigue vers home.
+        if (mounted) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            Get.offAllNamed(AppRoutes.mecaHome, arguments: {'justLoggedIn': true, 'message': 'Connecté via Google.'});
+          });
+        }
+      }
+    } catch (e) {
+      if (kDebugMode) debugPrint('[LOGIN DEBUG] Google sign-in error: $e');
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _handleApiResult({'success': false, 'message': 'Erreur Google Sign-In: ${e.toString()}'}); 
+      });
+    } finally {
+      if (mounted) WidgetsBinding.instance.addPostFrameCallback((_) => setState(() => _isLoading = false));
+    }
+  }
+
+  // Phone auth flow using FirebaseAuth.verifyPhoneNumber
   void _handlePhoneAuth() {
     if (!_codeSent) {
-      if (phoneController.text.isEmpty) {
+      final phone = phoneController.text.trim();
+      if (phone.isEmpty) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          _handleApiResult({
-            'success': false,
-            'message': 'Veuillez entrer votre numéro de téléphone',
-            'devMessage': 'Phone input empty in phone auth',
-          });
+          _handleApiResult({'success': false, 'message': 'Veuillez entrer votre numéro de téléphone', 'devMessage': 'Phone input empty in phone auth'});
         });
         return;
       }
-      if (mounted) setState(() => _isLoading = true);
-      ref.read(authServiceProvider).signInWithPhone(
-            phoneController.text,
-            context,
-            () {
-              if (mounted) {
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (mounted) {
-                    setState(() {
-                      _codeSent = true;
-                      _isLoading = false;
-                    });
-                  }
-                });
-              }
-            },
-            (error) {
-              if (mounted) {
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (mounted) setState(() => _isLoading = false);
-                  _handleApiResult({
-                    'success': false,
-                    'message': error,
-                    'devMessage': error,
-                  });
-                });
-              }
-            },
-          );
+
+      setState(() => _isLoading = true);
+
+      FirebaseAuth.instance.verifyPhoneNumber(
+        phoneNumber: phone,
+        verificationCompleted: (fb.PhoneAuthCredential credential) async {
+          // automatic verification (rare)
+          try {
+            final result = await FirebaseAuth.instance.signInWithCredential(credential);
+            if (result.user != null) {
+              if (mounted) WidgetsBinding.instance.addPostFrameCallback((_) => Get.offAllNamed(AppRoutes.mecaHome));
+            }
+          } catch (e) {
+            if (kDebugMode) debugPrint('[PHONE AUTH] verificationCompleted error: $e');
+          } finally {
+            if (mounted) WidgetsBinding.instance.addPostFrameCallback((_) => setState(() => _isLoading = false));
+          }
+        },
+        verificationFailed: (FirebaseAuthException e) {
+          if (kDebugMode) debugPrint('[PHONE AUTH] verificationFailed: $e');
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _handleApiResult({'success': false, 'message': 'Échec de l\'envoi du code: ${e.message}', 'devMessage': e.toString()});
+            if (mounted) setState(() => _isLoading = false);
+          });
+        },
+        codeSent: (String verificationId, int? resendToken) {
+          _verificationId = verificationId;
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) setState(() {
+              _codeSent = true;
+              _isLoading = false;
+            });
+            _handleApiResult({'success': true, 'message': 'Code envoyé.'});
+          });
+        },
+        codeAutoRetrievalTimeout: (String verificationId) {
+          _verificationId = verificationId;
+        },
+        timeout: const Duration(seconds: 60),
+      );
     } else {
-      if (mounted) setState(() => _isLoading = true);
-      ref.read(authServiceProvider).verifySmsCode(
-            otpController.text.trim(),
-            context,
-            isSignup: false,
-            onSuccess: (User? firebaseUser) async {
-              if (firebaseUser != null) {
-                // Navigation retardée pour éviter build conflict
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  if (mounted) Get.offAllNamed(AppRoutes.mecaHome);
-                });
-              } else {
-                WidgetsBinding.instance.addPostFrameCallback((_) {
-                  _handleApiResult({
-                    'success': false,
-                    'message': 'Échec de l\'authentification.',
-                    'devMessage': 'verifySmsCode returned null user',
-                  });
-                });
-              }
-            },
-          );
-      if (mounted) {
+      // Verify the code
+      final code = otpController.text.trim();
+      if (code.isEmpty || _verificationId == null) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) setState(() => _isLoading = false);
+          _handleApiResult({'success': false, 'message': 'Entrez le code reçu par SMS.'});
         });
+        return;
       }
+
+      setState(() => _isLoading = true);
+
+      final credential = PhoneAuthProvider.credential(verificationId: _verificationId!, smsCode: code);
+      FirebaseAuth.instance.signInWithCredential(credential).then((userCred) {
+        if (userCred.user != null) {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            Get.offAllNamed(AppRoutes.mecaHome);
+          });
+        } else {
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _handleApiResult({'success': false, 'message': 'Échec de l\'authentification par SMS.'});
+          });
+        }
+      }).catchError((err) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _handleApiResult({'success': false, 'message': 'Code invalide ou expiré.'});
+        });
+      }).whenComplete(() {
+        if (mounted) WidgetsBinding.instance.addPostFrameCallback((_) => setState(() => _isLoading = false));
+      });
     }
   }
 
@@ -658,51 +540,22 @@ class _LoginPageState extends ConsumerState<LoginPage>
           child: Column(
             children: [
               const SizedBox(height: 40),
-              // Logo ou titre de l'app
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
                   color: const Color(0xFF4A90E2),
                   borderRadius: BorderRadius.circular(20),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF4A90E2).withOpacity(0.3),
-                      blurRadius: 15,
-                      offset: const Offset(0, 5),
-                    ),
-                  ],
+                  boxShadow: [BoxShadow(color: const Color(0xFF4A90E2).withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 5))],
                 ),
-                child: const Icon(
-                  Icons.build_circle,
-                  size: 60,
-                  color: Colors.white,
-                ),
+                child: const Icon(Icons.build_circle, size: 60, color: Colors.white),
               ),
               const SizedBox(height: 30),
-              const Text(
-                'GarageLink',
-                style: TextStyle(
-                  fontSize: 32,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF2C3E50),
-                ),
-              ),
+              const Text('GarageLink', style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Color(0xFF2C3E50))),
               const SizedBox(height: 10),
-              Text(
-                'Gestion intelligente de votre garage',
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Colors.grey[600],
-                  fontWeight: FontWeight.w400,
-                ),
-              ),
+              Text('Gestion intelligente de votre garage', style: TextStyle(fontSize: 16, color: Colors.grey[600], fontWeight: FontWeight.w400)),
               const SizedBox(height: 50),
-
-              // Toggle Button
               _buildToggleButton(),
               const SizedBox(height: 40),
-
-              // Forms
               SizedBox(
                 height: 400,
                 child: Stack(
@@ -712,26 +565,8 @@ class _LoginPageState extends ConsumerState<LoginPage>
                   ],
                 ),
               ),
-
               const SizedBox(height: 20),
-              TextButton(
-                onPressed: () => Get.to(() => SignUpPage()),
-                child: RichText(
-                  text: const TextSpan(
-                    text: 'Nouveau utilisateur ? ',
-                    style: TextStyle(color: Colors.grey),
-                    children: [
-                      TextSpan(
-                        text: 'Créer un compte',
-                        style: TextStyle(
-                          color: Color(0xFF4A90E2),
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+              TextButton(onPressed: () => Get.to(() => const SignUpPage()), child: RichText(text: const TextSpan(text: 'Nouveau utilisateur ? ', style: TextStyle(color: Colors.grey), children: [TextSpan(text: 'Créer un compte', style: TextStyle(color: Color(0xFF4A90E2), fontWeight: FontWeight.w600))]))),
             ],
           ),
         ),

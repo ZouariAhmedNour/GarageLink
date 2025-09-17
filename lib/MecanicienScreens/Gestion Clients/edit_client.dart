@@ -8,7 +8,7 @@ import 'package:garagelink/providers/ficheClient_provider.dart';
 import 'package:get/get.dart';
 
 class EditClientScreen extends ConsumerStatefulWidget {
-  final Client client;
+  final FicheClient client;
   const EditClientScreen({Key? key, required this.client}) : super(key: key);
 
   @override
@@ -22,7 +22,7 @@ class _EditClientScreenState extends ConsumerState<EditClientScreen>
   late TextEditingController _mailCtrl;
   late TextEditingController _telCtrl;
   late TextEditingController _adrCtrl;
-  late Categorie _cat;
+  late ClientType _type;
   late AnimationController _animationController;
   Animation<double>? _fadeAnimation;
   bool _isLoading = false;
@@ -43,11 +43,11 @@ class _EditClientScreenState extends ConsumerState<EditClientScreen>
   }
 
   void _initControllers() {
-    _nomCtrl = TextEditingController(text: widget.client.nomComplet);
-    _mailCtrl = TextEditingController(text: widget.client.mail);
+    _nomCtrl = TextEditingController(text: widget.client.nom);
+    _mailCtrl = TextEditingController(text: widget.client.email);
     _telCtrl = TextEditingController(text: widget.client.telephone);
     _adrCtrl = TextEditingController(text: widget.client.adresse);
-    _cat = widget.client.categorie;
+    _type = widget.client.type;
   }
 
   void _setupAnimation() {
@@ -86,12 +86,11 @@ class _EditClientScreenState extends ConsumerState<EditClientScreen>
 
   String? _phoneValidator(String? v) {
     if (v == null || v.trim().isEmpty) return 'Ce champ est obligatoire';
-    final phoneRegex = RegExp(r'^\+?[\d\s\-\(\)]+$');
+    final phoneRegex = RegExp(r'^\+?[\d\s\-\(\)]{6,20}$');
     return phoneRegex.hasMatch(v.trim()) ? null : 'Format de téléphone invalide';
   }
 
   Widget _buildAnimatedCard({required Widget child}) {
-    // si _fadeAnimation est null (ex: après hot reload) on affiche directement l'enfant opaque
     final opacity = _fadeAnimation ?? AlwaysStoppedAnimation<double>(1.0);
 
     return FadeTransition(
@@ -167,7 +166,7 @@ class _EditClientScreenState extends ConsumerState<EditClientScreen>
     );
   }
 
-  Widget _buildCategorySelector() {
+  Widget _buildTypeSelector() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
@@ -180,7 +179,7 @@ class _EditClientScreenState extends ConsumerState<EditClientScreen>
           Icon(Icons.category_outlined, color: primaryColor, size: 22),
           const SizedBox(width: 12),
           const Text(
-            'Catégorie :',
+            'Type de client :',
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w500,
@@ -190,28 +189,25 @@ class _EditClientScreenState extends ConsumerState<EditClientScreen>
           const SizedBox(width: 16),
           Expanded(
             child: DropdownButtonHideUnderline(
-              child: DropdownButton<Categorie>(
-                value: _cat,
+              child: DropdownButton<ClientType>(
+                value: _type,
                 isExpanded: true,
                 style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w400,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
                   color: Color(0xFF2D3748),
                 ),
-                items: Categorie.values
+                items: ClientType.values
                     .map((e) => DropdownMenuItem(
                           value: e,
                           child: Text(
-                            e.toString().split('.').last.toUpperCase(),
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w500,
-                            ),
+                            e == ClientType.particulier ? 'Particulier' : 'Professionnel',
                           ),
                         ))
                     .toList(),
                 onChanged: (v) {
                   HapticFeedback.selectionClick();
-                  setState(() => _cat = v ?? Categorie.particulier);
+                  setState(() => _type = v ?? ClientType.particulier);
                 },
               ),
             ),
@@ -265,96 +261,80 @@ class _EditClientScreenState extends ConsumerState<EditClientScreen>
   }
 
   Future<void> _handleSave() async {
-  if (!(_formKey.currentState?.validate() ?? false)) return;
+    if (!(_formKey.currentState?.validate() ?? false)) return;
 
-  final id = widget.client.id;
-  if (id == null || id.isEmpty) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('ID client invalide'), backgroundColor: errorColor),
-    );
-    return;
-  }
-
-  HapticFeedback.mediumImpact();
-  setState(() => _isLoading = true);
-
-  try {
-    // Construire l'objet Client mis à jour
-    final updatedClient = widget.client.copyWith(
-      nomComplet: _nomCtrl.text.trim(),
-      mail: _mailCtrl.text.trim(),
-      telephone: _telCtrl.text.trim(),
-      adresse: _adrCtrl.text.trim(),
-      categorie: _cat,
-    );
-
-    // Convertir en Map<String, dynamic> avant d'appeler le provider
-    final Map<String, dynamic> payload = updatedClient.toJson();
-
-    // Appel au provider — many providers expect (id, Map)
-    final dynamic result = await ref.read(clientsProvider.notifier).updateClient(id, payload);
-
-    // Normaliser le résultat en boolean "success"
-    bool success = false;
-    if (result == null) {
-      // provider n'a rien retourné -> considérer ok (ou change selon ton impl)
-      success = true;
-    } else if (result is bool) {
-      success = result;
-    } else if (result is Client) {
-      success = true;
-      // Optionnel : si provider retourne le Client, tu peux mettre à jour localement
-      // ref.read(clientsProvider.notifier).setClient(result);
-    } else if (result is Map) {
-      // si c'est une Map { success: true, data: {...} } ou { data: clientMap }
-      if (result['success'] == true) success = true;
-      else if (result['data'] is Map || result['data'] is Client) success = true;
-      else {
-        // si la map ressemble plutôt à un client directement
-        success = true;
-      }
-    } else {
-      // fallback permissif
-      success = true;
+    final id = widget.client.id;
+    if (id == null || id.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('ID client invalide'), backgroundColor: Color(0xFFE53E3E)),
+      );
+      return;
     }
 
-    if (success) {
-      if (mounted) {
-        HapticFeedback.lightImpact();
+    HapticFeedback.mediumImpact();
+    setState(() => _isLoading = true);
+
+    try {
+      // Appel au provider updateFicheClient
+      await ref.read(ficheClientsProvider.notifier).updateFicheClient(
+        id: id,
+        nom: _nomCtrl.text.trim(),
+        type: _type,
+        adresse: _adrCtrl.text.trim(),
+        telephone: _telCtrl.text.trim(),
+        email: _mailCtrl.text.trim(),
+      );
+
+      // Vérifier si le provider a rapporté une erreur
+      final err = ref.read(ficheClientsProvider).error;
+      if (err != null) {
+        HapticFeedback.heavyImpact();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Row(
+            content: Row(
               children: [
-                Icon(Icons.check_circle_outline, color: Colors.white),
-                SizedBox(width: 12),
-                Text(
-                  'Client modifié avec succès',
-                  style: TextStyle(fontWeight: FontWeight.w500),
-                ),
+                const Icon(Icons.error_outline, color: Colors.white),
+                const SizedBox(width: 12),
+                Expanded(child: Text('Erreur: $err')),
               ],
             ),
-            backgroundColor: successColor,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            margin: const EdgeInsets.all(16),
+            backgroundColor: errorColor,
           ),
         );
-        // fermer l'écran après succès
-        Get.back();
+      } else {
+        if (mounted) {
+          HapticFeedback.lightImpact();
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Row(
+                children: [
+                  Icon(Icons.check_circle_outline, color: Colors.white),
+                  SizedBox(width: 12),
+                  Text(
+                    'Client modifié avec succès',
+                    style: TextStyle(fontWeight: FontWeight.w500),
+                  ),
+                ],
+              ),
+              backgroundColor: successColor,
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              margin: const EdgeInsets.all(16),
+            ),
+          );
+          Get.back();
+        }
       }
-    } else {
+    } catch (e) {
       if (mounted) {
         HapticFeedback.heavyImpact();
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Row(
+            content: Row(
               children: [
-                Icon(Icons.error_outline, color: Colors.white),
-                SizedBox(width: 12),
-                Text(
-                  'Erreur lors de la modification',
-                  style: TextStyle(fontWeight: FontWeight.w500),
-                ),
+                const Icon(Icons.error_outline, color: Colors.white),
+                const SizedBox(width: 12),
+                Expanded(child: Text('Erreur: ${e.toString()}')),
               ],
             ),
             backgroundColor: errorColor,
@@ -364,31 +344,10 @@ class _EditClientScreenState extends ConsumerState<EditClientScreen>
           ),
         );
       }
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
-  } catch (e, st) {
-    if (mounted) {
-      HapticFeedback.heavyImpact();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Row(
-            children: [
-              const Icon(Icons.error_outline, color: Colors.white),
-              const SizedBox(width: 12),
-              Expanded(child: Text('Erreur: ${e.toString()}')),
-            ],
-          ),
-          backgroundColor: errorColor,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          margin: const EdgeInsets.all(16),
-        ),
-      );
-    }
-    // debugPrintStack(label: 'EditClientScreen._handleSave', stackTrace: st);
-  } finally {
-    if (mounted) setState(() => _isLoading = false);
   }
-}
 
   @override
   Widget build(BuildContext context) {
@@ -460,7 +419,7 @@ class _EditClientScreenState extends ConsumerState<EditClientScreen>
 
                 const SizedBox(height: 16),
 
-                // Section adresse et catégorie
+                // Section adresse et type
                 _buildAnimatedCard(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -470,7 +429,7 @@ class _EditClientScreenState extends ConsumerState<EditClientScreen>
                           Icon(Icons.location_on_outlined, color: primaryColor),
                           SizedBox(width: 8),
                           Text(
-                            'Adresse et catégorie',
+                            'Adresse et type',
                             style: TextStyle(
                               fontSize: 18,
                               fontWeight: FontWeight.w600,
@@ -490,7 +449,7 @@ class _EditClientScreenState extends ConsumerState<EditClientScreen>
                       ),
 
                       const SizedBox(height: 8),
-                      _buildCategorySelector(),
+                      _buildTypeSelector(),
                     ],
                   ),
                 ),

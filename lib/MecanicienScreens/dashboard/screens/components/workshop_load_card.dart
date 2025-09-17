@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:garagelink/MecanicienScreens/dashboard/constants/constants.dart';
 import 'package:garagelink/MecanicienScreens/dashboard/screens/components/radial_painter.dart';
-import 'package:garagelink/providers/interventions_provider.dart';
-import 'package:garagelink/models/intervention.dart';
+
 
 class WorkshopLoadCard extends ConsumerWidget {
   final int mechanics;
@@ -17,19 +16,13 @@ class WorkshopLoadCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final interventions = ref.watch(interventionsProvider);
+    
 
     // total heures planifiées pour aujourd'hui
     double plannedMinutes = 0.0;
     final today = DateTime.now();
 
-    for (Intervention it in interventions) {
-      if (it.date.year == today.year &&
-          it.date.month == today.month &&
-          it.date.day == today.day) {
-        plannedMinutes += it.dureeMinutes.toDouble();
-      }
-    }
+ 
 
     final plannedHours = plannedMinutes / 60.0;
     final capacity = mechanics * hoursPerMechanic;

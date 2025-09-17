@@ -2,13 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:garagelink/MecanicienScreens/dashboard/constants/constants.dart';
 import 'package:garagelink/MecanicienScreens/dashboard/constants/responsive.dart';
 import 'package:garagelink/MecanicienScreens/dashboard/screens/components/analytic_cards.dart';
+import 'package:garagelink/MecanicienScreens/dashboard/screens/components/discussions.dart';
 import 'package:garagelink/MecanicienScreens/dashboard/screens/components/frequent_repairs_card.dart';
 import 'package:garagelink/MecanicienScreens/dashboard/screens/components/sales_line_chart.dart';
 import 'package:garagelink/MecanicienScreens/dashboard/screens/components/vehicles_by_type.dart';
 import 'package:garagelink/MecanicienScreens/dashboard/screens/components/workshop_load_card.dart';
-import 'package:garagelink/MecanicienScreens/dashboard/screens/report_screen.dart';
 import 'package:get/get.dart';
-import 'discussions.dart';
 
 class DashboardContent extends StatelessWidget {
   const DashboardContent({Key? key}) : super(key: key);
@@ -65,7 +64,7 @@ class DashboardContent extends StatelessWidget {
                                 child: InkWell(
                                   borderRadius: BorderRadius.circular(10),
                                   onTap: () {
-                                    Get.to(() => const ReportsScreen());
+                                   
                                   },
                                   child: Stack(
                                     children: [

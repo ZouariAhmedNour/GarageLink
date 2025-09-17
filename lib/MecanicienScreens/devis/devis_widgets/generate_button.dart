@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 
 class GenerateButton extends StatelessWidget {
-  final VoidCallback onPressed;
+  final VoidCallback? onPressed;
   final String text; // <-- nouveau paramètre
 
-  const GenerateButton({super.key, required this.onPressed, required this.text});
+  const GenerateButton({super.key,  this.onPressed, required this.text});
 
   @override
   Widget build(BuildContext context) {

@@ -1,7 +1,5 @@
-// lib/services/pdf_service.dart
 import 'dart:io';
 import 'dart:typed_data';
-
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
@@ -10,7 +8,6 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
-
 import '../models/devis.dart';
 
 class PdfService {
@@ -45,9 +42,9 @@ class PdfService {
                 pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
                   children: [
-                    pw.Text(devis.client.isNotEmpty ? devis.client : 'Client', style: headerTextStyle),
+                    pw.Text(devis.clientId.isNotEmpty ? devis.clientId : 'Client', style: headerTextStyle),
                     pw.SizedBox(height: 6),
-                    if (devis.vehicleInfo != null) pw.Text(devis.vehicleInfo!, style: baseTextStyle),
+                    pw.Text(devis.vehicleInfo, style: baseTextStyle),
                     pw.SizedBox(height: 4),
                     pw.Text('Devis #: ${devis.id ?? "-"}', style: baseTextStyle),
                     pw.Text('Statut: ${_niceStatus(devis.status)}', style: baseTextStyle),
@@ -140,7 +137,7 @@ class PdfService {
                     children: [
                       pw.Text('TVA (${devis.tvaRate.toStringAsFixed(2)}%): ', style: baseTextStyle),
                       pw.SizedBox(width: 8),
-                      pw.Text(_currency(devis.montantTva), style: baseTextStyle),
+                      pw.Text(_currency(devis.montantTVA), style: baseTextStyle),
                     ],
                   ),
                   pw.SizedBox(height: 8),
@@ -248,12 +245,8 @@ class PdfService {
       case DevisStatus.accepte:
         return 'Accepté';
       case DevisStatus.refuse:
-        return 'Refusé';
-      case DevisStatus.enAttente:
-        return 'En attente';
-      default:
-        return 'Inconnu';
-    }
+        return 'Refusé'; 
+      }
   }
 
 Future<pw.Font?> _loadFont() async {

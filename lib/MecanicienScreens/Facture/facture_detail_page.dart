@@ -1,10 +1,10 @@
-// lib/mecanicien/devis/facture_detail_page.dart
+// mecanicien/devis/facture_detail_page.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:garagelink/components/default_app_bar.dart';
 import 'package:garagelink/models/facture.dart';
 import 'package:garagelink/services/share_email_service.dart';
-import 'package:garagelink/vehicules/car%20widgets/ui_constants.dart';
+import 'package:garagelink/vehicules/car%20widgets/ui_constants.dart'; // contient primaryBlue
 
 class FactureDetailPage extends ConsumerWidget {
   final Facture facture;
@@ -14,17 +14,15 @@ class FactureDetailPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final clientName = facture.clientInfo.nom ?? 'Client';
     final clientEmail = facture.clientInfo.email ?? '';
-    final date = facture.invoiceDate ?? facture.createdAt ?? DateTime.now();
+    final date = facture.invoiceDate; // invoiceDate est non-nullable dans ton modèle
     final montant = facture.totalTTC;
-
     final displayId = facture.numeroFacture.isNotEmpty ? facture.numeroFacture : (facture.id ?? '');
 
-    // Utiliser bodySmall à la place de caption (caption est déprécié)
     final TextStyle? captionStyle = Theme.of(context).textTheme.bodySmall;
 
     return Scaffold(
       appBar: CustomAppBar(
-        title: 'Facture ${displayId}',
+        title: 'Facture $displayId',
         backgroundColor: primaryBlue,
         showDelete: false,
       ),
@@ -47,8 +45,7 @@ class FactureDetailPage extends ConsumerWidget {
             Row(children: [
               Icon(Icons.attach_money, size: 16, color: Colors.grey[700]),
               const SizedBox(width: 8),
-              Text('${montant.toStringAsFixed(2)} DT',
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+              Text('${montant.toStringAsFixed(2)} DT', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
             ]),
             const SizedBox(height: 20),
 
@@ -73,7 +70,6 @@ class FactureDetailPage extends ConsumerWidget {
                 icon: const Icon(Icons.picture_as_pdf),
                 label: const Text('Télécharger PDF'),
                 onPressed: () {
-                  // TODO: connecter à PdfService.buildFacturePdfBytes(...) si tu ajoutes cette méthode
                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
                     content: Text('Génération PDF (à connecter au PdfService pour Facture)'),
                   ));
@@ -83,7 +79,6 @@ class FactureDetailPage extends ConsumerWidget {
                 icon: const Icon(Icons.print),
                 label: const Text('Imprimer'),
                 onPressed: () {
-                  // TODO: imprimer le PDF via 'printing' une fois la génération implémentée
                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
                     content: Text('Impression (à connecter au PdfService pour Facture)'),
                   ));
@@ -123,7 +118,6 @@ class FactureDetailPage extends ConsumerWidget {
 
             const SizedBox(height: 24),
 
-            // éventuels notes
             if (facture.notes != null && facture.notes!.isNotEmpty) ...[
               const Text('Notes', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),

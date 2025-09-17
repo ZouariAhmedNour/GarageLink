@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:garagelink/models/facture.dart';
-import 'package:garagelink/global.dart'; // Importer la constante UrlApi
+import 'package:garagelink/global.dart'; 
 
 class FactureApi {
   // En-têtes par défaut pour les requêtes JSON

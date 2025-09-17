@@ -1,15 +1,17 @@
+// on_add_piece.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:garagelink/models/devis.dart';
-import 'package:garagelink/models/pieces.dart';
+import 'package:garagelink/models/devis.dart' show Service;
+import 'package:garagelink/models/pieces.dart' show Piece;
+
 import 'package:garagelink/providers/devis_provider.dart';
 import 'package:garagelink/MecanicienScreens/devis/utils/show_modern_snackbar.dart';
 
-/// Ajoute une pièce (soit depuis le catalogue PieceRechange, soit saisie libre)
+/// Ajoute une pièce (soit depuis le catalogue Piece, soit saisie libre)
 void onAddPiece({
   required BuildContext context,
   required WidgetRef ref,
-  required PieceRechange? selectedItem, // <- PieceRechange (ton model)
+  required Piece? selectedItem,
   required TextEditingController pieceNomCtrl,
   required TextEditingController qteCtrl,
   required TextEditingController puCtrl,
@@ -33,8 +35,8 @@ void onAddPiece({
 
   // Si selectedItem est fourni, on l'utilise comme source par défaut
   if (selectedItem != null) {
-    final name = nameFromCtrl.isEmpty ? (selectedItem.name) : nameFromCtrl;
-    final prixUnit = puFromCtrl ?? (selectedItem.prix ?? 0.0);
+    final name = nameFromCtrl.isEmpty ? selectedItem.name : nameFromCtrl;
+    final prixUnit = puFromCtrl ?? selectedItem.prix;
     final quantite = (qteFromCtrl != null && qteFromCtrl > 0) ? qteFromCtrl : 1;
 
     if (name.isEmpty) {
@@ -46,9 +48,9 @@ void onAddPiece({
       return;
     }
 
-    // Construire la ligne DevisService
-    final line = DevisService(
-      pieceId: selectedItem.id?.toString(),
+    // Construire la ligne Service
+    final line = Service(
+      pieceId: selectedItem.id?.toString() ?? '',
       piece: name,
       quantity: quantite,
       unitPrice: prixUnit,
@@ -80,8 +82,8 @@ void onAddPiece({
     return;
   }
 
-  final line = DevisService(
-    pieceId: null,
+  final line = Service(
+    pieceId: '',
     piece: name,
     quantity: qte,
     unitPrice: pu,

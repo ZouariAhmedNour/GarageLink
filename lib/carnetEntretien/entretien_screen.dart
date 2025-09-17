@@ -23,19 +23,18 @@ class EntretienScreen extends ConsumerStatefulWidget {
 
 class _EntretienScreenState extends ConsumerState<EntretienScreen>
     with TickerProviderStateMixin {
-  late TextEditingController _tacheCtrl;
+  late TextEditingController _tacheCtrl; // description / tâche
   late TextEditingController _coutCtrl;
-  late TextEditingController _serviceCtrl;
+  late TextEditingController _serviceCtrl; // type de service
   late TextEditingController _kmCtrl;
   late AnimationController _fadeController;
   late AnimationController _scaleController;
   late Animation<double> _fadeAnimation;
   late Animation<double> _scaleAnimation;
-  
+
   DateTime _date = DateTime.now();
   bool _isLoading = false;
   String? _errorMessage;
-  
 
   // Palette de couleurs unifiée
   static const Color primaryBlue = Color(0xFF357ABD);
@@ -53,14 +52,16 @@ class _EntretienScreenState extends ConsumerState<EntretienScreen>
 
   void _initializeControllers() {
     final init = widget.initial;
-    _tacheCtrl = TextEditingController(text: init?.tache ?? '');
+    // Prise en compte que services peut être vide
+    final firstService = (init?.services.isNotEmpty ?? false) ? init!.services.first : null;
+
+    _tacheCtrl = TextEditingController(text: firstService?.nom ?? init?.notes ?? '');
     _coutCtrl = TextEditingController(
-        text: init != null ? init.coutTotal.toStringAsFixed(2) : '');
-    _serviceCtrl = TextEditingController(text: init?.service ?? 'Entretien général');
-    _date = init?.dateOperation ?? DateTime.now();
-    _kmCtrl = TextEditingController(
-  text: init?.kilometrage?.toString() ?? ''
-);
+        text: init != null ? (init.totalTTC).toStringAsFixed(2) : '');
+    _serviceCtrl =
+        TextEditingController(text: firstService?.description ?? 'Entretien général');
+    _date = init?.dateCommencement ?? DateTime.now();
+    _kmCtrl = TextEditingController(text: init?.kilometrageEntretien?.toString() ?? '');
   }
 
   void _setupAnimations() {
@@ -102,10 +103,16 @@ class _EntretienScreenState extends ConsumerState<EntretienScreen>
     return double.tryParse(cleaned);
   }
 
+  int? _parseInt(String s) {
+    final cleaned = s.trim();
+    if (cleaned.isEmpty) return null;
+    return int.tryParse(cleaned);
+  }
+
   void _showError(String message) {
     setState(() => _errorMessage = message);
     HapticFeedback.lightImpact();
-    
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
@@ -124,7 +131,7 @@ class _EntretienScreenState extends ConsumerState<EntretienScreen>
 
   void _showSuccess(String message) {
     HapticFeedback.mediumImpact();
-    
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
@@ -161,6 +168,12 @@ class _EntretienScreenState extends ConsumerState<EntretienScreen>
       return false;
     }
 
+    final km = _parseInt(_kmCtrl.text);
+    if (_kmCtrl.text.trim().isNotEmpty && km == null) {
+      _showError('Kilométrage invalide');
+      return false;
+    }
+
     return true;
   }
 
@@ -170,34 +183,53 @@ class _EntretienScreenState extends ConsumerState<EntretienScreen>
     setState(() => _isLoading = true);
 
     try {
-      await Future.delayed(const Duration(milliseconds: 300)); // Simule le traitement
-
+      // Construire la liste de services (ici une seule tâche représentée)
       final tache = _tacheCtrl.text.trim();
       final cout = _parseDouble(_coutCtrl.text) ?? 0.0;
-      final service = _serviceCtrl.text.trim();
+      final serviceNom = _serviceCtrl.text.trim();
 
-      final entry = (widget.initial != null)
-          ? widget.initial!.copyWith(
-              dateOperation: _date,
-              service: service,
-              tache: tache,
-              coutTotal: cout)
-          : CarnetEntretien(
-              dateOperation: _date,
-              service: service,
-              tache: tache,
-              coutTotal: cout);
+      // ServiceEntretien est défini dans ton modèle carnetEntretien.dart
+      final taches = [
+        ServiceEntretien(
+          nom: tache,
+          description: serviceNom,
+          quantite: 1,
+          prix: cout == 0.0 ? null : cout,
+        )
+      ];
 
       final notifier = ref.read(carnetProvider.notifier);
-      if (widget.initial != null) {
-        notifier.updateEntry(widget.vehiculeId, entry.idOperation, entry);
-        _showSuccess('Intervention modifiée avec succès');
-      } else {
-        notifier.addEntry(widget.vehiculeId, entry);
+
+      if (widget.initial == null) {
+        // Création d'une nouvelle entrée manuelle
+        await notifier.ajouterEntree(
+          vehiculeId: widget.vehiculeId,
+          date: _date,
+          taches: taches,
+          cout: cout,
+          notes: '${serviceNom.isNotEmpty ? "$serviceNom — " : ""}$tache',
+        );
         _showSuccess('Intervention ajoutée avec succès');
+      } else {
+        // Édition : comme le provider n'a pas d'update général, on propose ici de marquer terminé
+        final carnetId = widget.initial!.id;
+        if (carnetId == null) {
+          _showError('Impossible de modifier : identifiant introuvable');
+        } else {
+          final km = _parseInt(_kmCtrl.text);
+          await notifier.marquerTermine(
+            vehiculeId: widget.vehiculeId,
+            carnetId: carnetId,
+            dateFinCompletion: _date,
+            kilometrageEntretien: km,
+            notes: '${serviceNom.isNotEmpty ? "$serviceNom — " : ""}$tache',
+          );
+          _showSuccess('Intervention marquée comme terminée');
+        }
       }
 
-      await Future.delayed(const Duration(milliseconds: 500));
+      // Petite pause UX et retour
+      await Future.delayed(const Duration(milliseconds: 300));
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
       _showError('Erreur lors de l\'enregistrement: ${e.toString()}');
@@ -243,13 +275,21 @@ class _EntretienScreenState extends ConsumerState<EntretienScreen>
     );
 
     if (conf == true) {
+      final carnetId = widget.initial!.id;
+      if (carnetId == null) {
+        _showError('Identifiant de l\'intervention manquant');
+        return;
+      }
+
       try {
-        ref.read(carnetProvider.notifier)
-            .removeEntry(widget.vehiculeId, widget.initial!.idOperation);
+        setState(() => _isLoading = true);
+        await ref.read(carnetProvider.notifier).supprimerEntree(widget.vehiculeId, carnetId);
         _showSuccess('Intervention supprimée');
-        Navigator.of(context).pop();
+        if (mounted) Navigator.of(context).pop();
       } catch (e) {
-        _showError('Erreur lors de la suppression');
+        _showError('Erreur lors de la suppression: ${e.toString()}');
+      } finally {
+        if (mounted) setState(() => _isLoading = false);
       }
     }
   }
@@ -410,11 +450,11 @@ class _EntretienScreenState extends ConsumerState<EntretienScreen>
     return Scaffold(
       backgroundColor: Colors.grey[50],
       appBar: CustomAppBar(
-  title: isEditing ? 'Modifier intervention' : 'Nouvelle intervention',
-  showDelete: isEditing,
-  onDelete: _delete, // ton callback
-  backgroundColor: primaryBlue,
-),
+        title: isEditing ? 'Détails intervention' : 'Nouvelle intervention',
+        showDelete: isEditing,
+        onDelete: _delete,
+        backgroundColor: primaryBlue,
+      ),
       body: FadeTransition(
         opacity: _fadeAnimation,
         child: ScaleTransition(
@@ -427,22 +467,21 @@ class _EntretienScreenState extends ConsumerState<EntretienScreen>
                 _buildDateCard(),
                 const SizedBox(height: 20),
                 _buildInputCard(
-                 title: 'Kilométrage',
-                 controller: _kmCtrl,
-                 icon: Icons.speed,
-                 hint: 'Ex: 120000',
-                 keyboardType: TextInputType.number,
-                 suffix: 'km',
-               ),
-               const SizedBox(height: 20),
-                 _buildInputCard(
+                  title: 'Kilométrage',
+                  controller: _kmCtrl,
+                  icon: Icons.speed,
+                  hint: 'Ex: 120000',
+                  keyboardType: TextInputType.number,
+                  suffix: 'km',
+                ),
+                const SizedBox(height: 20),
+                _buildInputCard(
                   title: 'Type de service',
                   controller: _serviceCtrl,
                   icon: Icons.build_circle_outlined,
                   hint: 'Ex: Vidange, Révision, Réparation...',
                 ),
                 const SizedBox(height: 20),
-
                 _buildInputCard(
                   title: 'Description de l\'intervention',
                   controller: _tacheCtrl,
@@ -451,7 +490,6 @@ class _EntretienScreenState extends ConsumerState<EntretienScreen>
                   maxLines: 3,
                 ),
                 const SizedBox(height: 20),
-
                 _buildInputCard(
                   title: 'Coût total',
                   controller: _coutCtrl,
@@ -461,7 +499,6 @@ class _EntretienScreenState extends ConsumerState<EntretienScreen>
                   suffix: 'DT',
                 ),
                 const SizedBox(height: 32),
-
                 // Boutons d'action
                 Row(
                   children: [
@@ -507,13 +544,19 @@ class _EntretienScreenState extends ConsumerState<EntretienScreen>
                                 ),
                               )
                             : Text(
-                                isEditing ? 'Enregistrer' : 'Ajouter',
+                                isEditing ? 'Marquer terminé' : 'Ajouter',
                                 style: const TextStyle(fontWeight: FontWeight.w600),
                               ),
                       ),
                     ),
                   ],
                 ),
+                const SizedBox(height: 12),
+                if (isEditing)
+                  Text(
+                    'Note: l\'édition complète des champs d\'une entrée existante n\'est pas implémentée. Le bouton "Marquer terminé" mettra l\'entrée à jour comme complétée.',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.black54),
+                  ),
               ],
             ),
           ),

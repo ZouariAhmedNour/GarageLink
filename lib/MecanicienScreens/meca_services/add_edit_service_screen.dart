@@ -24,9 +24,10 @@ class _AddEditServiceScreenState extends ConsumerState<AddEditServiceScreen> {
   void initState() {
     super.initState();
     if (widget.service != null) {
-      nomCtrl.text = widget.service!.nomService;
+      // Remplir avec les champs réels du modèle Service
+      nomCtrl.text = widget.service!.name;
       descCtrl.text = widget.service!.description;
-      actif = widget.service!.status == ServiceStatus.actif;
+      actif = widget.service!.statut == ServiceStatut.actif;
     }
   }
 
@@ -42,26 +43,39 @@ class _AddEditServiceScreenState extends ConsumerState<AddEditServiceScreen> {
     setState(() => _isLoading = true);
     HapticFeedback.mediumImpact();
 
+    final name = nomCtrl.text.trim();
+    final description = descCtrl.text.trim();
+    final statut = actif ? ServiceStatut.actif : ServiceStatut.desactive;
+
     try {
-      final newService = Service(
-        id: widget.service?.id ?? 'SVC-${DateTime.now().millisecondsSinceEpoch}',
-        nomService: nomCtrl.text.trim(),
-        description: descCtrl.text.trim(),
-        status: actif ? ServiceStatus.actif : ServiceStatus.inactif,
-      );
+      final notifier = ref.read(serviceProvider.notifier);
 
       if (widget.service == null) {
-        ref.read(serviceProvider.notifier).addService(newService);
+        // Création via provider -> createService (réseau)
+        await notifier.createService(
+          name: name,
+          description: description,
+          statut: statut,
+        );
       } else {
-        ref.read(serviceProvider.notifier).updateService(newService);
+        // Mise à jour : utiliser l'id MongoDB si présent sinon serviceId
+        final idToUse = widget.service!.id ?? widget.service!.serviceId;
+        await notifier.updateService(
+          id: idToUse,
+          name: name,
+          description: description,
+          statut: statut,
+        );
       }
 
       if (mounted) Navigator.pop(context);
     } catch (e) {
       HapticFeedback.heavyImpact();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Erreur lors de la sauvegarde')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur lors de la sauvegarde : $e')),
+        );
+      }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -89,12 +103,15 @@ class _AddEditServiceScreenState extends ConsumerState<AddEditServiceScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final isEditing = widget.service != null;
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
       appBar: AppBar(
         iconTheme: const IconThemeData(color: Colors.white),
-        title: Text(widget.service == null ? 'Nouveau service' : 'Modifier service', 
-            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+        title: Text(
+          isEditing ? 'Modifier service' : 'Nouveau service',
+          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+        ),
         backgroundColor: const Color(0xFF357ABD),
       ),
       body: ListView(
@@ -125,8 +142,9 @@ class _AddEditServiceScreenState extends ConsumerState<AddEditServiceScreen> {
                       const Text('Statut: ', style: TextStyle(fontWeight: FontWeight.w600)),
                       const SizedBox(width: 8),
                       Chip(
-                        label: Text(actif ? 'Actif' : 'Inactif'),
-                        backgroundColor: actif ? Colors.green.withOpacity(0.12) : Colors.red.withOpacity(0.12),
+                        label: Text(actif ? 'Actif' : 'Désactivé'),
+                        backgroundColor:
+                            actif ? Colors.green.withOpacity(0.12) : Colors.red.withOpacity(0.12),
                       ),
                       const Spacer(),
                       Switch(
@@ -143,7 +161,12 @@ class _AddEditServiceScreenState extends ConsumerState<AddEditServiceScreen> {
                     child: ElevatedButton(
                       onPressed: _isLoading ? null : _saveService,
                       style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF357ABD)),
-                      child: _isLoading ? const CircularProgressIndicator(color: Colors.white) : Text(widget.service == null ? 'Créer le service' : 'Sauvegarder', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white)),
+                      child: _isLoading
+                          ? const CircularProgressIndicator(color: Colors.white)
+                          : Text(
+                              isEditing ? 'Sauvegarder' : 'Créer le service',
+                              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white),
+                            ),
                     ),
                   ),
                 ],

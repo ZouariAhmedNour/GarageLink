@@ -1,3 +1,5 @@
+// mec_list_item.dart
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,7 +8,6 @@ import 'package:get/get.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../add_mec_screen.dart';
 
-// Couleurs cohérentes avec MecListScreen
 class MecItemColors {
   static const primary = Color(0xFF357ABD);
   static const primaryLight = Color(0xFF5A9BD8);
@@ -42,33 +43,35 @@ class _MecListItemState extends ConsumerState<MecListItem>
   late Animation<double> _expandAnimation;
   late Animation<double> _fadeAnimation;
 
-  @override
-void initState() {
-  super.initState();
-  _expandController = AnimationController(
-    duration: const Duration(milliseconds: 300),
-    vsync: this,
-  );
-  _expandAnimation = CurvedAnimation(
-    parent: _expandController,
-    curve: Curves.easeInOut,
-  );
-  _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-    CurvedAnimation(parent: _expandController, curve: Curves.easeIn),
-  );
+  String get _id => widget.mec.id ?? '';
 
-  // ✅ Synchroniser immédiatement avec l'état courant
-  if (widget.expanded.contains(widget.mec.id)) {
-    _expandController.value = 1.0; // déjà ouvert
-  } else {
-    _expandController.value = 0.0; // fermé
+  @override
+  void initState() {
+    super.initState();
+    _expandController = AnimationController(
+      duration: const Duration(milliseconds: 300),
+      vsync: this,
+    );
+    _expandAnimation = CurvedAnimation(
+      parent: _expandController,
+      curve: Curves.easeInOut,
+    );
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _expandController, curve: Curves.easeIn),
+    );
+
+    // Synchroniser l'animation avec l'état initial
+    if (widget.expanded.contains(_id) && _id.isNotEmpty) {
+      _expandController.value = 1.0;
+    } else {
+      _expandController.value = 0.0;
+    }
   }
-}
 
   @override
   void didUpdateWidget(MecListItem oldWidget) {
     super.didUpdateWidget(oldWidget);
-    final isExpanded = widget.expanded.contains(widget.mec.id);
+    final isExpanded = widget.expanded.contains(_id);
     if (isExpanded) {
       _expandController.forward();
     } else {
@@ -103,7 +106,7 @@ void initState() {
           children: [
             const Icon(Icons.error_outline, color: Colors.white, size: 20),
             const SizedBox(width: 8),
-            Text(message),
+            Expanded(child: Text(message)),
           ],
         ),
         backgroundColor: MecItemColors.danger,
@@ -115,6 +118,12 @@ void initState() {
 
   void _confirmDelete() {
     HapticFeedback.mediumImpact();
+
+    if (_id.isEmpty) {
+      _showError('Impossible de supprimer : identifiant invalide.');
+      return;
+    }
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -127,7 +136,8 @@ void initState() {
                 color: MecItemColors.danger.withOpacity(0.1),
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: const Icon(Icons.warning_amber, color: MecItemColors.danger, size: 24),
+              child:
+                  const Icon(Icons.warning_amber, color: MecItemColors.danger, size: 24),
             ),
             const SizedBox(width: 12),
             const Text('Supprimer mécanicien'),
@@ -149,7 +159,7 @@ void initState() {
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             ),
             onPressed: () {
-              widget.onDelete(widget.mec.id);
+              widget.onDelete(_id);
               Navigator.pop(context);
               HapticFeedback.heavyImpact();
             },
@@ -161,41 +171,77 @@ void initState() {
   }
 
   int _computeAnciennete() {
-    if (widget.mec.dateEmbauche == null) return 0;
+    final embauche = widget.mec.dateEmbauche;
     final now = DateTime.now();
-    int years = now.year - widget.mec.dateEmbauche!.year;
-    if (now.month < widget.mec.dateEmbauche!.month ||
-        (now.month == widget.mec.dateEmbauche!.month && now.day < widget.mec.dateEmbauche!.day)) {
+    int years = now.year - embauche.year;
+    if (now.month < embauche.month ||
+        (now.month == embauche.month && now.day < embauche.day)) {
       years--;
     }
     return years;
   }
 
-  Color _getStatutColor(String statut) {
-    return switch (statut.toLowerCase()) {
-      'actif' => MecItemColors.success,
-      'inactif' => MecItemColors.danger,
-      'congès' => MecItemColors.warning,
-      _ => MecItemColors.textSecondary,
-    };
+  Color _getStatutColor(String statutKey) {
+    switch (statutKey) {
+      case 'actif':
+        return MecItemColors.success;
+      case 'conge':
+      case 'arretMaladie':
+        return MecItemColors.warning;
+      case 'suspendu':
+      case 'demissionne':
+        return MecItemColors.danger;
+      default:
+        return MecItemColors.textSecondary;
+    }
+  }
+
+  String _formatPoste(String raw) {
+    switch (raw) {
+      case 'electricienAuto':
+        return 'Électricien Auto';
+      case 'carrossier':
+        return 'Carrossier';
+      case 'chefDEquipe':
+        return 'Chef d\'équipe';
+      case 'apprenti':
+        return 'Apprenti';
+      case 'mecanicien':
+      default:
+        return 'Mécanicien';
+    }
+  }
+
+  String _formatStatut(String raw) {
+    switch (raw) {
+      case 'conge':
+        return 'Congé';
+      case 'arretMaladie':
+        return 'Arrêt maladie';
+      case 'suspendu':
+        return 'Suspendu';
+      case 'demissionne':
+        return 'Démissionné';
+      case 'actif':
+      default:
+        return 'Actif';
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final isExpanded = widget.expanded.contains(widget.mec.id);
-    final statutStr = widget.mec.statut.toString().split('.').last;
-    final posteStr = widget.mec.poste.toString().split('.').last;
-    
+    final isExpanded = widget.expanded.contains(_id);
+    final statutRaw = widget.mec.statut.toString().split('.').last;
+    final posteRaw = widget.mec.poste.toString().split('.').last;
+    final statutStr = _formatStatut(statutRaw);
+    final posteStr = _formatPoste(posteRaw);
+
     return Container(
       margin: const EdgeInsets.only(bottom: 2),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.08),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
+          BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 8, offset: const Offset(0, 2)),
         ],
       ),
       child: Material(
@@ -203,8 +249,12 @@ void initState() {
         borderRadius: BorderRadius.circular(12),
         child: InkWell(
           onTap: () {
-            widget.onToggle(widget.mec.id);
-            HapticFeedback.selectionClick();
+            if (_id.isNotEmpty) {
+              widget.onToggle(_id);
+              HapticFeedback.selectionClick();
+            } else {
+              _showError('Identifiant du mécanicien manquant.');
+            }
           },
           borderRadius: BorderRadius.circular(12),
           child: Padding(
@@ -212,13 +262,10 @@ void initState() {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildHeader(posteStr, statutStr),
+                _buildHeader(posteStr, statutStr, statutRaw),
                 SizeTransition(
                   sizeFactor: _expandAnimation,
-                  child: FadeTransition(
-                    opacity: _fadeAnimation,
-                    child: _buildExpandedContent(),
-                  ),
+                  child: FadeTransition(opacity: _fadeAnimation, child: _buildExpandedContent()),
                 ),
               ],
             ),
@@ -228,98 +275,55 @@ void initState() {
     );
   }
 
-  Widget _buildHeader(String poste, String statut) {
+  Widget _buildHeader(String poste, String statut, String statutRaw) {
     return Row(
       children: [
         Container(
           width: 40,
           height: 40,
           decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [MecItemColors.primary, MecItemColors.primaryLight],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-            ),
+            gradient: LinearGradient(colors: [MecItemColors.primary, MecItemColors.primaryLight], begin: Alignment.topLeft, end: Alignment.bottomRight),
             borderRadius: BorderRadius.circular(10),
           ),
           child: Center(
             child: Text(
               widget.mec.nom.isNotEmpty ? widget.mec.nom[0].toUpperCase() : 'M',
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 18,
-              ),
+              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
             ),
           ),
         ),
         const SizedBox(width: 12),
         Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                widget.mec.nom,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 16,
-                  color: MecItemColors.textPrimary,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Row(
-                children: [
-                  Icon(Icons.badge_outlined, size: 14, color: MecItemColors.textSecondary),
-                  const SizedBox(width: 4),
-                  Text(
-                    widget.mec.matricule,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: MecItemColors.textSecondary,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Icon(Icons.work_outline, size: 14, color: MecItemColors.textSecondary),
-                  const SizedBox(width: 4),
-                  Text(
-                    poste,
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: MecItemColors.textSecondary,
-                    ),
-                  ),
-                ],
-              ),
-            ],
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(widget.mec.nom, style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: MecItemColors.textPrimary)),
+            const SizedBox(height: 2),
+            Row(children: [
+              Icon(Icons.badge_outlined, size: 14, color: MecItemColors.textSecondary),
+              const SizedBox(width: 4),
+              Text(widget.mec.matricule, style: const TextStyle(fontSize: 12, color: MecItemColors.textSecondary)),
+              const SizedBox(width: 12),
+              Icon(Icons.work_outline, size: 14, color: MecItemColors.textSecondary),
+              const SizedBox(width: 4),
+              Text(poste, style: const TextStyle(fontSize: 12, color: MecItemColors.textSecondary)),
+            ]),
+          ]),
+        ),
+        Column(children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: _getStatutColor(statutRaw).withOpacity(0.1),
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(color: _getStatutColor(statutRaw).withOpacity(0.3)),
+            ),
+            child: Text(statut, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: _getStatutColor(statutRaw))),
           ),
-        ),
-        Column(
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(
-                color: _getStatutColor(statut).withOpacity(0.1),
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: _getStatutColor(statut).withOpacity(0.3)),
-              ),
-              child: Text(
-                statut,
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: _getStatutColor(statut),
-                ),
-              ),
-            ),
-            const SizedBox(height: 4),
-            Icon(
-              widget.expanded.contains(widget.mec.id) 
-                ? Icons.keyboard_arrow_up 
-                : Icons.keyboard_arrow_down,
-              color: MecItemColors.textSecondary,
-            ),
-          ],
-        ),
+          const SizedBox(height: 4),
+          Icon(
+            widget.expanded.contains(_id) ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+            color: MecItemColors.textSecondary,
+          ),
+        ]),
       ],
     );
   }
@@ -328,163 +332,128 @@ void initState() {
     return Container(
       margin: const EdgeInsets.only(top: 16),
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: MecItemColors.surface,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildContactSection(),
-          const SizedBox(height: 12),
-          _buildInfoSection(),
-          const SizedBox(height: 12),
-          _buildServicesSection(),
-          const SizedBox(height: 16),
-          _buildActionButtons(),
-        ],
-      ),
+      decoration: BoxDecoration(color: MecItemColors.surface, borderRadius: BorderRadius.circular(8)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        _buildContactSection(),
+        const SizedBox(height: 12),
+        _buildInfoSection(),
+        const SizedBox(height: 12),
+        _buildServicesSection(),
+        const SizedBox(height: 16),
+        _buildActionButtons(),
+      ]),
     );
   }
 
   Widget _buildContactSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Icon(Icons.contact_phone, size: 16, color: MecItemColors.primary),
-            const SizedBox(width: 8),
-            const Text('Contact', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-          ],
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [
+        Icon(Icons.contact_phone, size: 16, color: MecItemColors.primary),
+        const SizedBox(width: 8),
+        const Text('Contact', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+      ]),
+      const SizedBox(height: 8),
+      Row(children: [
+        Expanded(
+          child: Row(children: [
+            Icon(Icons.phone, size: 14, color: MecItemColors.textSecondary),
+            const SizedBox(width: 6),
+            Text(widget.mec.telephone, style: const TextStyle(fontSize: 13)),
+          ]),
         ),
-        const SizedBox(height: 8),
-        Row(
-          children: [
-            Expanded(
-              child: Row(
-                children: [
-                  Icon(Icons.phone, size: 14, color: MecItemColors.textSecondary),
-                  const SizedBox(width: 6),
-                  Text(widget.mec.telephone, style: const TextStyle(fontSize: 13)),
-                ],
-              ),
-            ),
-            _buildActionButton(
-              icon: Icons.phone,
-              color: MecItemColors.success,
-              onPressed: () => _launchUrl('tel:${widget.mec.telephone}', 'Impossible de lancer l\'appel'),
-            ),
-            const SizedBox(width: 8),
-            _buildActionButton(
-              icon: Icons.email,
-              color: MecItemColors.primary,
-              onPressed: () => _launchUrl(
-                'mailto:${widget.mec.email}?subject=Message&body=Bonjour ${widget.mec.nom}',
-                'Impossible d\'ouvrir le client mail',
-              ),
-            ),
-          ],
+        _buildActionButton(
+          icon: Icons.phone,
+          color: MecItemColors.success,
+          onPressed: () => _launchUrl('tel:${widget.mec.telephone}', 'Impossible de lancer l\'appel'),
         ),
-      ],
-    );
+        const SizedBox(width: 8),
+        _buildActionButton(
+          icon: Icons.email,
+          color: MecItemColors.primary,
+          onPressed: () => _launchUrl(
+            'mailto:${widget.mec.email}?subject=Message&body=Bonjour ${widget.mec.nom}',
+            'Impossible d\'ouvrir le client mail',
+          ),
+        ),
+      ]),
+    ]);
   }
 
   Widget _buildInfoSection() {
     final anciennete = _computeAnciennete();
-    return Column(
-      children: [
-        _buildInfoRow(Icons.work_history, 'Expérience', '${widget.mec.experience} ans'),
-        const SizedBox(height: 6),
-        _buildInfoRow(Icons.payments, 'Salaire', '${widget.mec.salaire.toStringAsFixed(2)} DT'),
-        const SizedBox(height: 6),
-        _buildInfoRow(Icons.schedule, 'Ancienneté', anciennete > 0 ? '$anciennete ans' : 'Nouveau'),
-      ],
-    );
+    return Column(children: [
+      _buildInfoRow(Icons.work_history, 'Expérience', '${widget.mec.experience} ans'),
+      const SizedBox(height: 6),
+      _buildInfoRow(Icons.payments, 'Salaire', '${widget.mec.salaire.toStringAsFixed(2)} DT'),
+      const SizedBox(height: 6),
+      _buildInfoRow(Icons.schedule, 'Ancienneté', anciennete > 0 ? '$anciennete ans' : 'Nouveau'),
+    ]);
   }
 
   Widget _buildInfoRow(IconData icon, String label, String value) {
-    return Row(
-  children: [
-    Icon(icon, size: 14, color: MecItemColors.textSecondary),
-    const SizedBox(width: 6),
-    Text(
-      '$label: ',
-      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500),
-    ),
-    Expanded( // ⬅️ empêche l’overflow
-      child: Text(
-        value,
-        style: const TextStyle(
-          fontSize: 13,
-          color: MecItemColors.textSecondary,
-        ),
-        overflow: TextOverflow.ellipsis, // coupe proprement si trop long
-        maxLines: 1, // reste sur une ligne
+    return Row(children: [
+      Icon(icon, size: 14, color: MecItemColors.textSecondary),
+      const SizedBox(width: 6),
+      Text('$label: ', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w500)),
+      Expanded(
+        child: Text(value, style: const TextStyle(fontSize: 13, color: MecItemColors.textSecondary), overflow: TextOverflow.ellipsis, maxLines: 1),
       ),
-    ),
-  ],
-);
+    ]);
   }
 
   Widget _buildServicesSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Icon(Icons.build, size: 16, color: MecItemColors.primary),
-            const SizedBox(width: 8),
-            const Text('Services', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-          ],
-        ),
-        const SizedBox(height: 8),
+    final services = widget.mec.services;
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [
+        Icon(Icons.build, size: 16, color: MecItemColors.primary),
+        const SizedBox(width: 8),
+        const Text('Services', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+      ]),
+      const SizedBox(height: 8),
+      if (services.isEmpty)
+        const Text('Aucun service', style: TextStyle(color: MecItemColors.textSecondary))
+      else
         Wrap(
           spacing: 6,
           runSpacing: 4,
-          children: widget.mec.services.map((service) => Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: MecItemColors.primary.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: MecItemColors.primary.withOpacity(0.2)),
-            ),
-            child: Text(
-               service.label,
-              style: const TextStyle(
-                fontSize: 11,
-                color: MecItemColors.primary,
-                fontWeight: FontWeight.w500,
+          children: services.map((service) {
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              decoration: BoxDecoration(
+                color: MecItemColors.primary.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: MecItemColors.primary.withOpacity(0.2)),
               ),
-            ),
-          )).toList(),
+              child: Text(
+                service.name, // <-- corrige : name (model) au lieu de label
+                style: const TextStyle(fontSize: 11, color: MecItemColors.primary, fontWeight: FontWeight.w500),
+              ),
+            );
+          }).toList(),
         ),
-      ],
-    );
+    ]);
   }
 
   Widget _buildActionButtons() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.end,
-      children: [
-        _buildActionButton(
-          icon: Icons.edit,
-          color: MecItemColors.primary,
-          onPressed: () {
-            HapticFeedback.mediumImpact();
-            Get.to(() => AddMecScreen(mecanicien: widget.mec));
-          },
-          label: 'Modifier',
-        ),
-        const SizedBox(width: 12),
-        _buildActionButton(
-          icon: Icons.delete_outline,
-          color: MecItemColors.danger,
-          onPressed: _confirmDelete,
-          label: 'Supprimer',
-        ),
-      ],
-    );
+    return Row(mainAxisAlignment: MainAxisAlignment.end, children: [
+      _buildActionButton(
+        icon: Icons.edit,
+        color: MecItemColors.primary,
+        onPressed: () {
+          HapticFeedback.mediumImpact();
+          // navigation vers l'écran d'édition — on passe l'objet complet
+          Get.to(() => AddMecScreen(mecanicien: widget.mec));
+        },
+        label: 'Modifier',
+      ),
+      const SizedBox(width: 12),
+      _buildActionButton(
+        icon: Icons.delete_outline,
+        color: MecItemColors.danger,
+        onPressed: _confirmDelete,
+        label: 'Supprimer',
+      ),
+    ]);
   }
 
   Widget _buildActionButton({
@@ -497,32 +466,15 @@ void initState() {
       onTap: onPressed,
       borderRadius: BorderRadius.circular(8),
       child: Container(
-        padding: EdgeInsets.symmetric(
-          horizontal: label != null ? 12 : 8,
-          vertical: 8,
-        ),
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: color.withOpacity(0.3)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: 16, color: color),
-            if (label != null) ...[
-              const SizedBox(width: 6),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                  color: color,
-                ),
-              ),
-            ],
+        padding: EdgeInsets.symmetric(horizontal: label != null ? 12 : 8, vertical: 8),
+        decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(8), border: Border.all(color: color.withOpacity(0.3))),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(icon, size: 16, color: color),
+          if (label != null) ...[
+            const SizedBox(width: 6),
+            Text(label, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: color)),
           ],
-        ),
+        ]),
       ),
     );
   }

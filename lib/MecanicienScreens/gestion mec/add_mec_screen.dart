@@ -16,7 +16,7 @@ class AddMecScreen extends ConsumerStatefulWidget {
   ConsumerState<AddMecScreen> createState() => _AddMecScreenState();
 }
 
-class _AddMecScreenState extends ConsumerState<AddMecScreen> 
+class _AddMecScreenState extends ConsumerState<AddMecScreen>
     with SingleTickerProviderStateMixin {
   final _formKey = GlobalKey<FormState>();
   final nomCtrl = TextEditingController();
@@ -25,26 +25,36 @@ class _AddMecScreenState extends ConsumerState<AddMecScreen>
   final matriculeCtrl = TextEditingController();
   final salaireCtrl = TextEditingController();
   final experienceCtrl = TextEditingController();
-  final permisCtrl = TextEditingController();
-  
+
   DateTime? dateNaissance;
   DateTime? dateEmbauche;
   Poste? poste;
   TypeContrat? typeContrat;
   Statut? statut;
-  final Set<Service> selectedServices = {};
-  
+  PermisConduire? permis; // maintenant enum
+
+  final Set<String> selectedServices = {};
+
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
-  
+
   static const primaryColor = Color(0xFF357ABD);
   static const backgroundColor = Color(0xFFF8FAFC);
   static const cardColor = Colors.white;
   static const errorColor = Color(0xFFE53E3E);
   static const successColor = Color(0xFF38A169);
-  
-final allServices = Service.values;
 
+  // Liste simple de services (strings) — adapte si tu veux des ids différents
+  final List<String> allServices = [
+    'Moteur',
+    'Transmission',
+    'Freinage',
+    'Suspension',
+    'Électricité',
+    'Diagnostic',
+    'Carrosserie',
+    'Climatisation'
+  ];
 
   @override
   void initState() {
@@ -54,34 +64,35 @@ final allServices = Service.values;
       vsync: this,
     );
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _animationController, curve: Curves.easeOut)
-    );
+        CurvedAnimation(parent: _animationController, curve: Curves.easeOut));
     _animationController.forward();
-    
+
     _initializeData();
   }
 
   void _initializeData() {
-   if (widget.mecanicien != null) {
-  final m = widget.mecanicien!;
-  nomCtrl.text = m.nom;
-  telCtrl.text = m.telephone;
-  emailCtrl.text = m.email;
-  matriculeCtrl.text = m.matricule;
-  salaireCtrl.text = m.salaire.toString();
-  experienceCtrl.text = m.experience;
-  permisCtrl.text = m.permisConduite;
-  dateNaissance = m.dateNaissance;
-  dateEmbauche = m.dateEmbauche;
-  poste = m.poste;
-  typeContrat = m.typeContrat;
-  statut = m.statut;
-  selectedServices.addAll(m.services); 
-} else {
-  poste = Poste.mecanicien;
-  typeContrat = TypeContrat.cdi;
-  statut = Statut.actif;
-}
+    if (widget.mecanicien != null) {
+      final m = widget.mecanicien!;
+      nomCtrl.text = m.nom;
+      telCtrl.text = m.telephone;
+      emailCtrl.text = m.email;
+      matriculeCtrl.text = m.matricule;
+      salaireCtrl.text = m.salaire.toString();
+      experienceCtrl.text = m.experience;
+      dateNaissance = m.dateNaissance;
+      dateEmbauche = m.dateEmbauche;
+      poste = m.poste;
+      typeContrat = m.typeContrat;
+      statut = m.statut;
+      permis = m.permisConduire;
+      // remplir selectedServices à partir de m.services (utilise name)
+      selectedServices.addAll(m.services.map((s) => s.name));
+    } else {
+      poste = Poste.mecanicien;
+      typeContrat = TypeContrat.cdi;
+      statut = Statut.actif;
+      permis = PermisConduire.b;
+    }
   }
 
   @override
@@ -93,11 +104,11 @@ final allServices = Service.values;
     matriculeCtrl.dispose();
     salaireCtrl.dispose();
     experienceCtrl.dispose();
-    permisCtrl.dispose();
     super.dispose();
   }
 
-  Future<DateTime?> _pickDate(BuildContext context, DateTime? initial, {required bool isBirth}) async {
+  Future<DateTime?> _pickDate(BuildContext context, DateTime? initial,
+      {required bool isBirth}) async {
     HapticFeedback.lightImpact();
     final now = DateTime.now();
     final picked = await showDatePicker(
@@ -108,7 +119,8 @@ final allServices = Service.values;
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
-            colorScheme: Theme.of(context).colorScheme.copyWith(primary: primaryColor),
+            colorScheme:
+                Theme.of(context).colorScheme.copyWith(primary: primaryColor),
           ),
           child: child!,
         );
@@ -151,7 +163,8 @@ final allServices = Service.values;
         labelText: label,
         prefixIcon: Icon(icon, color: primaryColor, size: 20),
         suffixText: suffix,
-        labelStyle: TextStyle(color: Colors.grey[600], fontWeight: FontWeight.w500),
+        labelStyle:
+            TextStyle(color: Colors.grey[600], fontWeight: FontWeight.w500),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
           borderSide: BorderSide(color: Colors.grey[300]!),
@@ -180,7 +193,7 @@ final allServices = Service.values;
     required String Function(T) itemLabel,
   }) {
     return DropdownButtonFormField<T>(
-         isExpanded: true,
+      isExpanded: true,
       decoration: InputDecoration(
         labelText: label,
         prefixIcon: Icon(icon, color: primaryColor, size: 20),
@@ -197,10 +210,13 @@ final allServices = Service.values;
         fillColor: Colors.grey[50],
       ),
       value: value,
-      items: items.map((item) => DropdownMenuItem(
-        value: item,
-        child: Text(itemLabel(item), style: const TextStyle(fontWeight: FontWeight.w500)),
-      )).toList(),
+      items: items
+          .map((item) => DropdownMenuItem(
+                value: item,
+                child: Text(itemLabel(item),
+                    style: const TextStyle(fontWeight: FontWeight.w500)),
+              ))
+          .toList(),
       onChanged: (v) {
         HapticFeedback.selectionClick();
         onChanged(v);
@@ -251,64 +267,202 @@ final allServices = Service.values;
   }
 
   Widget _buildServicesSection() {
-  return Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Row(
-        children: [
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(children: [
           const Icon(Icons.build, color: primaryColor, size: 20),
           const SizedBox(width: 8),
-          Text(
-            'Services',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              fontWeight: FontWeight.w600,
-              color: Colors.black87,
-            ),
-          ),
-        ],
-      ),
-      const SizedBox(height: 12),
-      Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: allServices.map((service) {
-          final selected = selectedServices.contains(service);
-          return FilterChip(
-            label: Text(
-              service.label,
-              style: TextStyle(
-                color: selected ? Colors.white : primaryColor,
-                fontWeight: FontWeight.w500,
+          Text('Services',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black87,
+                  )),
+        ]),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: allServices.map((service) {
+            final selected = selectedServices.contains(service);
+            return FilterChip(
+              label: Text(
+                service,
+                style: TextStyle(
+                  color: selected ? Colors.white : primaryColor,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
-            ),
-            selected: selected,
-            selectedColor: primaryColor,
-            checkmarkColor: Colors.white,
-            backgroundColor: Colors.grey[100],
-            side: BorderSide(color: selected ? primaryColor : Colors.grey[300]!),
-            onSelected: (on) {
-              HapticFeedback.selectionClick();
-              setState(() {
-                if (on) selectedServices.add(service);
-                else selectedServices.remove(service);
-              });
-            },
-          );
-        }).toList(),
-      ),
-    ],
-  );
-}
+              selected: selected,
+              selectedColor: primaryColor,
+              checkmarkColor: Colors.white,
+              backgroundColor: Colors.grey[100],
+              side: BorderSide(color: selected ? primaryColor : Colors.grey[300]!),
+              onSelected: (on) {
+                HapticFeedback.selectionClick();
+                setState(() {
+                  if (on)
+                    selectedServices.add(service);
+                  else
+                    selectedServices.remove(service);
+                });
+              },
+            );
+          }).toList(),
+        ),
+      ],
+    );
+  }
+
+  String _labelPoste(Poste p) {
+    switch (p) {
+      case Poste.electricienAuto:
+        return 'Électricien Auto';
+      case Poste.carrossier:
+        return 'Carrossier';
+      case Poste.chefDEquipe:
+        return 'Chef d\'équipe';
+      case Poste.apprenti:
+        return 'Apprenti';
+      case Poste.mecanicien:
+      return 'Mécanicien';
+    }
+  }
+
+  String _labelTypeContrat(TypeContrat t) {
+    switch (t) {
+      case TypeContrat.cdd:
+        return 'CDD';
+      case TypeContrat.stage:
+        return 'Stage';
+      case TypeContrat.apprentissage:
+        return 'Apprentissage';
+      case TypeContrat.cdi:
+      return 'CDI';
+    }
+  }
+
+  String _labelStatut(Statut s) {
+    switch (s) {
+      case Statut.conge:
+        return 'Congé';
+      case Statut.arretMaladie:
+        return 'Arrêt maladie';
+      case Statut.suspendu:
+        return 'Suspendu';
+      case Statut.demissionne:
+        return 'Démissionné';
+      case Statut.actif:
+      return 'Actif';
+    }
+  }
+
+  String _labelPermis(PermisConduire p) {
+    return p.toString().split('.').last.toUpperCase();
+  }
+
+  Future<void> _save() async {
+    HapticFeedback.mediumImpact();
+
+    if (!_formKey.currentState!.validate()) {
+      Get.snackbar(
+        'Erreur de validation',
+        'Veuillez corriger les erreurs dans le formulaire',
+        backgroundColor: errorColor,
+        colorText: Colors.white,
+        snackPosition: SnackPosition.BOTTOM,
+        icon: const Icon(Icons.error, color: Colors.white),
+        duration: const Duration(seconds: 3),
+      );
+      return;
+    }
+
+    // fallback raisonnables si dates manquantes
+    final now = DateTime.now();
+    final dn = dateNaissance ?? DateTime(now.year - 25);
+    final de = dateEmbauche ?? now;
+
+    final salaire = double.tryParse(salaireCtrl.text.replaceAll(',', '.')) ?? 0.0;
+
+    // convertir selectedServices en List<ServiceMecanicien>
+    final services = selectedServices
+        .map((s) => ServiceMecanicien(
+              serviceId: s.toLowerCase().replaceAll(' ', '_'),
+              name: s,
+            ))
+        .toList();
+
+    final mecanicienId = widget.mecanicien?.id; // null si création
+
+    try {
+      if (mecanicienId == null) {
+        // création via le provider (méthode asynchrone)
+        await ref.read(mecaniciensProvider.notifier).addMecanicien(
+              nom: nomCtrl.text.trim(),
+              dateNaissance: dn,
+              telephone: telCtrl.text.trim(),
+              email: emailCtrl.text.trim(),
+              poste: poste ?? Poste.mecanicien,
+              dateEmbauche: de,
+              typeContrat: typeContrat ?? TypeContrat.cdi,
+              statut: statut ?? Statut.actif,
+              salaire: salaire,
+              services: services,
+              experience: experienceCtrl.text.trim(),
+              permisConduire: permis ?? PermisConduire.b,
+            );
+      } else {
+        // mise à jour : on envoie les champs modifiables
+        await ref.read(mecaniciensProvider.notifier).updateMecanicien(
+              id: mecanicienId,
+              nom: nomCtrl.text.trim(),
+              dateNaissance: dn,
+              telephone: telCtrl.text.trim(),
+              email: emailCtrl.text.trim(),
+              poste: poste,
+              dateEmbauche: de,
+              typeContrat: typeContrat,
+              statut: statut,
+              salaire: salaire,
+              services: services,
+              experience: experienceCtrl.text.trim(),
+              permisConduire: permis,
+            );
+      }
+
+      Get.snackbar(
+        'Succès',
+        mecanicienId == null ? 'Mécanicien ajouté' : 'Modifications enregistrées',
+        backgroundColor: successColor,
+        colorText: Colors.white,
+        icon: const Icon(Icons.check, color: Colors.white),
+        snackPosition: SnackPosition.BOTTOM,
+        duration: const Duration(seconds: 3),
+      );
+
+      // retourner à la liste (remplace la page actuelle)
+      Get.off(() => const MecListScreen());
+    } catch (e) {
+      Get.snackbar(
+        'Erreur',
+        'Une erreur est survenue lors de l\'enregistrement : ${e.toString()}',
+        backgroundColor: errorColor,
+        colorText: Colors.white,
+        icon: const Icon(Icons.error, color: Colors.white),
+        snackPosition: SnackPosition.BOTTOM,
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final isEdit = widget.mecanicien != null;
     return Scaffold(
       backgroundColor: backgroundColor,
-     appBar: CustomAppBar(
-  title: isEdit ? 'Modifier mécanicien' : 'Ajouter mécanicien',
-  backgroundColor: primaryColor,
-),
+      appBar: CustomAppBar(
+        title: isEdit ? 'Modifier mécanicien' : 'Ajouter mécanicien',
+        backgroundColor: primaryColor,
+      ),
       body: FadeTransition(
         opacity: _fadeAnimation,
         child: SingleChildScrollView(
@@ -322,16 +476,15 @@ final allServices = Service.values;
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.person, color: primaryColor),
-                          const SizedBox(width: 8),
-                          Text('Informations personnelles', 
+                      Row(children: [
+                        const Icon(Icons.person, color: primaryColor),
+                        const SizedBox(width: 8),
+                        Text('Informations personnelles',
                             style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w600, color: Colors.black87,
-                            )),
-                        ],
-                      ),
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.black87,
+                                )),
+                      ]),
                       const SizedBox(height: 16),
                       _buildTextField(
                         controller: nomCtrl,
@@ -340,34 +493,31 @@ final allServices = Service.values;
                         validator: (v) => (v?.isEmpty ?? true) ? 'Nom requis' : null,
                       ),
                       const SizedBox(height: 16),
-                     _buildTextField(
-  controller: telCtrl,
-  label: 'Téléphone',
-  icon: Icons.phone,
-  keyboardType: TextInputType.phone,
-  validator: (v) {
-    if (v == null || v.isEmpty) return 'Téléphone requis';
-    final regex = RegExp(r'^\d{8}$'); 
-    if (!regex.hasMatch(v)) return 'Format valide: XXXXXXXX';
-    return null;
-  },
-),
-
-const SizedBox(height: 16),
-
-// Champ Email
-_buildTextField(
-  controller: emailCtrl,
-  label: 'Email',
-  icon: Icons.email,
-  keyboardType: TextInputType.emailAddress,
-  validator: (v) {
-    if (v == null || v.isEmpty) return null; // facultatif
-    final regex = RegExp(r'^[\w\.-]+@[\w\.-]+\.\w{2,4}$');
-    if (!regex.hasMatch(v)) return 'Email invalide';
-    return null;
-  },
-),
+                      _buildTextField(
+                        controller: telCtrl,
+                        label: 'Téléphone',
+                        icon: Icons.phone,
+                        keyboardType: TextInputType.phone,
+                        validator: (v) {
+                          if (v == null || v.isEmpty) return 'Téléphone requis';
+                          final regex = RegExp(r'^\d{8}$');
+                          if (!regex.hasMatch(v)) return 'Format valide: XXXXXXXX';
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      _buildTextField(
+                        controller: emailCtrl,
+                        label: 'Email',
+                        icon: Icons.email,
+                        keyboardType: TextInputType.emailAddress,
+                        validator: (v) {
+                          if (v == null || v.isEmpty) return null; // facultatif
+                          final regex = RegExp(r'^[\w\.-]+@[\w\.-]+\.\w{2,}$');
+                          if (!regex.hasMatch(v)) return 'Email invalide';
+                          return null;
+                        },
+                      ),
                       const SizedBox(height: 16),
                       _buildDateField('Date de naissance', Icons.cake, dateNaissance, true),
                     ],
@@ -378,43 +528,45 @@ _buildTextField(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        children: [
-                          const Icon(Icons.work, color: primaryColor),
-                          const SizedBox(width: 8),
-                          Text('Informations professionnelles',
+                      Row(children: [
+                        const Icon(Icons.work, color: primaryColor),
+                        const SizedBox(width: 8),
+                        Text('Informations professionnelles',
                             style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.w600, color: Colors.black87,
-                            )),
-                        ],
-                      ),
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.black87,
+                                )),
+                      ]),
                       const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          Expanded(child: _buildTextField(
+                      Row(children: [
+                        Expanded(
+                          child: _buildTextField(
                             controller: matriculeCtrl,
                             label: 'Matricule',
                             icon: Icons.badge,
-                          )),
-                          const SizedBox(width: 12),
-                          Expanded(child: _buildTextField(
-  controller: salaireCtrl,
-  label: 'Salaire',
-  icon: Icons.attach_money,
-  keyboardType: TextInputType.number,
-  inputFormatters: [
-    FilteringTextInputFormatter.digitsOnly, // uniquement chiffres
-  ],
-  validator: (v) {
-    if (v == null || v.isEmpty) return null;
-    if (int.tryParse(v) == null) return 'Salaire doit être un nombre entier';
-    return null;
-  },
-  suffix: 'DT',
-),
                           ),
-                        ],
-                      ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _buildTextField(
+                            controller: salaireCtrl,
+                            label: 'Salaire',
+                            icon: Icons.attach_money,
+                            keyboardType:
+                                const TextInputType.numberWithOptions(decimal: true),
+                            inputFormatters: [
+                              FilteringTextInputFormatter.allow(RegExp(r'[\d.,]')),
+                            ],
+                            validator: (v) {
+                              if (v == null || v.isEmpty) return null;
+                              if (double.tryParse(v.replaceAll(',', '.')) == null)
+                                return 'Salaire doit être un nombre';
+                              return null;
+                            },
+                            suffix: 'DT',
+                          ),
+                        ),
+                      ]),
                       const SizedBox(height: 16),
                       _buildDropdown<Poste>(
                         label: 'Poste',
@@ -422,30 +574,32 @@ _buildTextField(
                         value: poste,
                         items: Poste.values,
                         onChanged: (v) => setState(() => poste = v),
-                        itemLabel: (p) => p.toString().split('.').last,
+                        itemLabel: (p) => _labelPoste(p),
                       ),
                       const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          Expanded(child: _buildDropdown<TypeContrat>(
+                      Row(children: [
+                        Expanded(
+                          child: _buildDropdown<TypeContrat>(
                             label: 'Type contrat',
                             icon: Icons.description,
                             value: typeContrat,
                             items: TypeContrat.values,
                             onChanged: (v) => setState(() => typeContrat = v),
-                            itemLabel: (t) => t.toString().split('.').last,
-                          )),
-                          const SizedBox(width: 12),
-                          Expanded(child: _buildDropdown<Statut>(
+                            itemLabel: (t) => _labelTypeContrat(t),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _buildDropdown<Statut>(
                             label: 'Statut',
                             icon: Icons.check_circle,
                             value: statut,
                             items: Statut.values,
                             onChanged: (v) => setState(() => statut = v),
-                            itemLabel: (s) => s.toString().split('.').last,
-                          )),
-                        ],
-                      ),
+                            itemLabel: (s) => _labelStatut(s),
+                          ),
+                        ),
+                      ]),
                       const SizedBox(height: 16),
                       _buildDateField('Date d\'embauche', Icons.today, dateEmbauche, false),
                     ],
@@ -459,15 +613,18 @@ _buildTextField(
                     children: [
                       _buildTextField(
                         controller: experienceCtrl,
-                        label: 'Expérience',
+                        label: 'Expérience (description / années)',
                         icon: Icons.star,
                         maxLines: 3,
                       ),
                       const SizedBox(height: 16),
-                      _buildTextField(
-                        controller: permisCtrl,
+                      _buildDropdown<PermisConduire>(
                         label: 'Permis de conduite',
                         icon: Icons.drive_eta,
+                        value: permis,
+                        items: PermisConduire.values,
+                        onChanged: (v) => setState(() => permis = v),
+                        itemLabel: (p) => _labelPermis(p),
                       ),
                     ],
                   ),
@@ -486,7 +643,7 @@ _buildTextField(
                     isEdit ? 'Enregistrer les modifications' : 'Ajouter le mécanicien',
                     style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                   ),
-                  onPressed: _save,
+                  onPressed: () async => await _save(),
                 ),
               ],
             ),
@@ -495,73 +652,4 @@ _buildTextField(
       ),
     );
   }
-
-void _save() {
-  HapticFeedback.mediumImpact();
-
-  if (!_formKey.currentState!.validate()) {
-    Get.snackbar(
-      'Erreur de validation',
-      'Veuillez corriger les erreurs dans le formulaire',
-      backgroundColor: errorColor,
-      colorText: Colors.white,
-      snackPosition: SnackPosition.BOTTOM,
-      icon: const Icon(Icons.error, color: Colors.white),
-      duration: const Duration(seconds: 3),
-    );
-    return;
-  }
-
-  final id = widget.mecanicien?.id ?? 'MEC-${DateTime.now().millisecondsSinceEpoch}';
-  final salaire = int.tryParse(salaireCtrl.text) ?? 0;
-
-  final mec = Mecanicien(
-    id: id,
-    nom: nomCtrl.text.trim(),
-    dateNaissance: dateNaissance,
-    telephone: telCtrl.text.trim(),
-    email: emailCtrl.text.trim(),
-    matricule: matriculeCtrl.text.trim(),
-    poste: poste ?? Poste.mecanicien,
-    dateEmbauche: dateEmbauche,
-    typeContrat: typeContrat ?? TypeContrat.cdi,
-    statut: statut ?? Statut.actif,
-    salaire: salaire,
-     services: selectedServices.toList(),
-    experience: experienceCtrl.text.trim(),
-    permisConduite: permisCtrl.text.trim(),
-  );
-
-  try {
-    if (widget.mecanicien == null) {
-      ref.read(mecaniciensProvider.notifier).addMec(mec);
-    } else {
-      ref.read(mecaniciensProvider.notifier).updateMec(id, mec);
-    }
-
-    // Affiche l'alerte de succès
-    Get.snackbar(
-      'Succès',
-      'Vos modifications sont enregistrées',
-      backgroundColor: successColor,
-      colorText: Colors.white,
-      icon: const Icon(Icons.check, color: Colors.white),
-      snackPosition: SnackPosition.BOTTOM,
-      duration: const Duration(seconds: 3),
-    );
-
-    // Navigation vers la liste des mécaniciens
-    // Utilise Get.to si tu veux empiler, Get.off pour remplacer la page actuelle,
-    // ou Get.offAll pour vider la pile. Ici j'utilise Get.to comme demandé :
-    Get.to(() => const MecListScreen());
-  } catch (e) {
-    Get.snackbar(
-      'Erreur',
-      'Une erreur est survenue lors de l\'enregistrement',
-      backgroundColor: errorColor,
-      colorText: Colors.white,
-      icon: const Icon(Icons.error, color: Colors.white),
-    );
-  }
-}
 }

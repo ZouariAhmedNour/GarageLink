@@ -32,7 +32,7 @@ class MainOeuvreInputs extends ConsumerWidget {
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                   onChanged: (v) => ref
                       .read(devisProvider.notifier)
-                      .setMainOeuvre(double.tryParse(v.replaceAll(',', '.')) ?? 0),
+                      .setMaindoeuvre(double.tryParse(v.replaceAll(',', '.')) ?? 0),
                 ),
               ),
               const SizedBox(width: 16),
@@ -53,7 +53,7 @@ class MainOeuvreInputs extends ConsumerWidget {
                 keyboardType: const TextInputType.numberWithOptions(decimal: true),
                 onChanged: (v) => ref
                     .read(devisProvider.notifier)
-                    .setMainOeuvre(double.tryParse(v.replaceAll(',', '.')) ?? 0),
+                    .setMaindoeuvre(double.tryParse(v.replaceAll(',', '.')) ?? 0),
               ),
               const SizedBox(height: 16),
               ModernDureePicker(

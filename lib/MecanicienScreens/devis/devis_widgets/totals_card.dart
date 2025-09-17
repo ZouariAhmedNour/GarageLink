@@ -2,7 +2,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:garagelink/providers/devis_provider.dart';
-
 import 'package:garagelink/utils/format.dart';
 
 class TotalsCard extends ConsumerWidget {
@@ -10,8 +9,14 @@ class TotalsCard extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final q = ref.watch(devisProvider);
-    final double remiseAmount = q.sousTotal - q.totalHt; // montant de la remise absolue
+    final state = ref.watch(devisProvider);
+
+    final sousTotalPieces = state.sousTotalPieces;
+    final maindoeuvre = state.maindoeuvre;
+    final totalHt = state.totalHT;
+    final montantTva = state.montantTva;
+    final totalTtc = state.totalTTC;
+    final tvaRate = state.tvaRate;
 
     return Card(
       color: Colors.white,
@@ -26,20 +31,15 @@ class TotalsCard extends ConsumerWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Ligne : Sous-total (pièces + main-d'oeuvre)
-            _row('Sous-total (HT brut)', Fmt.money(q.sousTotal)),
+            _row('Sous-total pièces (HT)', Fmt.money(sousTotalPieces)),
             const SizedBox(height: 6),
-            // Remise en % et montant
-            _row('Remise (${(q.remise * 100).toStringAsFixed(0)}%)', '- ${Fmt.money(remiseAmount)}'),
+            _row('Main d\'œuvre', Fmt.money(maindoeuvre)),
             const Divider(height: 20),
-            // Total HT après remise
-            _row('Total HT', Fmt.money(q.totalHt), isBold: true),
+            _row('Total HT', Fmt.money(totalHt), isBold: true),
             const SizedBox(height: 6),
-            // Montant TVA
-            _row('TVA (${(q.tva * 100).toStringAsFixed(0)}%)', Fmt.money(q.montantTva)),
+            _row('TVA (${tvaRate.toStringAsFixed(0)}%)', Fmt.money(montantTva)),
             const Divider(height: 20),
-            // Total TTC
-            _row('Total TTC', Fmt.money(q.totalTtc), isBold: true),
+            _row('Total TTC', Fmt.money(totalTtc), isBold: true),
           ],
         ),
       ),

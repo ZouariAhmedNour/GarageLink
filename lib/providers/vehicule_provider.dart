@@ -98,6 +98,8 @@ class VehiculesNotifier extends StateNotifier<VehiculesState> {
     String? couleur,
     FuelType? typeCarburant,
     int? kilometrage,
+    String? picKm,            // optionnel : chemin/URL de la photo principale
+    List<String>? images,     // optionnel : tableau d'images (chemins/URLs)
   }) async {
     if (!_hasToken) {
       state = state.copyWith(error: 'Token d\'authentification requis');
@@ -116,6 +118,8 @@ class VehiculesNotifier extends StateNotifier<VehiculesState> {
         couleur: couleur,
         typeCarburant: typeCarburant,
         kilometrage: kilometrage,
+        picKm: picKm,
+        images: images,
       );
       state = state.copyWith(vehicules: [...state.vehicules, vehicule], error: null);
     } catch (e) {
@@ -136,6 +140,8 @@ class VehiculesNotifier extends StateNotifier<VehiculesState> {
     String? couleur,
     FuelType? typeCarburant,
     int? kilometrage,
+    String? picKm,            // ajouté
+    List<String>? images,     // ajouté
   }) async {
     if (!_hasToken) {
       state = state.copyWith(error: 'Token d\'authentification requis');
@@ -155,6 +161,8 @@ class VehiculesNotifier extends StateNotifier<VehiculesState> {
         couleur: couleur,
         typeCarburant: typeCarburant,
         kilometrage: kilometrage,
+        picKm: picKm,
+        images: images,
       );
       state = state.copyWith(
         vehicules: state.vehicules.map((v) => v.id == id ? updatedVehicule : v).toList(),

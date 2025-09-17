@@ -1,3 +1,5 @@
+// screens/mec_list_screen.dart
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -42,15 +44,18 @@ class _MecListScreenState extends ConsumerState<MecListScreen>
   final Set<String> _expanded = {};
 
   // UI state
-
-  bool _isLoading = false;
   int _page = 0;
   int _pageSize = 8;
+  int _selectedFilterIndex = 0; // 0=Poste,1=Statut,2=Contrat,3=Services,4=Ancienneté
 
   @override
   void initState() {
     super.initState();
     _initAnimations();
+    // charge initialement la liste (si nécessaire)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(mecaniciensProvider.notifier).loadAll();
+    });
   }
 
   void _initAnimations() {
@@ -104,9 +109,7 @@ class _MecListScreenState extends ConsumerState<MecListScreen>
   }
 
   List<Mecanicien> _applyFiltersAndSort(List<Mecanicien> list) {
-    final filtered = list
-        .where((m) => _filterState.matches(m, _computeAncienneteYears))
-        .toList();
+    final filtered = list.where((m) => _filterState.matches(m, _computeAncienneteYears)).toList();
     _filterState.sortList(filtered, _computeAncienneteYears);
     return filtered;
   }
@@ -114,18 +117,17 @@ class _MecListScreenState extends ConsumerState<MecListScreen>
   List<Mecanicien> _paginate(List<Mecanicien> list) {
     final start = _page * _pageSize;
     if (start >= list.length) return [];
-    return list.sublist(start, (_page + 1) * _pageSize.clamp(0, list.length));
+    final end = math.min(list.length, start + _pageSize);
+    return list.sublist(start, end);
   }
 
   Future<void> _refreshData() async {
-    setState(() => _isLoading = true);
     HapticFeedback.mediumImpact();
-
-    await Future.delayed(const Duration(milliseconds: 800));
-
-    if (mounted) {
-      setState(() => _isLoading = false);
+    try {
+      await ref.read(mecaniciensProvider.notifier).loadAll();
       _showSnackBar('Liste actualisée', Icons.refresh, MecColors.success);
+    } catch (e) {
+      _showSnackBar('Erreur lors de l\'actualisation', Icons.error, Colors.red);
     }
   }
 
@@ -136,7 +138,7 @@ class _MecListScreenState extends ConsumerState<MecListScreen>
           children: [
             Icon(icon, color: color, size: 20),
             const SizedBox(width: 8),
-            Text(message),
+            Expanded(child: Text(message)),
           ],
         ),
         backgroundColor: Colors.white,
@@ -163,42 +165,63 @@ class _MecListScreenState extends ConsumerState<MecListScreen>
 
   @override
   Widget build(BuildContext context) {
-    final mecs = ref.watch(mecaniciensProvider);
+    final state = ref.watch(mecaniciensProvider); // MecaniciensState
+    final mecs = state.mecaniciens;
+    final isLoading = state.loading;
+    final hasError = state.error != null;
+
     final filteredSorted = _applyFiltersAndSort(mecs);
-    final pageCount = (filteredSorted.length / _pageSize).ceil();
+    final pageCount = (filteredSorted.isEmpty) ? 0 : (filteredSorted.length / _pageSize).ceil();
     final pageItems = _paginate(filteredSorted);
 
     return Scaffold(
-  backgroundColor: MecColors.surface,
-  appBar: _buildAppBar(filteredSorted.length),
-
-  body: SlideTransition(
-    position: _slideAnimation,
-    child: FadeTransition(
-      opacity: _fadeAnimation,
-      child: RefreshIndicator(
-        onRefresh: _refreshData,
-        color: MecColors.primary,
-        child: SingleChildScrollView(   // ✅ au lieu de Column
-          physics: const AlwaysScrollableScrollPhysics(),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _buildHeader(filteredSorted.length),
-              _buildFiltersSection(),
-              SizedBox(
-                height: MediaQuery.of(context).size.height * 0.5,
-                child: _buildContent(pageItems, filteredSorted),
+      backgroundColor: MecColors.surface,
+      appBar: _buildAppBar(filteredSorted.length),
+      body: SlideTransition(
+        position: _slideAnimation,
+        child: FadeTransition(
+          opacity: _fadeAnimation,
+          child: RefreshIndicator(
+            onRefresh: _refreshData,
+            color: MecColors.primary,
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  _buildHeader(filteredSorted.length),
+                  _buildFiltersSection(),
+                  const SizedBox(height: 8),
+                  // contenu principal
+                  if (isLoading)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 40),
+                      child: Center(child: CircularProgressIndicator(color: MecColors.primary)),
+                    )
+                  else if (hasError)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 40),
+                      child: Center(
+                        child: Text(
+                          state.error ?? 'Erreur inconnue',
+                          style: const TextStyle(color: Colors.red),
+                        ),
+                      ),
+                    )
+                  else
+                    Container(
+                      margin: const EdgeInsets.all(16),
+                      child: _buildContent(pageItems, filteredSorted),
+                    ),
+                  _buildPagination(pageCount),
+                ],
               ),
-              _buildPagination(pageCount),
-            ],
+            ),
           ),
         ),
       ),
-    ),
-  ),
-  floatingActionButton: _buildFab(),
-);
+      floatingActionButton: _buildFab(),
+    );
   }
 
   PreferredSizeWidget _buildAppBar(int count) {
@@ -245,7 +268,6 @@ class _MecListScreenState extends ConsumerState<MecListScreen>
   Widget _buildIconContainer(IconData icon) {
     return Container(
       padding: const EdgeInsets.all(8),
-
       decoration: BoxDecoration(
         color: Colors.white.withOpacity(0.2),
         borderRadius: BorderRadius.circular(8),
@@ -318,8 +340,6 @@ class _MecListScreenState extends ConsumerState<MecListScreen>
     );
   }
 
-  int _selectedFilterIndex =
-      0; // 0=Poste, 1=Statut, 2=Contrat, 3=Services, 4=Ancienneté
   Widget _buildFiltersSection() {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -330,21 +350,16 @@ class _MecListScreenState extends ConsumerState<MecListScreen>
         children: [
           _buildSectionHeader(Icons.search, 'Recherche et filtres'),
           const SizedBox(height: 12),
-
-          // 🔍 Recherche + tri
+          // Recherche + tri
           SearchAndSortRow(
-            onSearchChanged: (v) =>
-                _updateFilter(() => _filterState.search = v),
+            onSearchChanged: (v) => _updateFilter(() => _filterState.search = v),
             onSortChanged: (v) => _updateFilter(() => _filterState.sortBy = v),
-            onSortDirectionChanged: (v) =>
-                _updateFilter(() => _filterState.sortAsc = v),
+            onSortDirectionChanged: (v) => _updateFilter(() => _filterState.sortAsc = v),
             sortBy: _filterState.sortBy,
             sortAsc: _filterState.sortAsc,
           ),
-
           const SizedBox(height: 12),
-
-          // 🔹 Onglets filtres (5 boutons)
+          // Onglets filtres
           SingleChildScrollView(
             scrollDirection: Axis.horizontal,
             child: ToggleButtons(
@@ -356,111 +371,62 @@ class _MecListScreenState extends ConsumerState<MecListScreen>
                 setState(() => _selectedFilterIndex = index);
               },
               children: const [
-                Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 12),
-                  child: Text("Poste"),
-                ),
-                Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 12),
-                  child: Text("Statut"),
-                ),
-                Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 12),
-                  child: Text("Contrat"),
-                ),
-                Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 12),
-                  child: Text("Services"),
-                ),
-                Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 12),
-                  child: Text("Ancienneté"),
-                ),
+                Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: Text("Poste")),
+                Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: Text("Statut")),
+                Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: Text("Contrat")),
+                Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: Text("Services")),
+                Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: Text("Ancienneté")),
               ],
             ),
           ),
-
           const SizedBox(height: 12),
-
-          // 🔹 Contenu dynamique
+          // Contenu dynamique
           if (_selectedFilterIndex == 0) // Poste
             DropdownButtonFormField<String>(
               value: _filterState.posteFilter,
-              items: [
-                'Tous',
-                'Chef',
-                'Technicien',
-                'Apprenti',
-              ].map((p) => DropdownMenuItem(value: p, child: Text(p))).toList(),
-              onChanged: (v) =>
-                  _updateFilter(() => _filterState.posteFilter = v ?? 'Tous'),
+              items: ['Tous', 'Chef', 'Technicien', 'Apprenti']
+                  .map((p) => DropdownMenuItem(value: p, child: Text(p)))
+                  .toList(),
+              onChanged: (v) => _updateFilter(() => _filterState.posteFilter = v ?? 'Tous'),
               decoration: const InputDecoration(labelText: "Filtrer par poste"),
             ),
-
           if (_selectedFilterIndex == 1) // Statut
             DropdownButtonFormField<String>(
               value: _filterState.statutFilter,
-              items: [
-                'Tous',
-                'Actif',
-                'Inactif',
-              ].map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
-              onChanged: (v) =>
-                  _updateFilter(() => _filterState.statutFilter = v ?? 'Tous'),
-              decoration: const InputDecoration(
-                labelText: "Filtrer par statut",
-              ),
+              items: ['Tous', 'Actif', 'Inactif']
+                  .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                  .toList(),
+              onChanged: (v) => _updateFilter(() => _filterState.statutFilter = v ?? 'Tous'),
+              decoration: const InputDecoration(labelText: "Filtrer par statut"),
             ),
-
           if (_selectedFilterIndex == 2) // Contrat
             DropdownButtonFormField<String>(
               value: _filterState.typeContratFilter,
-              items: [
-                'Tous',
-                'CDI',
-                'CDD',
-                'Stage',
-              ].map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
-              onChanged: (v) => _updateFilter(
-                () => _filterState.typeContratFilter = v ?? 'Tous',
-              ),
-              decoration: const InputDecoration(
-                labelText: "Filtrer par type de contrat",
-              ),
+              items: ['Tous', 'CDI', 'CDD', 'Stage']
+                  .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                  .toList(),
+              onChanged: (v) => _updateFilter(() => _filterState.typeContratFilter = v ?? 'Tous'),
+              decoration: const InputDecoration(labelText: "Filtrer par type de contrat"),
             ),
-
           if (_selectedFilterIndex == 3) ...[
-            // Services
             _buildSectionHeader(Icons.home_repair_service, 'Services'),
             const SizedBox(height: 8),
             ServicesChips(
               onServiceSelected: (c, on) => _updateFilter(() {
-                if (on) {
-                  _filterState.servicesFilter.add(c);
-                } else {
-                  _filterState.servicesFilter.remove(c);
-                }
+                if (on) _filterState.servicesFilter.add(c);
+                else _filterState.servicesFilter.remove(c);
               }),
               servicesFilter: _filterState.servicesFilter,
             ),
           ],
-
           if (_selectedFilterIndex == 4) // Ancienneté
             DropdownButtonFormField<String>(
               value: _filterState.ancienneteFilter,
-              items: [
-                'Tous',
-                '<1',
-                '1-3',
-                '3-5',
-                '5+',
-              ].map((a) => DropdownMenuItem(value: a, child: Text(a))).toList(),
-              onChanged: (v) => _updateFilter(
-                () => _filterState.ancienneteFilter = v ?? 'Tous',
-              ),
-              decoration: const InputDecoration(
-                labelText: "Filtrer par ancienneté",
-              ),
+              items: ['Tous', '<1', '1-3', '3-5', '5+']
+                  .map((a) => DropdownMenuItem(value: a, child: Text(a)))
+                  .toList(),
+              onChanged: (v) => _updateFilter(() => _filterState.ancienneteFilter = v ?? 'Tous'),
+              decoration: const InputDecoration(labelText: "Filtrer par ancienneté"),
             ),
         ],
       ),
@@ -477,47 +443,38 @@ class _MecListScreenState extends ConsumerState<MecListScreen>
     );
   }
 
-  Widget _buildContent(
-    List<Mecanicien> pageItems,
-    List<Mecanicien> allFiltered,
-  ) {
-    if (_isLoading) {
-      return const Center(
-        child: CircularProgressIndicator(color: MecColors.primary),
-      );
+  Widget _buildContent(List<Mecanicien> pageItems, List<Mecanicien> allFiltered) {
+    if (pageItems.isEmpty) return _buildEmptyState(allFiltered.isEmpty);
+
+    // Utilise Column car la pagination limite la taille de la page (évite conflits scroll imbriqués)
+    final children = <Widget>[];
+    for (var i = 0; i < pageItems.length; i++) {
+      children.add(Container(
+        decoration: _buildCardDecoration(),
+        child: MecListItem(
+          mec: pageItems[i],
+          onDelete: (id) async {
+            // supprime via le provider
+            try {
+              await ref.read(mecaniciensProvider.notifier).removeMecanicien(id);
+              _showSnackBar('Mécanicien supprimé', Icons.delete, MecColors.success);
+            } catch (e) {
+              _showSnackBar('Erreur suppression', Icons.error, Colors.red);
+            }
+          },
+          expanded: _expanded,
+          onToggle: (id) {
+            setState(() {
+              if (_expanded.contains(id)) _expanded.remove(id);
+              else _expanded.add(id);
+            });
+          },
+        ),
+      ));
+      if (i < pageItems.length - 1) children.add(const SizedBox(height: 8));
     }
 
-    if (pageItems.isEmpty) {
-      return _buildEmptyState(allFiltered.isEmpty);
-    }
-
-    return Container(
-      margin: const EdgeInsets.all(16),
-      child: ListView.separated(
-        itemCount: pageItems.length,
-        separatorBuilder: (_, __) => const SizedBox(height: 8),
-        itemBuilder: (context, index) {
-          return Container(
-            decoration: _buildCardDecoration(),
-            child: MecListItem(
-              mec: pageItems[index],
-              onDelete: (id) =>
-                  ref.read(mecaniciensProvider.notifier).removeMec(id),
-              expanded: _expanded,
-              onToggle: (id) {
-                setState(() {
-                  if (_expanded.contains(id)) {
-                    _expanded.remove(id);
-                  } else {
-                    _expanded.add(id);
-                  }
-                });
-              },
-            ),
-          );
-        },
-      ),
-    );
+    return Column(children: children);
   }
 
   Widget _buildEmptyState(bool noResults) {
@@ -541,13 +498,8 @@ class _MecListScreenState extends ConsumerState<MecListScreen>
           ),
           const SizedBox(height: 8),
           Text(
-            noResults
-                ? 'Essayez de modifier vos critères'
-                : 'Naviguez vers une autre page',
-            style: const TextStyle(
-              fontSize: 14,
-              color: MecColors.textSecondary,
-            ),
+            noResults ? 'Essayez de modifier vos critères' : 'Naviguez vers une autre page',
+            style: const TextStyle(fontSize: 14, color: MecColors.textSecondary),
             textAlign: TextAlign.center,
           ),
           if (noResults && _filterState.hasActiveFilters()) ...[
@@ -559,9 +511,7 @@ class _MecListScreenState extends ConsumerState<MecListScreen>
               style: ElevatedButton.styleFrom(
                 backgroundColor: MecColors.primary,
                 foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               ),
             ),
           ],
@@ -581,8 +531,12 @@ class _MecListScreenState extends ConsumerState<MecListScreen>
         page: _page,
         pageCount: pageCount,
         pageSize: _pageSize,
-        onPrevPage: () => setState(() => _page--),
-        onNextPage: () => setState(() => _page++),
+        onPrevPage: () {
+          if (_page > 0) setState(() => _page--);
+        },
+        onNextPage: () {
+          if (_page + 1 < pageCount) setState(() => _page++);
+        },
         onPageSizeChanged: (v) => setState(() {
           _pageSize = v;
           _page = 0;
@@ -654,38 +608,44 @@ class _FilterState {
   bool sortAsc = true;
 
   bool matches(Mecanicien m, int Function(DateTime?) computeYears) {
+    final idLower = (m.id ?? '').toLowerCase();
     final matchesSearch =
         search.isEmpty ||
         m.nom.toLowerCase().contains(search.toLowerCase()) ||
-        m.id.toLowerCase().contains(search.toLowerCase());
+        idLower.contains(search.toLowerCase());
 
+    final posteRaw = m.poste.toString().split('.').last.toLowerCase();
     final matchesPoste =
-        posteFilter == 'Tous' ||
-        m.poste.toString().split('.').last.toLowerCase() ==
-            posteFilter.toLowerCase();
+        posteFilter == 'Tous' || posteRaw == posteFilter.toLowerCase();
 
+    final statutRaw = m.statut.toString().split('.').last.toLowerCase();
     final matchesStatut =
-        statutFilter == 'Tous' ||
-        m.statut.toString().split('.').last.toLowerCase() ==
-            statutFilter.toLowerCase();
+        statutFilter == 'Tous' || statutRaw == statutFilter.toLowerCase();
 
+    final contratRaw = m.typeContrat.toString().split('.').last.toLowerCase();
     final matchesContrat =
-        typeContratFilter == 'Tous' ||
-        m.typeContrat.toString().split('.').last.toLowerCase() ==
-            typeContratFilter.toLowerCase();
+        typeContratFilter == 'Tous' || contratRaw == typeContratFilter.toLowerCase();
 
     final years = computeYears(m.dateEmbauche);
-    final matchesAnciennete = switch (ancienneteFilter) {
-      '<1' => years < 1,
-      '1-3' => years >= 1 && years <= 3,
-      '3-5' => years > 3 && years <= 5,
-      '5+' => years > 5,
-      _ => true,
-    };
+    final matchesAnciennete = () {
+      switch (ancienneteFilter) {
+        case '<1':
+          return years < 1;
+        case '1-3':
+          return years >= 1 && years <= 3;
+        case '3-5':
+          return years > 3 && years <= 5;
+        case '5+':
+          return years > 5;
+        default:
+          return true;
+      }
+    }();
 
-    final matchesCompetences =
-        servicesFilter.isEmpty ||
-        servicesFilter.every((c) => m.services.contains(c));
+    // servicesFilter contient des strings (noms). m.services contient ServiceMecanicien
+    final mecanicienServiceNames = m.services.map((s) => s.name.toLowerCase()).toSet();
+    final matchesCompetences = servicesFilter.isEmpty ||
+        servicesFilter.every((c) => mecanicienServiceNames.contains(c.toLowerCase()));
 
     return matchesSearch &&
         matchesPoste &&
@@ -697,13 +657,17 @@ class _FilterState {
 
   void sortList(List<Mecanicien> list, int Function(DateTime?) computeYears) {
     list.sort((a, b) {
-      final cmp = switch (sortBy) {
-        'salaire' => a.salaire.compareTo(b.salaire),
-        'anciennete' => computeYears(
-          a.dateEmbauche,
-        ).compareTo(computeYears(b.dateEmbauche)),
-        _ => a.nom.toLowerCase().compareTo(b.nom.toLowerCase()),
-      };
+      int cmp;
+      switch (sortBy) {
+        case 'salaire':
+          cmp = a.salaire.compareTo(b.salaire);
+          break;
+        case 'anciennete':
+          cmp = computeYears(a.dateEmbauche).compareTo(computeYears(b.dateEmbauche));
+          break;
+        default:
+          cmp = a.nom.toLowerCase().compareTo(b.nom.toLowerCase());
+      }
       return sortAsc ? cmp : -cmp;
     });
   }
@@ -724,5 +688,7 @@ class _FilterState {
     typeContratFilter = 'Tous';
     ancienneteFilter = 'Tous';
     servicesFilter.clear();
+    sortBy = 'nom';
+    sortAsc = true;
   }
 }

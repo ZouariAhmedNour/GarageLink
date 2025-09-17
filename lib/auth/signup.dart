@@ -20,68 +20,46 @@ class SignUpPage extends ConsumerStatefulWidget {
 
 class _SignUpPageState extends ConsumerState<SignUpPage>
     with TickerProviderStateMixin {
-  // 🔧 CONFIGURATION ET VALIDATION
-  // ===============================
-  final RegExp tunisianPhoneRegExp = RegExp(r'^\+216\d{8}\$');
+  // Regex téléphone tunisien (ex: +21612345678)
+  final RegExp tunisianPhoneRegExp = RegExp(r'^\+216\d{8}$');
 
-  // 📊 ÉTATS DE L'INTERFACE
-  // =======================
-  bool _usePhoneSignup = false; // Mode téléphone vs email
-  bool _codeSent = false; // État d'envoi du code SMS
-  bool _isLoading = false; // État de chargement
+  bool _usePhoneSignup = false;
+  bool _codeSent = false;
+  bool _isLoading = false;
 
-  // 🎬 CONTRÔLEURS D'ANIMATION
-  // ==========================
-  late AnimationController _toggleController; // Animation du toggle
-  late AnimationController _slideController; // Animation des slides
-  late Animation<Offset> _emailSlideAnimation; // Slide formulaire email
-  late Animation<Offset> _phoneSlideAnimation; // Slide formulaire téléphone
+  late AnimationController _toggleController;
+  late AnimationController _slideController;
+  late Animation<Offset> _emailSlideAnimation;
+  late Animation<Offset> _phoneSlideAnimation;
 
-  // 📝 CONTRÔLEUR DE SAISIE
-  // ========================
   final TextEditingController otpController = TextEditingController();
+
+  // verificationId retourné par Firebase lors du codeSent
+  String? _verificationId;
 
   @override
   void initState() {
     super.initState();
 
-    // 🎯 INITIALISATION DES ANIMATIONS
-    // =================================
-    _toggleController = AnimationController(
-      duration: const Duration(milliseconds: 300),
-      vsync: this,
-    );
+    _toggleController =
+        AnimationController(duration: const Duration(milliseconds: 300), vsync: this);
+    _slideController =
+        AnimationController(duration: const Duration(milliseconds: 400), vsync: this);
 
-    _slideController = AnimationController(
-      duration: const Duration(milliseconds: 400),
-      vsync: this,
-    );
-
-    // 📐 CONFIGURATION DES TRANSITIONS
-    // ================================
-    _emailSlideAnimation =
-        Tween<Offset>(begin: Offset.zero, end: const Offset(-1.0, 0.0)).animate(
-      CurvedAnimation(parent: _slideController, curve: Curves.easeInOut),
-    );
-
-    _phoneSlideAnimation =
-        Tween<Offset>(begin: const Offset(1.0, 0.0), end: Offset.zero).animate(
-      CurvedAnimation(parent: _slideController, curve: Curves.easeInOut),
-    );
+    _emailSlideAnimation = Tween<Offset>(begin: Offset.zero, end: const Offset(-1.0, 0.0))
+        .animate(CurvedAnimation(parent: _slideController, curve: Curves.easeInOut));
+    _phoneSlideAnimation = Tween<Offset>(begin: const Offset(1.0, 0.0), end: Offset.zero)
+        .animate(CurvedAnimation(parent: _slideController, curve: Curves.easeInOut));
   }
 
   @override
   void dispose() {
-    // 🧹 NETTOYAGE DES RESSOURCES
-    // ============================
     _toggleController.dispose();
     _slideController.dispose();
     otpController.dispose();
     super.dispose();
   }
 
-  // 🔄 GESTION DU TOGGLE ENTRE MODES
-  // =================================
   void _toggleSignupMode() {
     setState(() {
       _usePhoneSignup = !_usePhoneSignup;
@@ -89,25 +67,20 @@ class _SignUpPageState extends ConsumerState<SignUpPage>
       otpController.clear();
 
       if (_usePhoneSignup) {
-        // 📱 Passage au mode téléphone
         _toggleController.forward();
         _slideController.forward();
-        final phoneController = ref.read(numberControllerProvider);
-        phoneController.text = '+216';
-        phoneController.selection = TextSelection.fromPosition(
-          TextPosition(offset: phoneController.text.length),
-        );
+        final phoneCtrl = ref.read(phoneControllerProvider);
+        phoneCtrl.text = '+216';
+        phoneCtrl.selection = TextSelection.fromPosition(TextPosition(offset: phoneCtrl.text.length));
       } else {
-        // 📧 Passage au mode email
         _toggleController.reverse();
         _slideController.reverse();
       }
     });
   }
 
-  // 📢 SYSTÈME DE NOTIFICATIONS
-  // ============================
   void _showSnackBar(String message, {bool isError = true}) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
@@ -118,31 +91,22 @@ class _SignUpPageState extends ConsumerState<SignUpPage>
     );
   }
 
-  /// Handle response maps from UserService and show SnackBar + debug print
   void _handleApiResult(Map<String, dynamic> res,
       {bool successIsError = false, VoidCallback? onSuccess}) {
-    // Affiche un message utilisateur via SnackBar (champ 'message' retourné par UserService)
     final msg = (res['message'] as String?) ?? 'Une erreur est survenue.';
     final isError = !(res['success'] == true) || successIsError;
 
     _showSnackBar(msg, isError: isError);
+    if (res['success'] == true && onSuccess != null) onSuccess();
 
-    // Si succès et callback fourni -> appelle le callback
-    if (res['success'] == true && onSuccess != null) {
-      onSuccess();
-    }
-
-    // Log détaillé pour dev/admin (seulement en debug)
     if (kDebugMode) {
-      print('[API DEBUG] message: $msg');
-      if (res.containsKey('devMessage')) print('[API DEBUG] devMessage: ${res['devMessage']}');
-      if (res.containsKey('statusCode')) print('[API DEBUG] statusCode: ${res['statusCode']}');
-      if (res.containsKey('body')) print('[API DEBUG] body: ${res['body']}');
+      debugPrint('[API DEBUG] message: $msg');
+      if (res.containsKey('devMessage')) debugPrint('[API DEBUG] devMessage: ${res['devMessage']}');
+      if (res.containsKey('statusCode')) debugPrint('[API DEBUG] statusCode: ${res['statusCode']}');
+      if (res.containsKey('body')) debugPrint('[API DEBUG] body: ${res['body']}');
     }
   }
 
-  // 🎚️ WIDGET TOGGLE ANIMÉ
-  // =======================
   Widget _buildToggleButton() {
     return Container(
       width: 320,
@@ -150,17 +114,10 @@ class _SignUpPageState extends ConsumerState<SignUpPage>
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(25),
         color: Colors.grey[300],
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 2))],
       ),
       child: Stack(
         children: [
-          // 🎯 INDICATEUR ANIMÉ
           AnimatedBuilder(
             animation: _toggleController,
             builder: (context, child) {
@@ -174,22 +131,14 @@ class _SignUpPageState extends ConsumerState<SignUpPage>
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(25),
                     color: const Color(0xFF4A90E2),
-                    boxShadow: [
-                      BoxShadow(
-                        color: const Color(0xFF4A90E2).withOpacity(0.3),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
+                    boxShadow: [BoxShadow(color: const Color(0xFF4A90E2).withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 2))],
                   ),
                 ),
               );
             },
           ),
-          // 📱📧 BOUTONS DE SÉLECTION
           Row(
             children: [
-              // 📧 MODE EMAIL
               Expanded(
                 child: GestureDetector(
                   onTap: () => !_usePhoneSignup ? null : _toggleSignupMode(),
@@ -199,30 +148,14 @@ class _SignUpPageState extends ConsumerState<SignUpPage>
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(
-                          Icons.email_outlined,
-                          color: !_usePhoneSignup
-                              ? Colors.white
-                              : Colors.grey[600],
-                          size: 20,
-                        ),
+                        Icon(Icons.email_outlined, color: !_usePhoneSignup ? Colors.white : Colors.grey[600], size: 20),
                         const SizedBox(width: 8),
-                        Text(
-                          'Email',
-                          style: TextStyle(
-                            color: !_usePhoneSignup
-                                ? Colors.white
-                                : Colors.grey[600],
-                            fontWeight: FontWeight.w600,
-                            fontSize: 16,
-                          ),
-                        ),
+                        Text('Email', style: TextStyle(color: !_usePhoneSignup ? Colors.white : Colors.grey[600], fontWeight: FontWeight.w600, fontSize: 16)),
                       ],
                     ),
                   ),
                 ),
               ),
-              // 📱 MODE TÉLÉPHONE
               Expanded(
                 child: GestureDetector(
                   onTap: () => _usePhoneSignup ? null : _toggleSignupMode(),
@@ -232,24 +165,9 @@ class _SignUpPageState extends ConsumerState<SignUpPage>
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(
-                          Icons.phone_android,
-                          color: _usePhoneSignup
-                              ? Colors.white
-                              : Colors.grey[600],
-                          size: 20,
-                        ),
+                        Icon(Icons.phone_android, color: _usePhoneSignup ? Colors.white : Colors.grey[600], size: 20),
                         const SizedBox(width: 8),
-                        Text(
-                          'Téléphone',
-                          style: TextStyle(
-                            color: _usePhoneSignup
-                                ? Colors.white
-                                : Colors.grey[600],
-                            fontWeight: FontWeight.w600,
-                            fontSize: 16,
-                          ),
-                        ),
+                        Text('Téléphone', style: TextStyle(color: _usePhoneSignup ? Colors.white : Colors.grey[600], fontWeight: FontWeight.w600, fontSize: 16)),
                       ],
                     ),
                   ),
@@ -262,52 +180,27 @@ class _SignUpPageState extends ConsumerState<SignUpPage>
     );
   }
 
-  // 📧 FORMULAIRE D'INSCRIPTION EMAIL
-  // ==================================
   Widget _buildEmailForm() {
-    final fullNameController = ref.watch(fullNameControllerProvider);
-    final emailController = ref.watch(emailControllerProvider);
-    final phoneController = ref.watch(numberControllerProvider);
-    final passwordController = ref.watch(passwordControllerProvider);
-    final confirmPasswordController = ref.watch(
-      confirmPasswordControllerProvider,
-    );
+    final usernameCtrl = ref.watch(usernameControllerProvider);
+    final emailCtrl = ref.watch(emailControllerProvider);
+    final phoneCtrl = ref.watch(phoneControllerProvider);
+    final passwordCtrl = ref.watch(passwordControllerProvider);
+    final confirmPasswordCtrl = ref.watch(confirmPasswordControllerProvider);
 
     return SlideTransition(
       position: _emailSlideAnimation,
       child: Column(
         children: [
-          // 👤 NOM COMPLET
-          CustomTextForm(
-            hinttext: 'Nom complet',
-            mycontroller: fullNameController,
-          ),
+          CustomTextForm(hinttext: 'Nom complet', mycontroller: usernameCtrl),
           const SizedBox(height: 20),
-          // 📧 EMAIL
-          CustomTextForm(
-            hinttext: 'Adresse email',
-            mycontroller: emailController,
-          ),
+          CustomTextForm(hinttext: 'Adresse email', mycontroller: emailCtrl),
           const SizedBox(height: 20),
-          // 📱 TÉLÉPHONE
-          CustomTextForm(
-            hinttext: 'Numéro de téléphone',
-            mycontroller: phoneController,
-          ),
+          CustomTextForm(hinttext: 'Numéro de téléphone', mycontroller: phoneCtrl),
           const SizedBox(height: 20),
-          // 🔐 MOT DE PASSE
-          CustomTextForm(
-            hinttext: 'Mot de passe',
-            mycontroller: passwordController,
-          ),
+          CustomTextForm(hinttext: 'Mot de passe', mycontroller: passwordCtrl),
           const SizedBox(height: 20),
-          // 🔐 CONFIRMATION MOT DE PASSE
-          CustomTextForm(
-            hinttext: 'Confirmer le mot de passe',
-            mycontroller: confirmPasswordController,
-          ),
+          CustomTextForm(hinttext: 'Confirmer le mot de passe', mycontroller: confirmPasswordCtrl),
           const SizedBox(height: 30),
-          // ✅ BOUTON D'INSCRIPTION
           CustomButton(
             text: _isLoading ? 'Création du compte...' : 'Créer un compte',
             backgroundColor: const Color(0xFF4A90E2),
@@ -318,44 +211,30 @@ class _SignUpPageState extends ConsumerState<SignUpPage>
     );
   }
 
-  // 📱 FORMULAIRE D'INSCRIPTION TÉLÉPHONE
-  // =====================================
   Widget _buildPhoneForm() {
-    final phoneController = ref.watch(numberControllerProvider);
+    final phoneCtrl = ref.watch(phoneControllerProvider);
 
     return SlideTransition(
       position: _phoneSlideAnimation,
       child: Column(
         children: [
-          // 📱 NUMÉRO DE TÉLÉPHONE
           CustomTextForm(
             hinttext: 'Numéro de téléphone',
-            mycontroller: phoneController,
+            mycontroller: phoneCtrl,
             inputFormatters: [TunisiePhoneFormatter()],
             validator: (value) {
-              if (value == null || value.isEmpty) {
-                return 'Veuillez entrer un numéro';
-              }
-              if (!tunisianPhoneRegExp.hasMatch(value)) {
-                return 'Numéro tunisien invalide. Format: +216********';
-              }
+              if (value == null || value.isEmpty) return 'Veuillez entrer un numéro';
+              if (!tunisianPhoneRegExp.hasMatch(value)) return 'Numéro tunisien invalide. Format: +216********';
               return null;
             },
           ),
-          // 🔢 CODE OTP (si envoyé)
           if (_codeSent) ...[
             const SizedBox(height: 20),
-            CustomTextForm(
-              hinttext: 'Code de vérification (6 chiffres)',
-              mycontroller: otpController,
-            ),
+            CustomTextForm(hinttext: 'Code de vérification (6 chiffres)', mycontroller: otpController),
           ],
           const SizedBox(height: 30),
-          // 📤 BOUTON D'ACTION
           CustomButton(
-            text: _isLoading
-                ? (_codeSent ? 'Vérification...' : 'Envoi...')
-                : (_codeSent ? 'Vérifier le code' : 'Envoyer le code'),
+            text: _isLoading ? (_codeSent ? 'Vérification...' : 'Envoi...') : (_codeSent ? 'Vérifier le code' : 'Envoyer le code'),
             backgroundColor: const Color(0xFF4A90E2),
             onPressed: _isLoading ? () {} : () => _handlePhoneSignup(),
           ),
@@ -364,202 +243,208 @@ class _SignUpPageState extends ConsumerState<SignUpPage>
     );
   }
 
-  // 📧 GESTION INSCRIPTION EMAIL
-  // =============================
-Future<void> _handleEmailSignup() async {
-  final fullNameController = ref.read(fullNameControllerProvider);
-  final emailController = ref.read(emailControllerProvider);
-  final phoneController = ref.read(numberControllerProvider);
-  final passwordController = ref.read(passwordControllerProvider);
-  final confirmPasswordController = ref.read(confirmPasswordControllerProvider);
+  // Flow email -> ouvre EditLocalisation pour compléter la localisation avant d'appeler l'API
+  Future<void> _handleEmailSignup() async {
+    final usernameCtrl = ref.read(usernameControllerProvider);
+    final emailCtrl = ref.read(emailControllerProvider);
+    final phoneCtrl = ref.read(phoneControllerProvider);
+    final passwordCtrl = ref.read(passwordControllerProvider);
+    final confirmPasswordCtrl = ref.read(confirmPasswordControllerProvider);
 
-  if (fullNameController.text.isEmpty ||
-      emailController.text.isEmpty ||
-      passwordController.text.isEmpty ||
-      confirmPasswordController.text.isEmpty) {
-    _showSnackBar('Veuillez remplir tous les champs');
-    return;
+    if (usernameCtrl.text.isEmpty || emailCtrl.text.isEmpty || passwordCtrl.text.isEmpty || confirmPasswordCtrl.text.isEmpty) {
+      _showSnackBar('Veuillez remplir tous les champs');
+      return;
+    }
+
+    if (passwordCtrl.text != confirmPasswordCtrl.text) {
+      _showSnackBar('Les mots de passe ne correspondent pas');
+      return;
+    }
+
+    if (!mounted) return;
+    setState(() => _isLoading = true);
+
+    try {
+      final passedData = {
+        "username": usernameCtrl.text.trim(),
+        "garagenom": ref.read(garageNameProvider),
+        "matriculefiscal": ref.read(matriculeFiscalProvider),
+        "email": emailCtrl.text.trim(),
+        "password": passwordCtrl.text.trim(),
+        "phone": phoneCtrl.text.trim(),
+      };
+
+      // Navigation pour compléter adresse/localisation
+      Get.to(() => EditLocalisation(), arguments: passedData);
+    } catch (e) {
+      _showSnackBar("Erreur: ${e.toString()}");
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
-  if (passwordController.text != confirmPasswordController.text) {
-    _showSnackBar('Les mots de passe ne correspondent pas');
-    return;
-  }
-
-  setState(() => _isLoading = true);
-
- try {
-  // validation OK -> ne pas appeler userService.register ici
-  final passedData = {
-    "username": fullNameController.text.trim(),
-    "garagenom": "Mon Garage",
-    "matriculefiscal": "123456",
-    "email": emailController.text.trim(),
-    "password": passwordController.text.trim(),
-    "phone": phoneController.text.trim(),
-    // NE PAS inclure userId ici (on n'a pas encore créé l'utilisateur)
-  };
-
-  // Navigation vers EditLocalisation pour compléter adresse/localisation
-  Get.to(() => EditLocalisation(), arguments: passedData);
-} on Exception catch (e) {
-  _showSnackBar("Erreur: $e");
-} finally {
-  if (mounted) setState(() => _isLoading = false);
-}
-}
-  // 📱 GESTION INSCRIPTION TÉLÉPHONE
-  // =================================
+  // Flow téléphone : envoi du code via Firebase et vérification
   Future<void> _handlePhoneSignup() async {
-    final phoneController = ref.read(numberControllerProvider);
-    final authService = ref.read(authServiceProvider);
+    final phoneCtrl = ref.read(phoneControllerProvider);
+    final phone = phoneCtrl.text.trim();
 
     if (!_codeSent) {
-      // 📤 ENVOI DU CODE SMS
-      if (phoneController.text.isEmpty) {
+      if (phone.isEmpty) {
         _showSnackBar('Veuillez entrer votre numéro de téléphone');
         return;
       }
+      if (!tunisianPhoneRegExp.hasMatch(phone)) {
+        _showSnackBar('Numéro tunisien invalide. Format: +216********');
+        return;
+      }
 
-      setState(() => _isLoading = true);
+      if (!mounted) return;
+      setState(() {
+        _isLoading = true;
+      });
 
-      authService.signUpWithPhone(
-        phoneController.text,
-        context,
-        () {
-          // ✅ SUCCÈS ENVOI
-          if (mounted) {
+      try {
+        await FirebaseAuth.instance.verifyPhoneNumber(
+          phoneNumber: phone,
+          timeout: const Duration(seconds: 60),
+          verificationCompleted: (PhoneAuthCredential credential) async {
+            // connexion automatique (rare sur émulateur)
+            try {
+              final userCred = await FirebaseAuth.instance.signInWithCredential(credential);
+              if (kDebugMode) debugPrint('Firebase auto login success: ${userCred.user?.uid}');
+              // si la connexion réussit, enregistre l'utilisateur côté backend
+              await _registerBackendAfterFirebase(phone);
+            } catch (e) {
+              if (kDebugMode) debugPrint('Auto sign-in error: $e');
+            }
+          },
+          verificationFailed: (FirebaseAuthException e) {
+            if (kDebugMode) debugPrint('verifyPhone failed: ${e.toString()}');
+            if (mounted) {
+              setState(() => _isLoading = false);
+              _showSnackBar('Erreur envoi SMS: ${e.message ?? e.code}');
+            }
+          },
+          codeSent: (String verificationId, int? resendToken) {
+            if (!mounted) return;
             setState(() {
+              _verificationId = verificationId;
               _codeSent = true;
               _isLoading = false;
             });
-          }
-        },
-        (error) {
-          // ❌ ERREUR ENVOI
-          if (mounted) {
-            setState(() => _isLoading = false);
-            _showSnackBar(error);
-          }
-        },
-      );
-    } else {
-      // 🔢 VÉRIFICATION DU CODE
-      setState(() => _isLoading = true);
-      authService.verifySmsCode(
-        otpController.text.trim(),
-        context,
-        isSignup: true,
-        onSuccess: (User? firebaseUser) async {
-          if (firebaseUser != null) {
-            final phoneController = ref.read(numberControllerProvider);
-            final userService = UserService();
-            final res = await userService.register(
-              username: "Utilisateur ${phoneController.text}",
-              garagenom: "Mon Garage",
-              matriculefiscal: "123456",
-              email: "${phoneController.text}@dummy.com", // fake email si obligatoire
-              password: "firebase", // mot de passe placeholder
-              phone: phoneController.text,
-            );
-
-            _handleApiResult(res, onSuccess: () {
-              // navigation only
-              Get.off(() => LoginPage());
-            });
-          } else {
-            _showSnackBar('Échec de l\'authentification.', isError: true);
-          }
-        },
-      );
-      if (mounted) {
-        setState(() => _isLoading = false);
+            _showSnackBar('Code envoyé', isError: false);
+          },
+          codeAutoRetrievalTimeout: (String verificationId) {
+            // Timeout, on sauvegarde quand même l'id
+            _verificationId = verificationId;
+          },
+        );
+      } catch (e) {
+        if (mounted) setState(() => _isLoading = false);
+        _showSnackBar('Erreur lors de l\'envoi du SMS: ${e.toString()}');
       }
+    } else {
+      // Vérification manuelle du code
+      final smsCode = otpController.text.trim();
+      if (smsCode.isEmpty) {
+        _showSnackBar('Veuillez saisir le code reçu');
+        return;
+      }
+      if (_verificationId == null) {
+        _showSnackBar('ID de vérification manquant. Renvoyez le code.');
+        return;
+      }
+
+      if (!mounted) return;
+      setState(() => _isLoading = true);
+
+      try {
+        final credential = PhoneAuthProvider.credential(verificationId: _verificationId!, smsCode: smsCode);
+        final userCred = await FirebaseAuth.instance.signInWithCredential(credential);
+
+        if (userCred.user != null) {
+          // inscription côté backend après réussite Firebase
+          await _registerBackendAfterFirebase(userCred.user!.phoneNumber ?? phone);
+        } else {
+          _showSnackBar('Échec de l\'authentification Firebase', isError: true);
+        }
+      } on FirebaseAuthException catch (e) {
+        _showSnackBar('Erreur vérification OTP: ${e.message ?? e.code}');
+      } catch (e) {
+        _showSnackBar('Erreur: ${e.toString()}');
+      } finally {
+        if (mounted) setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  // Appelle ton backend pour créer l'utilisateur après succès Firebase
+  Future<void> _registerBackendAfterFirebase(String phone) async {
+    try {
+      // utilise les values pré-remplies des providers
+      final username = ref.read(usernameProvider);
+      final email = ref.read(emailProvider);
+      final garagenom = ref.read(garageNameProvider);
+      final matricule = ref.read(matriculeFiscalProvider);
+      final password = ref.read(passwordProvider); // placeholder
+
+      // Appel API
+      final createdUser = await UserApi.register(
+        username: username.isEmpty ? 'Utilisateur $phone' : username,
+        garagenom: garagenom,
+        matriculefiscal: matricule,
+        email: email,
+        password: password,
+        phone: phone,
+      );
+
+      // Succès -> informer l'utilisateur et rediriger vers login
+      _handleApiResult({'success': true, 'message': 'Inscription réussie'});
+      if (mounted) {
+        // optionnel : tu peux stocker createdUser via authNotifierProvider si besoin
+        Get.off(() => const LoginPage());
+      }
+    } catch (e) {
+      // si backend échoue, préviens l'utilisateur (mais Firebase compte existe déjà)
+      _handleApiResult({'success': false, 'message': 'Erreur backend: ${e.toString()}'}); 
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA), // 🎨 Background moderne
+      backgroundColor: const Color(0xFFF8F9FA),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24.0),
           child: Column(
             children: [
               const SizedBox(height: 30),
-
-              // 🔙 HEADER AVEC NAVIGATION
-              // =========================
               Row(
                 children: [
-                  IconButton(
-                    onPressed: () => Get.back(),
-                    icon: const Icon(
-                      Icons.arrow_back_ios,
-                      color: Color(0xFF2C3E50),
-                    ),
-                  ),
+                  IconButton(onPressed: () => Get.back(), icon: const Icon(Icons.arrow_back_ios, color: Color(0xFF2C3E50))),
                   const Spacer(),
                 ],
               ),
               const SizedBox(height: 20),
-
-              // 🏢 LOGO DE L'APPLICATION
-              // ========================
               Container(
                 padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF4A90E2), // Aligné avec LoginPage
+                  color: const Color(0xFF4A90E2),
                   borderRadius: BorderRadius.circular(20),
-                  boxShadow: [
-                    BoxShadow(
-                      color: const Color(0xFF4A90E2).withOpacity(0.3),
-                      blurRadius: 15,
-                      offset: const Offset(0, 5),
-                    ),
-                  ],
+                  boxShadow: [BoxShadow(color: const Color(0xFF4A90E2).withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 5))],
                 ),
-                child: const Icon(
-                  Icons.person_add,
-                  size: 50,
-                  color: Colors.white,
-                ),
+                child: const Icon(Icons.person_add, size: 50, color: Colors.white),
               ),
               const SizedBox(height: 25),
-
-              // 📝 TITRE ET SOUS-TITRE
-              // =======================
-              const Text(
-                'Créer un compte',
-                style: TextStyle(
-                  fontSize: 28,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF2C3E50),
-                ),
-              ),
+              const Text('Créer un compte', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Color(0xFF2C3E50))),
               const SizedBox(height: 10),
-              Text(
-                'Rejoignez GarageLink aujourd\'hui',
-                style: TextStyle(
-                  fontSize: 16,
-                  color: Colors.grey[600],
-                  fontWeight: FontWeight.w400,
-                ),
-              ),
+              Text('Rejoignez GarageLink aujourd\'hui', style: TextStyle(fontSize: 16, color: Colors.grey[600], fontWeight: FontWeight.w400)),
               const SizedBox(height: 40),
-
-              // 🎚️ TOGGLE ENTRE MODES
-              // ======================
               _buildToggleButton(),
               const SizedBox(height: 35),
-
-              // 📋 FORMULAIRES DYNAMIQUES
-              // ==========================
               SizedBox(
-                height: _usePhoneSignup
-                    ? (_codeSent ? 250 : 180)
-                    : 450, // Hauteur adaptative
+                height: _usePhoneSignup ? (_codeSent ? 250 : 180) : 450,
                 child: Stack(
                   children: [
                     if (!_usePhoneSignup) _buildEmailForm(),
@@ -567,25 +452,15 @@ Future<void> _handleEmailSignup() async {
                   ],
                 ),
               ),
-
               const SizedBox(height: 25),
-
-              // 🔗 LIEN VERS CONNEXION
-              // =======================
               TextButton(
-                onPressed: () => Get.off(() => LoginPage()),
+                onPressed: () => Get.off(() => const LoginPage()),
                 child: RichText(
                   text: const TextSpan(
                     text: 'Déjà un compte ? ',
                     style: TextStyle(color: Colors.grey),
                     children: [
-                      TextSpan(
-                        text: 'Se connecter',
-                        style: TextStyle(
-                          color: Color(0xFF4A90E2),
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
+                      TextSpan(text: 'Se connecter', style: TextStyle(color: Color(0xFF4A90E2), fontWeight: FontWeight.w600)),
                     ],
                   ),
                 ),

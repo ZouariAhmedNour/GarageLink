@@ -3,9 +3,9 @@ import 'package:garagelink/models/pieces.dart';
 import 'package:garagelink/utils/format.dart';
 
 class CatalogDropdown extends StatelessWidget {
-  final PieceRechange? selectedItem;
-  final ValueChanged<PieceRechange?> onChanged;
-  final List<PieceRechange> items;
+  final Piece? selectedItem;
+  final ValueChanged<Piece?> onChanged;
+  final List<Piece> items;
 
   const CatalogDropdown({
     super.key,
@@ -16,7 +16,7 @@ class CatalogDropdown extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return DropdownButtonFormField<PieceRechange>(
+    return DropdownButtonFormField<Piece>(
       value: selectedItem,
       isExpanded: true,
       dropdownColor: Colors.white,

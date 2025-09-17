@@ -1,4 +1,3 @@
-// lib/MecanicienScreens/Gestion Clients/client_dash.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -43,7 +42,6 @@ class _ClientDashState extends ConsumerState<ClientDash>
   DateTimeRange? dateRangeFilter;
   final vinCtrl = TextEditingController();
   final numLocalCtrl = TextEditingController();
-  
 
   @override
   void initState() {
@@ -147,9 +145,10 @@ class _ClientDashState extends ConsumerState<ClientDash>
 
   @override
   Widget build(BuildContext context) {
-    final clientsAsync = ref.watch(clientsProvider);
+    final clientsState = ref.watch(ficheClientsProvider);
+    final clientsList = clientsState.clients;
     final vehState = ref.watch(vehiculesProvider); // VehiculesState
-    final ordersState = ref.watch(ordersProvider);
+    final ordersState = ref.watch(ordresProvider);
 
     return Scaffold(
       backgroundColor: backgroundColor,
@@ -238,64 +237,66 @@ class _ClientDashState extends ConsumerState<ClientDash>
                         ),
                       if (dateRangeFilter != null) const SizedBox(height: 16),
 
-                      // Zone principale: contenu selon l'état async du provider
+                      // Zone principale: contenu selon l'état du provider
                       Expanded(
-                        child: clientsAsync.when(
-                          data: (clientsList) {
-                            // filtre des clients selon le mode
-                            final filtered = clientsList.where((c) {
-                              bool matches = true;
-                              if (selectedIndex == 0) {
-                                matches = nomFilter.isEmpty || c.nomComplet.toLowerCase().contains(nomFilter.toLowerCase());
-                              } else if (selectedIndex == 1) {
-                                if (immatFilter.isEmpty) {
-                                  matches = true;
-                                } else {
-                                  // rechercher parmi les véhicules fournis par le provider (proprietaireId)
-                                  final clientVehs = vehState.vehicules.where((v) => (v.proprietaireId ?? '') == (c.id ?? '')).toList();
-                                  matches = clientVehs.any((v) => v.immatriculation.toLowerCase().contains(immatFilter.toLowerCase()));
-                                }
-                              } else if (selectedIndex == 2) {
-                                final clientOrders = ordersState.where((o) => o.clientId == c.id).toList();
-                                matches = dateRangeFilter == null || clientOrders.any((o) =>
-                                  o.date.isAfter(dateRangeFilter!.start.subtract(const Duration(days: 1))) &&
-                                  o.date.isBefore(dateRangeFilter!.end.add(const Duration(days: 1))));
-                              }
-                              return matches;
-                            }).toList();
-
-                            if (filtered.isEmpty) {
-                              return Center(
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(Icons.person_search, size: 64, color: Colors.grey[400]),
-                                    const SizedBox(height: 16),
-                                    Text('Aucun client trouvé', style: TextStyle(fontSize: 18, color: Colors.grey[600])),
-                                  ],
-                                ),
-                              );
-                            }
-
-                            return ListView.separated(
-                              itemCount: filtered.length,
-                              separatorBuilder: (_, __) => const SizedBox(height: 8),
-                              itemBuilder: (context, idx) {
-                                final c = filtered[idx];
-                                final clientVeh = vehState.vehicules.where((v) => (v.proprietaireId ?? '') == (c.id ?? '')).toList();
-                                return ClientCard(client: c, vehicules: clientVeh, index: idx);
-                              },
-                            );
-                          },
-                          loading: () => const Center(child: CircularProgressIndicator()),
-                          error: (err, st) => Center(child: Text('Erreur chargement clients: ${err.toString()}')),
-                        ),
+                        child: clientsState.loading
+                          ? const Center(child: CircularProgressIndicator())
+                          : clientsState.error != null
+                            ? Center(child: Text('Erreur chargement clients: ${clientsState.error}'))
+                            : _buildClientsList(clientsList, vehState, ordersState),
                       ),
                     ],
                   ),
                 ),
               ),
             ),
+    );
+  }
+
+  Widget _buildClientsList(List<FicheClient> clientsList, dynamic vehState, dynamic ordersState) {
+    // filtre des clients selon le mode
+    final filtered = clientsList.where((c) {
+      bool matches = true;
+      if (selectedIndex == 0) {
+        matches = nomFilter.isEmpty || c.nom.toLowerCase().contains(nomFilter.toLowerCase());
+      } else if (selectedIndex == 1) {
+        if (immatFilter.isEmpty) {
+          matches = true;
+        } else {
+          final clientVehs = vehState.vehicules.where((v) => (v.proprietaireId ?? '') == (c.id ?? '')).toList();
+          matches = clientVehs.any((v) => (v.immatriculation ?? '').toLowerCase().contains(immatFilter.toLowerCase()));
+        }
+      } else if (selectedIndex == 2) {
+        final clientOrders = (ordersState is List) ? ordersState.where((o) => o.clientId == c.id).toList() : [];
+        matches = dateRangeFilter == null || clientOrders.any((o) =>
+          (o.date != null) &&
+          o.date.isAfter(dateRangeFilter!.start.subtract(const Duration(days: 1))) &&
+          o.date.isBefore(dateRangeFilter!.end.add(const Duration(days: 1))));
+      }
+      return matches;
+    }).toList();
+
+    if (filtered.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.person_search, size: 64, color: Colors.grey[400]),
+            const SizedBox(height: 16),
+            Text('Aucun client trouvé', style: TextStyle(fontSize: 18, color: Colors.grey[600])),
+          ],
+        ),
+      );
+    }
+
+    return ListView.separated(
+      itemCount: filtered.length,
+      separatorBuilder: (_, __) => const SizedBox(height: 8),
+      itemBuilder: (context, idx) {
+        final c = filtered[idx];
+        final clientVeh = ref.watch(vehiculesProvider).vehicules.where((v) => (v.proprietaireId ?? '') == (c.id ?? '')).toList();
+        return ClientCard(client: c, vehicules: clientVeh, index: idx);
+      },
     );
   }
 
@@ -331,7 +332,7 @@ class _ClientDashState extends ConsumerState<ClientDash>
 
 // --------------------- ClientCard ---------------------
 class ClientCard extends ConsumerStatefulWidget {
-  final Client client;
+  final FicheClient client;
   final List<Vehicule> vehicules;
   final int index;
   const ClientCard({required this.client, required this.vehicules, required this.index, Key? key}) : super(key: key);
@@ -347,7 +348,6 @@ class _ClientCardState extends ConsumerState<ClientCard> with SingleTickerProvid
   static const successColor = Color(0xFF38A169);
   static const errorColor = Color(0xFFE53E3E);
   late AnimationController _expandController;
-  
 
   @override
   void initState() {
@@ -428,7 +428,7 @@ class _ClientCardState extends ConsumerState<ClientCard> with SingleTickerProvid
                   style: TextStyle(fontSize: 14, color: Colors.black87),
                 ),
                 TextSpan(
-                  text: '"${widget.client.nomComplet}"',
+                  text: '"${widget.client.nom}"',
                   style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: Colors.black87),
                 ),
                 const TextSpan(
@@ -478,15 +478,15 @@ class _ClientCardState extends ConsumerState<ClientCard> with SingleTickerProvid
     HapticFeedback.mediumImpact();
 
     final id = widget.client.id;
-    if (id == null) {
+    if (id == null || id.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('ID client invalide'), backgroundColor: errorColor),
       );
       return;
     }
 
-    final success = await ref.read(clientsProvider.notifier).removeClient(id);
-    if (success) {
+    try {
+      await ref.read(ficheClientsProvider.notifier).removeFicheClient(id);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Row(
@@ -495,7 +495,7 @@ class _ClientCardState extends ConsumerState<ClientCard> with SingleTickerProvid
           backgroundColor: successColor,
         ),
       );
-    } else {
+    } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Row(
@@ -509,9 +509,10 @@ class _ClientCardState extends ConsumerState<ClientCard> with SingleTickerProvid
 
   @override
   Widget build(BuildContext context) {
-     final clientVehCache = ref.watch(vehiculesProvider).vehicules
+    final clientVehCache = ref.watch(vehiculesProvider).vehicules
       .where((v) => (v.proprietaireId ?? '') == (widget.client.id ?? ''))
       .toList();
+
     return AnimatedContainer(
       duration: Duration(milliseconds: 300 + (widget.index * 50)),
       child: Card(
@@ -527,20 +528,20 @@ class _ClientCardState extends ConsumerState<ClientCard> with SingleTickerProvid
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
-                    colors: widget.client.categorie == Categorie.particulier
+                    colors: widget.client.type == ClientType.particulier
                       ? [primaryColor.withOpacity(0.1), primaryColor.withOpacity(0.2)]
                       : [successColor.withOpacity(0.1), successColor.withOpacity(0.2)],
                   ),
                   borderRadius: BorderRadius.circular(10),
                 ),
                 child: Icon(
-                  widget.client.categorie == Categorie.particulier ? Icons.person : Icons.business,
-                  color: widget.client.categorie == Categorie.particulier ? primaryColor : successColor,
+                  widget.client.type == ClientType.particulier ? Icons.person : Icons.business,
+                  color: widget.client.type == ClientType.particulier ? primaryColor : successColor,
                   size: 24,
                 ),
               ),
               title: Text(
-                widget.client.nomComplet,
+                widget.client.nom,
                 style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
@@ -599,34 +600,30 @@ class _ClientCardState extends ConsumerState<ClientCard> with SingleTickerProvid
                       tooltip: 'Supprimer',
                     ),
                     const SizedBox(width: 6),
-                   _buildActionButton(
-  expanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
-  Colors.grey[600]!,
-  () async {
-    // basculer l'état d'expansion
-    setState(() => expanded = !expanded);
+                    _buildActionButton(
+                      expanded ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                      Colors.grey[600]!,
+                      () async {
+                        setState(() => expanded = !expanded);
 
-    if (expanded) {
-      _expandController.forward();
-      // fetch remote une seule fois la première ouverture (si id présent)
-      if (!_fetchedVehicules && (widget.client.id ?? '').isNotEmpty) {
-        _fetchedVehicules = true;
-        try {
-          await ref.read(vehiculesProvider.notifier).loadByProprietaire(widget.client.id!);
-        } catch (e) {
-          // optional : notifier l'utilisateur en cas d'erreur
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Erreur chargement véhicules')),
-          );
-        }
-      }
-    } else {
-      _expandController.reverse();
-    }
-  },
-  tooltip: expanded ? 'Réduire' : 'Développer',
-),
-
+                        if (expanded) {
+                          _expandController.forward();
+                          if (!_fetchedVehicules && (widget.client.id ?? '').isNotEmpty) {
+                            _fetchedVehicules = true;
+                            try {
+                              await ref.read(vehiculesProvider.notifier).loadByProprietaire(widget.client.id!);
+                            } catch (e) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('Erreur chargement véhicules')),
+                              );
+                            }
+                          }
+                        } else {
+                          _expandController.reverse();
+                        }
+                      },
+                      tooltip: expanded ? 'Réduire' : 'Développer',
+                    ),
                   ],
                 ),
               ),
@@ -642,7 +639,7 @@ class _ClientCardState extends ConsumerState<ClientCard> with SingleTickerProvid
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Divider(),
-                    _buildInfoRow(Icons.email, 'Email', widget.client.mail),
+                    _buildInfoRow(Icons.email, 'Email', widget.client.email),
                     const SizedBox(height: 8),
                     _buildInfoRow(Icons.location_on, 'Adresse', widget.client.adresse),
                     const SizedBox(height: 16),
@@ -670,41 +667,41 @@ class _ClientCardState extends ConsumerState<ClientCard> with SingleTickerProvid
                       ],
                     ),
                     const SizedBox(height: 8),
-                    
-                   clientVehCache.isEmpty
-  ? Text('Aucun véhicule', style: TextStyle(color: Colors.grey[600], fontStyle: FontStyle.italic))
-  : Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: clientVehCache.map((v) =>
-        InkWell(
-          onTap: () {
-            HapticFeedback.lightImpact();
-            if (v.id.isEmpty) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('ID véhicule manquant')),
-              );
-              return;
-            }
-            Get.to(() => VehiculeInfoScreen(vehiculeId: v.id));
-          },
-          borderRadius: BorderRadius.circular(8),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: Colors.grey[100],
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.grey[300]!),
-            ),
-            child: Text(
-              '${v.marque} ${v.modele}\n${v.immatriculation}',
-              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
-              textAlign: TextAlign.center,
-            ),
-          ),
-        ),
-      ).toList(),
-    ),
+
+                    clientVehCache.isEmpty
+                      ? Text('Aucun véhicule', style: TextStyle(color: Colors.grey[600], fontStyle: FontStyle.italic))
+                      : Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: clientVehCache.map((v) =>
+                            InkWell(
+                              onTap: () {
+                                HapticFeedback.lightImpact();
+                                if ((v.id ?? '').isEmpty) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(content: Text('ID véhicule manquant')),
+                                  );
+                                  return;
+                                }
+                                Get.to(() => VehiculeInfoScreen(vehiculeId: v.id!));
+                              },
+                              borderRadius: BorderRadius.circular(8),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey[100],
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: Colors.grey[300]!),
+                                ),
+                                child: Text(
+                                  '${v.marque} ${v.modele}\n${v.immatriculation}',
+                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ),
+                            ),
+                          ).toList(),
+                        ),
                   ],
                 ),
               ),

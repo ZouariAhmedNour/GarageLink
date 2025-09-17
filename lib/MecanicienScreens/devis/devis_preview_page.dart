@@ -95,15 +95,17 @@ class _DevisPreviewPageState extends ConsumerState<DevisPreviewPage>
           final png = await _capturePreviewPng();
           try {
             if (png != null) {
-              // send with preview image if supported by your function
-              await generateAndSendDevis(ref, context, previewPng: png, devisToSend: devis);
+              await generateAndSendDevis(
+                ref,
+                context,
+                previewPng: png,
+                devisToSend: devis,
+              );
             } else {
-              // fallback : envoi sans image
               await generateAndSendDevis(ref, context, devisToSend: devis);
             }
             _showSuccessMessage('${isFacture ? 'Facture' : 'Devis'} envoyé avec succès');
           } catch (e) {
-            // Si l'envoi échoue, on retente sans preview et on propose de partager le PDF au besoin.
             debugPrint('Envoi avec preview échoué: $e — tentative d\'envoi sans preview');
             try {
               await generateAndSendDevis(ref, context, devisToSend: devis);
@@ -112,9 +114,15 @@ class _DevisPreviewPageState extends ConsumerState<DevisPreviewPage>
               debugPrint('Tentative d\'envoi sans preview également échouée: $inner');
               // Proposer au moins de partager le PDF localement pour l'utilisateur
               try {
-                final pdfBytes = await PdfService.instance.buildDevisPdfBytes(devis, footerNote: 'Généré par GarageLink');
-                await Printing.sharePdf(bytes: pdfBytes, filename: '${isFacture ? 'facture' : 'devis'}_${devis.id ?? 'doc'}.pdf');
-                _showSuccessMessage('Envoi automatique impossible — PDF partagé localement pour envoi manuel.');
+                final pdfBytes = await PdfService.instance.buildDevisPdfBytes(
+                  devis,
+                  footerNote: 'Généré par GarageLink',
+                );
+                await Printing.sharePdf(
+                    bytes: pdfBytes,
+                    filename: '${isFacture ? 'facture' : 'devis'}_${devis.id ?? 'doc'}.pdf');
+                _showSuccessMessage(
+                    'Envoi automatique impossible — PDF partagé localement pour envoi manuel.');
               } catch (shareErr) {
                 debugPrint('Erreur génération/partage PDF fallback: $shareErr');
                 _showErrorMessage('Impossible d\'envoyer le devis : $e');
@@ -124,11 +132,16 @@ class _DevisPreviewPageState extends ConsumerState<DevisPreviewPage>
           break;
 
         case 'download':
-          final bytes = await PdfService.instance.buildDevisPdfBytes(devis, footerNote: 'Généré par GarageLink');
+          final bytes = await PdfService.instance.buildDevisPdfBytes(
+            devis,
+            footerNote: 'Généré par GarageLink',
+          );
 
           if (kIsWeb) {
-            // Sur web : on utilise Printing.sharePdf (ou Printing.layoutPdf selon besoin)
-            await Printing.sharePdf(bytes: bytes, filename: '${isFacture ? 'facture' : 'devis'}_${devis.id ?? 'doc'}.pdf');
+            await Printing.sharePdf(
+                bytes: bytes,
+                filename:
+                    '${isFacture ? 'facture' : 'devis'}_${(devis.clientName).replaceAll(RegExp(r"[^A-Za-z0-9_]"), "_")}.pdf');
             _showSuccessMessage('PDF prêt à être téléchargé (web).');
             break;
           }
@@ -142,8 +155,10 @@ class _DevisPreviewPageState extends ConsumerState<DevisPreviewPage>
           }
           targetDir ??= await getApplicationDocumentsDirectory();
 
-          final safeClient = (devis.client.isNotEmpty ? devis.client : 'client').replaceAll(RegExp(r'[^A-Za-z0-9_\-]'), '_');
-          final fileName = '${isFacture ? 'facture' : 'devis'}_${safeClient}_${DateTime.now().millisecondsSinceEpoch}.pdf';
+          final safeClient = (devis.clientName.isNotEmpty ? devis.clientName : 'client')
+              .replaceAll(RegExp(r'[^A-Za-z0-9_\-]'), '_');
+          final fileName =
+              '${isFacture ? 'facture' : 'devis'}_${safeClient}_${DateTime.now().millisecondsSinceEpoch}.pdf';
           final filePath = '${targetDir.path}/$fileName';
 
           try {
@@ -159,8 +174,10 @@ class _DevisPreviewPageState extends ConsumerState<DevisPreviewPage>
           break;
 
         case 'print':
-          final bytes = await PdfService.instance.buildDevisPdfBytes(devis, footerNote: 'Généré par GarageLink');
-          // Printing.layoutPdf peut être utilisé directement:
+          final bytes = await PdfService.instance.buildDevisPdfBytes(
+            devis,
+            footerNote: 'Généré par GarageLink',
+          );
           await PdfService.instance.printPdfBytes(bytes);
           _showSuccessMessage('Impression lancée');
           break;
@@ -172,7 +189,7 @@ class _DevisPreviewPageState extends ConsumerState<DevisPreviewPage>
       debugPrint('Erreur action $action: $e\n$st');
       _showErrorMessage('Erreur: ${e.toString()}');
     } finally {
-      setState(() => _isProcessing = false);
+      if (mounted) setState(() => _isProcessing = false);
     }
   }
 
@@ -190,6 +207,7 @@ class _DevisPreviewPageState extends ConsumerState<DevisPreviewPage>
   }
 
   void _showSuccessMessage(String message) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
@@ -207,6 +225,7 @@ class _DevisPreviewPageState extends ConsumerState<DevisPreviewPage>
   }
 
   void _showErrorMessage(String message) {
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Row(
@@ -225,8 +244,16 @@ class _DevisPreviewPageState extends ConsumerState<DevisPreviewPage>
 
   @override
   Widget build(BuildContext context) {
-    final Devis previewDevis = widget.devis ?? ref.watch(devisProvider).toDevis();
+    // récupère l'état courant du provider et transforme en Devis via la méthode fournie
+    // (DevisFilterState contient bien toDevis()).
+    final Devis previewDevis =
+        widget.devis ?? ref.watch(devisProvider).toDevis();
     final bool isFacture = previewDevis.status == DevisStatus.accepte;
+
+    // safe filename client name
+    final safeClientForFilename =
+        (previewDevis.clientName.isNotEmpty ? previewDevis.clientName : 'client')
+            .replaceAll(RegExp(r"[^A-Za-z0-9_]"), "_");
 
     return Scaffold(
       backgroundColor: PreviewColors.surface,
@@ -258,14 +285,13 @@ class _DevisPreviewPageState extends ConsumerState<DevisPreviewPage>
                           canChangeOrientation: false,
                           canChangePageFormat: false,
                           build: (format) async {
-                            // build doit renvoyer Future<Uint8List>
                             return await PdfService.instance.buildDevisPdfBytes(
                               previewDevis,
                               footerNote: 'Généré par GarageLink',
                             );
                           },
                           pdfFileName:
-                              '${isFacture ? 'facture' : 'devis'}_${previewDevis.client.replaceAll(RegExp(r"[^A-Za-z0-9]"), "_")}.pdf',
+                              '${isFacture ? 'facture' : 'devis'}_$safeClientForFilename.pdf',
                           allowPrinting: true,
                           allowSharing: true,
                         ),
@@ -443,7 +469,7 @@ class _DevisPreviewPageState extends ConsumerState<DevisPreviewPage>
         ),
         const SizedBox(height: 2),
         Text(
-          devis.client.isNotEmpty ? devis.client : 'Client non spécifié',
+          devis.clientName.isNotEmpty ? devis.clientName : 'Client non spécifié',
           style: const TextStyle(
             color: Colors.white70,
             fontSize: 12,
@@ -527,9 +553,7 @@ class _DevisPreviewPageState extends ConsumerState<DevisPreviewPage>
         return PreviewColors.success;
       case DevisStatus.refuse:
         return Colors.red;
-      default:
-        return Colors.grey;
-    }
+      }
   }
 
   String _getStatusText(DevisStatus status) {
@@ -542,8 +566,6 @@ class _DevisPreviewPageState extends ConsumerState<DevisPreviewPage>
         return 'ACCEPTÉ';
       case DevisStatus.refuse:
         return 'REFUSÉ';
-      default:
-        return 'INCONNU';
-    }
+      }
   }
 }

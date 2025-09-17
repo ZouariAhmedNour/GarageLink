@@ -1,5 +1,3 @@
-// vehicule.dart
-
 enum FuelType {
   essence,
   diesel,
@@ -14,8 +12,8 @@ enum VehicleStatus {
 }
 
 class Vehicule {
-  final String? id; // _id from MongoDB
-  final String proprietaireId; // Reference to FicheClient
+  final String? id;
+  final String proprietaireId;
   final String marque;
   final String modele;
   final String immatriculation;
@@ -24,8 +22,10 @@ class Vehicule {
   final FuelType typeCarburant;
   final int? kilometrage;
   final VehicleStatus statut;
-  final DateTime? createdAt; // From timestamps
-  final DateTime? updatedAt; // From timestamps
+  final String? picKm; // image principale
+  final List<String> images; // ✅ tableau d’images
+  final DateTime? createdAt;
+  final DateTime? updatedAt;
 
   Vehicule({
     this.id,
@@ -38,11 +38,12 @@ class Vehicule {
     this.typeCarburant = FuelType.essence,
     this.kilometrage,
     this.statut = VehicleStatus.actif,
+    this.picKm,
+    this.images = const [],
     this.createdAt,
     this.updatedAt,
   });
 
-  // Parse JSON to Vehicule object
   factory Vehicule.fromJson(Map<String, dynamic> json) {
     return Vehicule(
       id: json['_id']?.toString(),
@@ -54,17 +55,16 @@ class Vehicule {
       couleur: json['couleur'],
       typeCarburant: _parseFuelType(json['typeCarburant']),
       kilometrage: json['kilometrage'],
-      statut: json['statut'] == 'actif' ? VehicleStatus.actif : VehicleStatus.inactif,
-      createdAt: json['createdAt'] != null
-          ? DateTime.parse(json['createdAt'])
-          : null,
-      updatedAt: json['updatedAt'] != null
-          ? DateTime.parse(json['updatedAt'])
-          : null,
+      statut: json['statut'] == 'actif'
+          ? VehicleStatus.actif
+          : VehicleStatus.inactif,
+      picKm: json['picKm'],
+      images: (json['images'] as List?)?.map((e) => e.toString()).toList() ?? [],
+      createdAt: json['createdAt'] != null ? DateTime.parse(json['createdAt']) : null,
+      updatedAt: json['updatedAt'] != null ? DateTime.parse(json['updatedAt']) : null,
     );
   }
 
-  // Convert Vehicule object to JSON
   Map<String, dynamic> toJson() {
     return {
       '_id': id,
@@ -77,14 +77,52 @@ class Vehicule {
       'typeCarburant': typeCarburant.toString().split('.').last,
       'kilometrage': kilometrage,
       'statut': statut == VehicleStatus.actif ? 'actif' : 'inactif',
+      'picKm': picKm,
+      'images': images,
       'createdAt': createdAt?.toIso8601String(),
       'updatedAt': updatedAt?.toIso8601String(),
-    }..removeWhere((key, value) => value == null); // Remove null values
+    }..removeWhere((key, value) => value == null);
   }
 
-  // Helper method to parse fuel type
-  static FuelType _parseFuelType(String? type) {
-    switch (type) {
+  Vehicule copyWith({
+    String? id,
+    String? proprietaireId,
+    String? marque,
+    String? modele,
+    String? immatriculation,
+    int? annee,
+    String? couleur,
+    FuelType? typeCarburant,
+    int? kilometrage,
+    VehicleStatus? statut,
+    String? picKm,
+    List<String>? images,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) {
+    return Vehicule(
+      id: id ?? this.id,
+      proprietaireId: proprietaireId ?? this.proprietaireId,
+      marque: marque ?? this.marque,
+      modele: modele ?? this.modele,
+      immatriculation: immatriculation ?? this.immatriculation,
+      annee: annee ?? this.annee,
+      couleur: couleur ?? this.couleur,
+      typeCarburant: typeCarburant ?? this.typeCarburant,
+      kilometrage: kilometrage ?? this.kilometrage,
+      statut: statut ?? this.statut,
+      picKm: picKm ?? this.picKm,
+      images: images ?? this.images,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
+    );
+  }
+
+  /// ✅ Ajout du parseur FuelType
+  static FuelType _parseFuelType(dynamic value) {
+    if (value == null) return FuelType.essence;
+    final str = value.toString().toLowerCase();
+    switch (str) {
       case 'diesel':
         return FuelType.diesel;
       case 'hybride':
@@ -93,7 +131,6 @@ class Vehicule {
         return FuelType.electrique;
       case 'gpl':
         return FuelType.gpl;
-      case 'essence':
       default:
         return FuelType.essence;
     }
