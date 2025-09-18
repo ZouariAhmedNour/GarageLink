@@ -35,4 +35,9 @@ class AppRoutes {
   static const String clientVehiclesScreen = '/clientVehiclesScreen';
   static const String clientMapScreen = '/clientMapScreen';
 
+  ///////////////////////   MODULE ATELIERS   ///////////////////////
+  static const String atelierDashboard = '/atelier_dashboard';
+  static const String modifierAtelier = '/modifier_atelier';
+  static const String ajouterAtelier = '/ajouter_atelier';
+
 }

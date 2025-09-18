@@ -1,7 +1,7 @@
 // atelier.dart
 
 class Atelier {
-  final String? id; // _id from MongoDB
+  final String? id;
   final String name;
   final String localisation;
 

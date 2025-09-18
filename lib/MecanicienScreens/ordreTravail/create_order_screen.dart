@@ -1,5 +1,7 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:http/http.dart' as http;
 import 'package:garagelink/MecanicienScreens/devis/devis_widgets/date_picker.dart';
 import 'package:garagelink/MecanicienScreens/devis/devis_widgets/generate_button.dart';
 import 'package:garagelink/MecanicienScreens/devis/devis_widgets/modern_card.dart';
@@ -9,6 +11,8 @@ import 'package:garagelink/MecanicienScreens/ordreTravail/work_order_page.dart';
 import 'package:garagelink/models/devis.dart';
 import 'package:garagelink/models/ordre.dart';
 import 'package:garagelink/providers/ordres_provider.dart';
+import 'package:garagelink/providers/auth_provider.dart';
+import 'package:garagelink/global.dart';
 import 'package:get/get.dart';
 
 class CreateOrderScreen extends ConsumerStatefulWidget {
@@ -31,12 +35,25 @@ class _CreateOrderScreenState extends ConsumerState<CreateOrderScreen>
   final numLocalCtrl = TextEditingController();
   final descriptionCtrl = TextEditingController();
 
-  String? mechanic;
-  String? workshop;
+  // listes chargées depuis l'API
+  List<Map<String, String>> services = [];
+  List<Map<String, String>> mecaniciens = [];
+  List<Map<String, String>> ateliers = [];
+
+  // sélection (ids)
+  String? selectedServiceId;
+  String? selectedMecanicienId;
+  String? selectedAtelierId;
+
+  String? selectedServiceName;
+  String? selectedMecanicienName;
+  String? selectedAtelierName;
+
   DateTime date = DateTime.now();
-  String? service;
 
   bool _submitting = false;
+  bool _loadingMeta = true;
+  String? _metaError;
 
   @override
   void initState() {
@@ -53,12 +70,15 @@ class _CreateOrderScreenState extends ConsumerState<CreateOrderScreen>
 
     // Pré-remplir certains champs depuis le devis passé
     clientCtrl.text = widget.devis.clientName.isNotEmpty ? widget.devis.clientName : '';
-    // Si ton modèle Devis a vin/numLocal, décommente:
+    // si le modèle Devis a VIN/numLocal décommenter ci-dessous
     // vinCtrl.text = widget.devis.vin ?? '';
     // numLocalCtrl.text = widget.devis.numLocal ?? '';
 
     final idToShow = widget.devis.devisId.isNotEmpty ? widget.devis.devisId : (widget.devis.id ?? '');
     descriptionCtrl.text = 'Travail lié au devis $idToShow';
+
+    // Charger les listes (services, ateliers) immédiatement
+    _loadMeta();
   }
 
   @override
@@ -71,19 +91,152 @@ class _CreateOrderScreenState extends ConsumerState<CreateOrderScreen>
     super.dispose();
   }
 
+  Future<void> _loadMeta() async {
+    setState(() {
+      _loadingMeta = true;
+      _metaError = null;
+    });
+
+    final token = ref.read(authTokenProvider);
+    if (token == null || token.isEmpty) {
+      setState(() {
+        _metaError = 'Token manquant';
+        _loadingMeta = false;
+      });
+      return;
+    }
+
+    try {
+      final futures = await Future.wait([
+        _fetchServices(token),
+        _fetchAteliers(token),
+      ]);
+      services = futures[0] as List<Map<String, String>>;
+      ateliers = futures[1] as List<Map<String, String>>;
+
+      // si le devis contient un atelierId / serviceId nous pouvons pré-sélectionner (optionnel)
+      // ex: if (widget.devis.preferredAtelierId != null) selectedAtelierId = widget.devis.preferredAtelierId;
+
+      setState(() {
+        _loadingMeta = false;
+      });
+    } catch (e) {
+      setState(() {
+        _metaError = e.toString();
+        _loadingMeta = false;
+      });
+    }
+  }
+
+  Future<List<Map<String, String>>> _fetchServices(String token) async {
+    final uri = Uri.parse('$UrlApi/getAllServices');
+    final resp = await http.get(uri, headers: {'Authorization': 'Bearer $token'});
+    if (resp.statusCode == 200) {
+      final body = jsonDecode(resp.body);
+      List<dynamic> list;
+      if (body is Map && body.containsKey('success') && body['success'] == true) {
+        list = body['services'] ?? body['data'] ?? [];
+      } else if (body is List) {
+        list = body;
+      } else {
+        throw Exception('Format services inattendu');
+      }
+      return list.map((item) {
+        final m = item as Map<String, dynamic>;
+        final id = (m['_id'] ?? m['id'] ?? '').toString();
+        final name = (m['name'] ?? m['nom'] ?? m['serviceNom'] ?? '').toString();
+        return {'id': id, 'name': name};
+      }).toList();
+    } else {
+      throw Exception('Erreur chargement services (${resp.statusCode})');
+    }
+  }
+
+  Future<List<Map<String, String>>> _fetchAteliers(String token) async {
+    final uri = Uri.parse('$UrlApi/getAllAteliers');
+    final resp = await http.get(uri, headers: {'Authorization': 'Bearer $token'});
+    if (resp.statusCode == 200) {
+      final body = jsonDecode(resp.body);
+      List<dynamic> list;
+      if (body is Map && body.containsKey('success') && body['success'] == true) {
+        list = body['ateliers'] ?? body['data'] ?? [];
+      } else if (body is List) {
+        list = body;
+      } else {
+        throw Exception('Format ateliers inattendu');
+      }
+      return list.map((item) {
+        final m = item as Map<String, dynamic>;
+        final id = (m['_id'] ?? m['id'] ?? '').toString();
+        final name = (m['name'] ?? m['nom'] ?? '').toString();
+        return {'id': id, 'name': name};
+      }).toList();
+    } else {
+      throw Exception('Erreur chargement ateliers (${resp.statusCode})');
+    }
+  }
+
+  Future<void> _fetchMecaniciensForService(String serviceId) async {
+    mecaniciens = [];
+    selectedMecanicienId = null;
+    selectedMecanicienName = null;
+    setState(() {});
+
+    final token = ref.read(authTokenProvider);
+    if (token == null || token.isEmpty) return;
+
+    final uri = Uri.parse('$UrlApi/mecaniciens/by-service/$serviceId');
+    final resp = await http.get(uri, headers: {'Authorization': 'Bearer $token'});
+    if (resp.statusCode == 200) {
+      final body = jsonDecode(resp.body);
+      List<dynamic> list;
+      if (body is Map && body.containsKey('success') && body['success'] == true) {
+        list = body['mecaniciens'] ?? body['data'] ?? [];
+      } else if (body is List) {
+        list = body;
+      } else if (body is Map && body.containsKey('mecaniciens')) {
+        list = body['mecaniciens'];
+      } else {
+        list = [];
+      }
+
+      mecaniciens = list.map((item) {
+        final m = item as Map<String, dynamic>;
+        final id = (m['_id'] ?? m['id'] ?? '').toString();
+        final name = (m['nom'] ?? m['name'] ?? '').toString();
+        return {'id': id, 'name': name};
+      }).toList();
+      setState(() {});
+    } else {
+      // silencieux : pas de mécaniciens trouvés / erreur
+      setState(() {});
+    }
+  }
+
   void _onCreatePressed() async {
     if (!_formKey.currentState!.validate()) return;
+
+    if (selectedServiceId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sélectionner un service')));
+      return;
+    }
+    if (selectedMecanicienId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sélectionner un mécanicien')));
+      return;
+    }
+    if (selectedAtelierId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sélectionner un atelier')));
+      return;
+    }
 
     setState(() => _submitting = true);
 
     final tache = Tache(
-      description: descriptionCtrl.text.trim().isEmpty
-          ? (service ?? 'Service')
-          : descriptionCtrl.text.trim(),
-      serviceId: '',
-      serviceNom: service ?? '',
-      mecanicienId: '',
-      mecanicienNom: mechanic ?? '',
+      description: descriptionCtrl.text.trim().isEmpty ? 'Travail' : descriptionCtrl.text.trim(),
+      serviceId: selectedServiceId!,
+      serviceNom: selectedServiceName ?? '',
+      mecanicienId: selectedMecanicienId!,
+      mecanicienNom: selectedMecanicienName ?? '',
       estimationHeures: 1.0,
     );
 
@@ -96,14 +249,13 @@ class _CreateOrderScreenState extends ConsumerState<CreateOrderScreen>
       await ref.read(ordresProvider.notifier).createOrdre(
             devisId: linkedDevisId,
             dateCommence: date,
-            atelierId: workshop ?? '',
+            atelierId: selectedAtelierId!,
             priorite: 'normale',
             description: descriptionCtrl.text.trim(),
             taches: [tache],
           );
 
       if (mounted) {
-        // Retourner à la liste des ordres
         Get.off(() => const WorkOrderPage());
       }
     } catch (e) {
@@ -179,8 +331,7 @@ class _CreateOrderScreenState extends ConsumerState<CreateOrderScreen>
                               controller: clientCtrl,
                               label: 'Client',
                               icon: Icons.person,
-                              validator: (v) =>
-                                  (v == null || v.isEmpty) ? 'Obligatoire' : null,
+                              validator: (v) => (v == null || v.isEmpty) ? 'Obligatoire' : null,
                             ),
                             const SizedBox(height: 16),
                           ],
@@ -209,45 +360,63 @@ class _CreateOrderScreenState extends ConsumerState<CreateOrderScreen>
                         borderColor: const Color(0xFF4A90E2),
                         child: Column(
                           children: [
-                            DropdownButtonFormField<String>(
-                              decoration: const InputDecoration(
-                                labelText: 'Service',
-                                border: OutlineInputBorder(),
-                              ),
-                              value: service,
-                              items: ['Dépannage', 'Entretien', 'Diagnostic']
-                                  .map((e) => DropdownMenuItem(value: e, child: Text(e)))
-                                  .toList(),
-                              onChanged: (v) => setState(() => service = v),
-                              validator: (v) => v == null ? "Sélectionner un service" : null,
-                            ),
+                            // Service (chargé depuis API)
+                            _loadingMeta
+                                ? const Padding(
+                                    padding: EdgeInsets.symmetric(vertical: 8),
+                                    child: LinearProgressIndicator(),
+                                  )
+                                : DropdownButtonFormField<String>(
+                                    decoration: const InputDecoration(labelText: 'Service', border: OutlineInputBorder()),
+                                    value: selectedServiceId,
+                                    items: services
+                                        .map((s) => DropdownMenuItem(value: s['id'], child: Text(s['name'] ?? '')))
+                                        .toList(),
+                                    onChanged: (val) async {
+                                      setState(() {
+                                        selectedServiceId = val;
+                                        selectedServiceName = services.firstWhere((s) => s['id'] == val)['name'];
+                                      });
+                                      if (val != null) {
+                                        await _fetchMecaniciensForService(val);
+                                      }
+                                    },
+                                    validator: (v) => v == null ? "Sélectionner un service" : null,
+                                  ),
                             const SizedBox(height: 16),
+
+                            // Mécanicien (rempli après sélection service)
                             DropdownButtonFormField<String>(
-                              decoration: const InputDecoration(
-                                labelText: 'Mécanicien',
-                                border: OutlineInputBorder(),
-                              ),
-                              value: mechanic,
-                              items: ['Jean Dupont', 'Marie']
-                                  .map((e) => DropdownMenuItem(value: e, child: Text(e)))
-                                  .toList(),
-                              onChanged: (v) => setState(() => mechanic = v),
+                              decoration: const InputDecoration(labelText: 'Mécanicien', border: OutlineInputBorder()),
+                              value: selectedMecanicienId,
+                              items: mecaniciens.isNotEmpty
+                                  ? mecaniciens.map((m) => DropdownMenuItem(value: m['id'], child: Text(m['name'] ?? ''))).toList()
+                                  : [
+                                      const DropdownMenuItem(value: null, child: Text('Sélectionner le service d\'abord'))
+                                    ],
+                              onChanged: (val) => setState(() {
+                                selectedMecanicienId = val;
+                                selectedMecanicienName = mecaniciens.isNotEmpty && val != null
+                                    ? mecaniciens.firstWhere((m) => m['id'] == val)['name']
+                                    : null;
+                              }),
                               validator: (v) => v == null ? "Sélectionner un mécanicien" : null,
                             ),
                             const SizedBox(height: 16),
+
+                            // Atelier (chargé depuis API)
                             DropdownButtonFormField<String>(
-                              decoration: const InputDecoration(
-                                labelText: 'Atelier',
-                                border: OutlineInputBorder(),
-                              ),
-                              value: workshop,
-                              items: ['Atelier 1', 'Atelier 2']
-                                  .map((e) => DropdownMenuItem(value: e, child: Text(e)))
-                                  .toList(),
-                              onChanged: (v) => setState(() => workshop = v),
+                              decoration: const InputDecoration(labelText: 'Atelier', border: OutlineInputBorder()),
+                              value: selectedAtelierId,
+                              items: ateliers.map((a) => DropdownMenuItem(value: a['id'], child: Text(a['name'] ?? ''))).toList(),
+                              onChanged: (v) => setState(() {
+                                selectedAtelierId = v;
+                                selectedAtelierName = ateliers.firstWhere((a) => a['id'] == v)['name'];
+                              }),
                               validator: (v) => v == null ? "Sélectionner un atelier" : null,
                             ),
                             const SizedBox(height: 16),
+
                             TextFormField(
                               controller: descriptionCtrl,
                               decoration: const InputDecoration(
@@ -255,9 +424,7 @@ class _CreateOrderScreenState extends ConsumerState<CreateOrderScreen>
                                 border: OutlineInputBorder(),
                               ),
                               maxLines: 3,
-                              validator: (v) => (v == null || v.isEmpty)
-                                  ? "Description obligatoire"
-                                  : null,
+                              validator: (v) => (v == null || v.isEmpty) ? "Description obligatoire" : null,
                             ),
                             const SizedBox(height: 16),
                             DatePicker(
@@ -276,6 +443,10 @@ class _CreateOrderScreenState extends ConsumerState<CreateOrderScreen>
                           text: _submitting ? 'Création...' : 'Créer et retourner',
                         ),
                       ),
+                      if (_metaError != null) ...[
+                        const SizedBox(height: 12),
+                        Text('Erreur chargement données: $_metaError', style: const TextStyle(color: Colors.red)),
+                      ]
                     ],
                   ),
                 ),

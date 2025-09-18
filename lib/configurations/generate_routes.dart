@@ -1,5 +1,8 @@
 // import 'package:garagelink/Clients%20Screens/clientHome.dart';
 import 'package:garagelink/Clients%20Screens/clientMapScreen.dart';
+import 'package:garagelink/MecanicienScreens/atelier/ajouterAtelier.dart';
+import 'package:garagelink/MecanicienScreens/atelier/atelier_dash.dart';
+import 'package:garagelink/MecanicienScreens/atelier/modifierAtelier.dart';
 // import 'package:garagelink/Clients%20Screens/client_vehicles_screen.dart';
 import 'package:garagelink/MecanicienScreens/stock/stockPieceForm.dart';
 import 'package:garagelink/auth/login.dart';
@@ -12,6 +15,7 @@ import 'package:garagelink/MecanicienScreens/Facture/facture_detail_page.dart';
 import 'package:garagelink/MecanicienScreens/Facture/facture_screen.dart';
 import 'package:garagelink/MecanicienScreens/Gestion%20Clients/add_client.dart';
 import 'package:garagelink/MecanicienScreens/R%C3%A9servations/reservation_screen.dart';
+import 'package:garagelink/models/atelier.dart';
 import 'package:garagelink/vehicules/add_veh.dart';
 import 'package:garagelink/MecanicienScreens/Gestion%20Clients/client_dash.dart';
 import 'package:garagelink/MecanicienScreens/Gestion%20Clients/edit_client.dart';
@@ -136,5 +140,19 @@ class GenerateRoutes {
     //   page: () => const ClientVehiclesScreen(),
     // ),
     GetPage(name: AppRoutes.clientMapScreen, page: () => ClientMapScreen()),
+
+
+    //////////////// MODULE ATELIERS  //////////////////////
+    GetPage(name: AppRoutes.atelierDashboard, page: () => const AtelierDashScreen()),
+    GetPage(
+  name: AppRoutes.modifierAtelier,
+  page: () {
+    final atelier = Get.arguments as Atelier;
+    return ModifierAtelierScreen(atelier: atelier);
+  },
+),
+  GetPage(name: AppRoutes.ajouterAtelier, page: () => const AjouterAtelierScreen()),
+
+    //////////////// FIN MODULE ATELIERS  /////////////////////
   ];
 }

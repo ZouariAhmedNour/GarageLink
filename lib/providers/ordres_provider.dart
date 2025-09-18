@@ -1,9 +1,10 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:garagelink/models/ordre.dart';
+import 'package:garagelink/providers/auth_provider.dart';
 import 'package:garagelink/services/ordre_api.dart';
 
-// Provider pour le token d'authentification (partagé avec autres providers)
-final authTokenProvider = StateProvider<String?>((ref) => null);
+// NOTE: Ne pas redeclarer authTokenProvider ici si tu l'as déjà ailleurs.
+// final authTokenProvider = StateProvider<String?>((ref) => null);
 
 // État des ordres de travail
 class OrdresState {
@@ -34,22 +35,22 @@ class OrdresNotifier extends StateNotifier<OrdresState> {
 
   final Ref ref;
 
-  // Récupérer le token depuis le provider
+  // Récupérer le token depuis le provider d'auth (défini ailleurs)
   String? get _token => ref.read(authTokenProvider);
 
-  // Vérifier si le token est disponible
   bool get _hasToken => _token != null && _token!.isNotEmpty;
 
-  // État
   void setLoading(bool value) => state = state.copyWith(loading: value, error: null);
-
   void setError(String error) => state = state.copyWith(error: error, loading: false);
-
   void setOrdres(List<OrdreTravail> list) => state = state.copyWith(ordres: [...list], error: null);
-
   void clear() => state = const OrdresState();
 
-  // Réseau : charger tous les ordres
+  // Helper pour comparer les ids (supporte id ou _id)
+  bool _matchesId(OrdreTravail o, String id) {
+    final oid = o.id ?? (o.toJson()['_id']?.toString());
+    return oid == id || (o.id == null && (o.toJson()['_id']?.toString() == id));
+  }
+
   Future<void> loadAll({
     int page = 1,
     int limit = 10,
@@ -80,7 +81,13 @@ class OrdresNotifier extends StateNotifier<OrdresState> {
         sortBy: sortBy,
         sortOrder: sortOrder,
       );
-      setOrdres(result['ordres'] as List<OrdreTravail>);
+
+      final ordresList = (result['ordres'] as List<dynamic>?)
+              ?.map((e) => e is OrdreTravail ? e : OrdreTravail.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          <OrdreTravail>[];
+
+      setOrdres(ordresList);
     } catch (e) {
       setError(e.toString());
     } finally {
@@ -88,7 +95,6 @@ class OrdresNotifier extends StateNotifier<OrdresState> {
     }
   }
 
-  // Réseau : récupérer un ordre par ID
   Future<OrdreTravail?> getById(String id) async {
     if (!_hasToken) {
       state = state.copyWith(error: 'Token d\'authentification requis');
@@ -107,7 +113,6 @@ class OrdresNotifier extends StateNotifier<OrdresState> {
     }
   }
 
-  // Réseau : récupérer un ordre par devisId
   Future<OrdreTravail?> getByDevisId(String devisId) async {
     if (!_hasToken) {
       state = state.copyWith(error: 'Token d\'authentification requis');
@@ -118,7 +123,9 @@ class OrdresNotifier extends StateNotifier<OrdresState> {
     try {
       final result = await OrdreApi.getOrdreByDevisId(_token!, devisId);
       if (result['exists'] == true) {
-        return result['ordre'] as OrdreTravail;
+        final ord = result['ordre'];
+        if (ord is OrdreTravail) return ord;
+        if (ord is Map<String, dynamic>) return OrdreTravail.fromJson(ord);
       }
       return null;
     } catch (e) {
@@ -129,7 +136,6 @@ class OrdresNotifier extends StateNotifier<OrdresState> {
     }
   }
 
-  // Réseau : récupérer les ordres par statut
   Future<void> getByStatus({
     required String status,
     int page = 1,
@@ -148,7 +154,13 @@ class OrdresNotifier extends StateNotifier<OrdresState> {
         page: page,
         limit: limit,
       );
-      setOrdres(result['ordres'] as List<OrdreTravail>);
+
+      final ordresList = (result['ordres'] as List<dynamic>?)
+              ?.map((e) => e is OrdreTravail ? e : OrdreTravail.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          <OrdreTravail>[];
+
+      setOrdres(ordresList);
     } catch (e) {
       setError(e.toString());
     } finally {
@@ -156,7 +168,6 @@ class OrdresNotifier extends StateNotifier<OrdresState> {
     }
   }
 
-  // Réseau : récupérer les ordres par atelier
   Future<void> getByAtelier({
     required String atelierId,
     int page = 1,
@@ -175,7 +186,13 @@ class OrdresNotifier extends StateNotifier<OrdresState> {
         page: page,
         limit: limit,
       );
-      setOrdres(result['ordres'] as List<OrdreTravail>);
+
+      final ordresList = (result['ordres'] as List<dynamic>?)
+              ?.map((e) => e is OrdreTravail ? e : OrdreTravail.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          <OrdreTravail>[];
+
+      setOrdres(ordresList);
     } catch (e) {
       setError(e.toString());
     } finally {
@@ -183,7 +200,6 @@ class OrdresNotifier extends StateNotifier<OrdresState> {
     }
   }
 
-  // Réseau : récupérer les statistiques
   Future<Map<String, dynamic>?> getStatistiques({String? atelierId}) async {
     if (!_hasToken) {
       state = state.copyWith(error: 'Token d\'authentification requis');
@@ -192,10 +208,7 @@ class OrdresNotifier extends StateNotifier<OrdresState> {
 
     setLoading(true);
     try {
-      final stats = await OrdreApi.getStatistiques(
-        token: _token!,
-        atelierId: atelierId,
-      );
+      final stats = await OrdreApi.getStatistiques(token: _token!, atelierId: atelierId);
       return stats;
     } catch (e) {
       setError(e.toString());
@@ -205,7 +218,6 @@ class OrdresNotifier extends StateNotifier<OrdresState> {
     }
   }
 
-  // Réseau : créer un ordre
   Future<void> createOrdre({
     required String devisId,
     required DateTime dateCommence,
@@ -230,7 +242,12 @@ class OrdresNotifier extends StateNotifier<OrdresState> {
         description: description,
         taches: taches,
       );
-      state = state.copyWith(ordres: [...state.ordres, ordre], error: null);
+
+      // Optionnel : éviter doublons (check id/_id)
+      final exists = state.ordres.any((o) => _matchesId(o, ordre.id ?? ordre.toJson()['_id']?.toString() ?? ''));
+      if (!exists) {
+        state = state.copyWith(ordres: [...state.ordres, ordre], error: null);
+      }
     } catch (e) {
       setError(e.toString());
     } finally {
@@ -238,7 +255,6 @@ class OrdresNotifier extends StateNotifier<OrdresState> {
     }
   }
 
-  // Réseau : mettre à jour le statut d'un ordre
   Future<void> updateStatus(String id, String status) async {
     if (!_hasToken) {
       state = state.copyWith(error: 'Token d\'authentification requis');
@@ -247,13 +263,11 @@ class OrdresNotifier extends StateNotifier<OrdresState> {
 
     setLoading(true);
     try {
-      final updatedOrdre = await OrdreApi.updateStatusOrdre(
-        token: _token!,
-        id: id,
-        status: status,
-      );
+      final updatedOrdre = await OrdreApi.updateStatusOrdre(token: _token!, id: id, status: status);
       state = state.copyWith(
-        ordres: state.ordres.map((o) => o.id == id ? updatedOrdre : o).toList(),
+        ordres: state.ordres.map((o) {
+          return _matchesId(o, id) ? updatedOrdre : o;
+        }).toList(),
         error: null,
       );
     } catch (e) {
@@ -263,7 +277,6 @@ class OrdresNotifier extends StateNotifier<OrdresState> {
     }
   }
 
-  // Réseau : démarrer un ordre
   Future<void> demarrerOrdre(String id) async {
     if (!_hasToken) {
       state = state.copyWith(error: 'Token d\'authentification requis');
@@ -274,7 +287,7 @@ class OrdresNotifier extends StateNotifier<OrdresState> {
     try {
       final updatedOrdre = await OrdreApi.demarrerOrdre(_token!, id);
       state = state.copyWith(
-        ordres: state.ordres.map((o) => o.id == id ? updatedOrdre : o).toList(),
+        ordres: state.ordres.map((o) => _matchesId(o, id) ? updatedOrdre : o).toList(),
         error: null,
       );
     } catch (e) {
@@ -284,7 +297,6 @@ class OrdresNotifier extends StateNotifier<OrdresState> {
     }
   }
 
-  // Réseau : terminer un ordre
   Future<void> terminerOrdre(String id) async {
     if (!_hasToken) {
       state = state.copyWith(error: 'Token d\'authentification requis');
@@ -295,7 +307,7 @@ class OrdresNotifier extends StateNotifier<OrdresState> {
     try {
       final updatedOrdre = await OrdreApi.terminerOrdre(_token!, id);
       state = state.copyWith(
-        ordres: state.ordres.map((o) => o.id == id ? updatedOrdre : o).toList(),
+        ordres: state.ordres.map((o) => _matchesId(o, id) ? updatedOrdre : o).toList(),
         error: null,
       );
     } catch (e) {
@@ -305,7 +317,6 @@ class OrdresNotifier extends StateNotifier<OrdresState> {
     }
   }
 
-  // Réseau : supprimer un ordre
   Future<void> supprimerOrdre(String id) async {
     if (!_hasToken) {
       state = state.copyWith(error: 'Token d\'authentification requis');
@@ -316,7 +327,7 @@ class OrdresNotifier extends StateNotifier<OrdresState> {
     try {
       await OrdreApi.supprimerOrdre(_token!, id);
       state = state.copyWith(
-        ordres: state.ordres.where((o) => o.id != id).toList(),
+        ordres: state.ordres.where((o) => !_matchesId(o, id)).toList(),
         error: null,
       );
     } catch (e) {
@@ -326,7 +337,6 @@ class OrdresNotifier extends StateNotifier<OrdresState> {
     }
   }
 
-  // Réseau : mettre à jour un ordre
   Future<void> updateOrdre({
     required String id,
     DateTime? dateCommence,
@@ -352,7 +362,7 @@ class OrdresNotifier extends StateNotifier<OrdresState> {
         taches: taches,
       );
       state = state.copyWith(
-        ordres: state.ordres.map((o) => o.id == id ? updatedOrdre : o).toList(),
+        ordres: state.ordres.map((o) => _matchesId(o, id) ? updatedOrdre : o).toList(),
         error: null,
       );
     } catch (e) {
