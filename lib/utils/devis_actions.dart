@@ -10,6 +10,7 @@ import 'package:garagelink/services/devis_api.dart';
 import 'package:garagelink/services/pdf_service.dart';
 import 'package:printing/printing.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:garagelink/global.dart'; // UrlApi
 
 String _statusToString(DevisStatus s) {
   switch (s) {
@@ -20,7 +21,7 @@ String _statusToString(DevisStatus s) {
     case DevisStatus.refuse:
       return 'refuse';
     case DevisStatus.brouillon:
-    return 'brouillon';
+      return 'brouillon';
   }
 }
 
@@ -53,6 +54,11 @@ Future<void> saveDraft(WidgetRef ref) async {
   ref.read(historiqueDevisProvider.notifier).ajouterDevis(brouillon);
 }
 
+/// Helper utilitaire pour nettoyer sauts de ligne multiples avant encodage mailto
+String _removeExtraNewlines(String s) {
+  return s.replaceAll(RegExp(r'\n{2,}'), '\n\n').trim();
+}
+
 /// Génère un PDF pour le devis (création ou mise à jour côté serveur) puis
 /// propose un envoi/partage local (mailto ou partage de PDF).
 ///
@@ -70,7 +76,7 @@ Future<void> generateAndSendDevis(
 }) async {
   final Devis base = devisToSend ?? ref.read(devisProvider).toDevis();
 
-  // Construire Devis avec statut 'envoye'
+  // Construire Devis avec statut 'envoye' localement (pour l'historique)
   final Devis toSave = Devis(
     id: base.id,
     devisId: base.devisId,
@@ -93,7 +99,7 @@ Future<void> generateAndSendDevis(
   );
 
   try {
-    // récupérer token si possible (certaines méthodes de DevisApi requièrent token)
+    // récupérer token si possible
     String? token;
     try {
       token = await const FlutterSecureStorage().read(key: 'token');
@@ -101,15 +107,15 @@ Future<void> generateAndSendDevis(
       token = null;
     }
 
-    // 1) create or update via DevisApi
+    // 1) create or update via DevisApi (best-effort)
     Devis created = toSave;
     if (token != null && token.isNotEmpty) {
       if (toSave.id != null && toSave.id!.isNotEmpty) {
-        // update (en utilisant id comme identifiant)
+        // update (on suppose que l'API accepte l'_id Mongo ou le custom id selon usage)
         try {
           final updated = await DevisApi.updateDevis(
             token: token,
-            id: toSave.id!, // si ton API attend un autre id, adapte ici
+            id: toSave.id!, // adapte si ton API attend DEVxxx ici
             clientId: toSave.clientId,
             clientName: toSave.clientName,
             vehicleInfo: toSave.vehicleInfo,
@@ -121,7 +127,6 @@ Future<void> generateAndSendDevis(
           );
           created = updated;
         } catch (e) {
-          // ignore et essaye la création ensuite
           debugPrint('updateDevis échoué: $e');
         }
       } else {
@@ -159,24 +164,81 @@ Future<void> generateAndSendDevis(
       ref.read(historiqueDevisProvider.notifier).modifierDevis(idx, created);
     }
 
-    // 3) Générer PDF bytes (utilise ton PdfService)
+    // -------------------------------------------------------------------------
+    // Envoi via serveur : IMPORTANT -> l'endpoint send-email côté backend
+    // recherche le devis avec le champ "id" (le custom DEVxxx). Donc on
+    // DOIT transmettre le DEVxxx (created.devisId) si disponible.
+    // -------------------------------------------------------------------------
+    final String idForServerSend = (created.devisId.isNotEmpty) ? created.devisId : (created.id ?? '');
+    // Pour construire les liens d'accept/refuse (qui utilisent findByIdAndUpdate)
+    // il faut l'_id Mongo du document : created.id (si présent)
+    final String mongoIdForLinks = (created.id != null && created.id!.isNotEmpty) ? created.id! : '';
+
+    // Si on a un token ET qu'aucun recipientEmail n'a été fourni,
+    // on privilégie l'envoi via le backend (il prendra l'email client et enverra le mail + liens).
+    if (token != null && token.isNotEmpty && (recipientEmail == null || recipientEmail.trim().isEmpty) && idForServerSend.isNotEmpty) {
+      try {
+        await DevisApi.sendDevisByEmail(token: token, devisId: idForServerSend);
+        // Best-effort : mettre à jour l'historique local si besoin (backend mettra status envoye)
+        try {
+          ref.read(historiqueDevisProvider.notifier).updateStatusById(idForServerSend, DevisStatus.envoye);
+        } catch (_) {}
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Devis envoyé par le serveur (email envoyé)'), backgroundColor: Colors.green),
+        );
+        return; // terminé : l'envoi est fait par le backend
+      } catch (e) {
+        // échec de l'envoi via backend -> on bascule en fallback local
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Envoi via serveur échoué : ${e.toString()} — utilisation du partage local'), backgroundColor: Colors.orange),
+        );
+        // on continue vers la génération PDF + partage
+      }
+    }
+
+    // 3) Générer PDF bytes (fallback / mailto / partage local)
     Uint8List pdfBytes;
     try {
       pdfBytes = await PdfService.instance.buildDevisPdfBytes(created, footerNote: 'Généré par GarageLink');
     } catch (e) {
-      // fallback si ton service a une autre méthode statique
       if (kDebugMode) debugPrint('Erreur buildDevisPdfBytes: $e');
       throw Exception('Impossible de générer le PDF : $e');
     }
 
     final filename = 'devis_${created.id ?? created.devisId}.pdf';
 
-    // 4) Si on a un recipientEmail fourni, on tente d'ouvrir mailto: (compose)
+    // Construire les URLs d'accept/refuse basées sur mongoIdForLinks (si disponible)
+    // UrlApi peut être 'http://host:port' ou 'http://host:port/api' ; on veut la base sans /api
+    String baseUrl = UrlApi;
+    if (baseUrl.endsWith('/api')) {
+      baseUrl = baseUrl.substring(0, baseUrl.length - 4);
+    } else if (baseUrl.endsWith('/api/')) {
+      baseUrl = baseUrl.substring(0, baseUrl.length - 5);
+    }
+    final String acceptUrl = mongoIdForLinks.isNotEmpty ? '$baseUrl/api/devis/$mongoIdForLinks/accept' : '';
+    final String refuseUrl = mongoIdForLinks.isNotEmpty ? '$baseUrl/api/devis/$mongoIdForLinks/refuse' : '';
+
+    // 4) Si recipientEmail fourni -> on essaie mailto: vers cette adresse (compose)
+    // On inclut dans le corps les liens d'accept/refuse (si on possède l'_id Mongo)
     if (recipientEmail != null && recipientEmail.trim().isNotEmpty) {
-      final subject = Uri.encodeComponent('Devis GarageLink - ${created.id ?? created.devisId}');
-      final body = Uri.encodeComponent(
-        'Bonjour ${created.clientName},\n\nVeuillez trouver ci-joint le devis.\n\nTotal TTC: ${created.totalTTC.toStringAsFixed(2)}\n\nCordialement,\nVotre garage',
-      );
+      final subject = Uri.encodeComponent('Devis GarageLink - ${created.devisId.isNotEmpty ? created.devisId : (created.id ?? '')}');
+
+      final buffer = StringBuffer();
+      buffer.writeln('Bonjour ${created.clientName},');
+      buffer.writeln();
+      buffer.writeln('Veuillez trouver ci-joint le devis.');
+      buffer.writeln('Total TTC: ${created.totalTTC.toStringAsFixed(2)} DT');
+      buffer.writeln();
+      if (acceptUrl.isNotEmpty && refuseUrl.isNotEmpty) {
+        buffer.writeln('Vous pouvez accepter ou refuser ce devis en cliquant sur les liens suivants :');
+        buffer.writeln('Accepter : $acceptUrl');
+        buffer.writeln('Refuser  : $refuseUrl');
+        buffer.writeln();
+      }
+      buffer.writeln('Cordialement,');
+      buffer.writeln('Votre garage');
+
+      final body = Uri.encodeComponent(_removeExtraNewlines(buffer.toString()));
       final uri = Uri.parse('mailto:$recipientEmail?subject=$subject&body=$body');
 
       if (await canLaunchUrl(uri)) {
@@ -184,14 +246,14 @@ Future<void> generateAndSendDevis(
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Boîte mail ouverte')));
         return;
       } else {
-        // si mailto impossible, on partage le PDF
+        // mailto impossible -> partager le PDF
         await Printing.sharePdf(bytes: pdfBytes, filename: filename);
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Impossible d\'ouvrir le mail, PDF partagé')));
         return;
       }
     }
 
-    // 5) Pas d'email : on partage le PDF (utilise Printing pour compatibilité mobile/web/desktop)
+    // 5) Pas d'email fourni et on n'a pas (ou pas pu) envoyer via serveur -> partager le PDF
     await Printing.sharePdf(bytes: pdfBytes, filename: filename);
     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('PDF partagé / prêt à être envoyé')));
   } catch (e, st) {

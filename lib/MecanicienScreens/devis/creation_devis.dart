@@ -7,16 +7,17 @@ import 'package:garagelink/MecanicienScreens/devis/devis_widgets/main_oeuvre_inp
 import 'package:garagelink/MecanicienScreens/devis/devis_widgets/modern_card.dart';
 import 'package:garagelink/MecanicienScreens/devis/devis_widgets/piece_inputs.dart';
 import 'package:garagelink/MecanicienScreens/devis/devis_widgets/piece_row.dart';
+import 'package:garagelink/MecanicienScreens/devis/devis_widgets/totals_card.dart';
 import 'package:garagelink/MecanicienScreens/devis/devis_widgets/tva_and_totals.dart';
 import 'package:garagelink/MecanicienScreens/devis/historique_devis.dart';
 import 'package:garagelink/models/devis.dart' show Service, EstimatedTime;
 import 'package:garagelink/models/ficheClient.dart' show FicheClient;
-import 'package:garagelink/models/pieces.dart' show Piece;
 import 'package:garagelink/models/vehicule.dart';
 import 'package:garagelink/providers/devis_provider.dart';
 import 'package:garagelink/providers/ficheClient_provider.dart';
-import 'package:garagelink/providers/pieces_provider.dart';
 import 'package:garagelink/providers/vehicule_provider.dart';
+import 'package:garagelink/providers/auth_provider.dart';
+import 'package:garagelink/services/devis_api.dart';
 import 'package:get/get.dart';
 
 class CreationDevisPage extends ConsumerStatefulWidget {
@@ -33,37 +34,36 @@ class _CreationDevisPageState extends ConsumerState<CreationDevisPage>
   final _vinCtrl = TextEditingController();
   DateTime _date = DateTime.now();
 
-  // local selection state for clients / vehicules
   FicheClient? _selectedClient;
   Vehicule? _selectedVehicule;
   bool _loadingVehiculesForClient = false;
 
-  // Entrée pièce - catalogue
-  Piece? _selectedItem;
   final _pieceNomCtrl = TextEditingController();
   final _qteCtrl = TextEditingController(text: '1');
   final _puCtrl = TextEditingController();
 
-  // Entrée TVA & Remise (remise UI stays but provider may not store remise)
   final _tvaCtrl = TextEditingController(text: '20');
   final _remiseCtrl = TextEditingController(text: '0');
 
-  // Entrée numéro de série (sera rempli depuis la sélection de véhicule)
   final _numLocalCtrl = TextEditingController();
 
-  // Main d'œuvre  & durée
   final _mainOeuvreCtrl = TextEditingController(text: '0');
   Duration _duree = const Duration(hours: 1);
 
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
 
-  // submission state
   bool _isSubmitting = false;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      try {
+        ref.read(ficheClientsProvider.notifier).loadNoms();
+      } catch (_) {}
+    });
+
     _animationController = AnimationController(
       duration: const Duration(milliseconds: 800),
       vsync: this,
@@ -90,7 +90,6 @@ class _CreationDevisPageState extends ConsumerState<CreationDevisPage>
     super.dispose();
   }
 
-  // Helpers de parsing
   double? _parseDouble(String s) {
     final stripped = s.replaceAll(',', '.').trim();
     if (stripped.isEmpty) return null;
@@ -103,28 +102,6 @@ class _CreationDevisPageState extends ConsumerState<CreationDevisPage>
     return int.tryParse(t);
   }
 
-  // Ajout depuis catalogue (Piece)
-  void _addFromCatalog(Piece p) {
-    final unitPrice = p.prix;
-    final name = p.name;
-    final qty = 1;
-    final service = Service(
-      pieceId: p.id?.toString() ?? '',
-      piece: name,
-      quantity: qty,
-      unitPrice: unitPrice,
-      total: unitPrice * qty,
-    );
-    ref.read(devisProvider.notifier).addService(service);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Pièce ajoutée depuis le catalogue'),
-        backgroundColor: Color(0xFF50C878),
-      ),
-    );
-  }
-
-  // Ajout manuel depuis champs
   void _addFromInputs() {
     final name = _pieceNomCtrl.text.trim();
     final qte = _parseInt(_qteCtrl.text) ?? 0;
@@ -159,7 +136,6 @@ class _CreationDevisPageState extends ConsumerState<CreationDevisPage>
     }
 
     final service = Service(
-      pieceId: '',
       piece: name,
       quantity: qte,
       unitPrice: pu,
@@ -186,7 +162,6 @@ class _CreationDevisPageState extends ConsumerState<CreationDevisPage>
 
     if (client != null && client.id != null && client.id!.isNotEmpty) {
       await ref.read(vehiculesProvider.notifier).loadByProprietaire(client.id!);
-      // provider expects (id, name)
       ref.read(devisProvider.notifier).setClient(client.id ?? '', client.nom);
     } else {
       ref.read(devisProvider.notifier).setClient('', '');
@@ -205,15 +180,14 @@ class _CreationDevisPageState extends ConsumerState<CreationDevisPage>
         _vinCtrl.text = veh.immatriculation;
         ref.read(devisProvider.notifier).setNumeroSerie(veh.immatriculation);
 
-        // set vehiculeId and vehicleInfo in provider
         final info = '${veh.marque} ${veh.modele} — ${veh.immatriculation}';
         ref.read(devisProvider.notifier).setVehicule(veh.id, info);
 
         if (_selectedClient != null) {
           ref.read(devisProvider.notifier).setClient(
-                _selectedClient!.id ?? '',
-                _selectedClient!.nom,
-              );
+            _selectedClient!.id ?? '',
+            _selectedClient!.nom,
+          );
         }
       } else {
         _numLocalCtrl.clear();
@@ -224,7 +198,6 @@ class _CreationDevisPageState extends ConsumerState<CreationDevisPage>
     });
   }
 
-  // helper: Duration -> EstimatedTime
   EstimatedTime _durationToEstimatedTime(Duration d) {
     final days = d.inDays;
     final hours = d.inHours % 24;
@@ -233,7 +206,6 @@ class _CreationDevisPageState extends ConsumerState<CreationDevisPage>
   }
 
   Future<void> _saveDraftToServer() async {
-    // Validate client & vehicle selected
     if (_selectedClient == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Veuillez sélectionner un client.'), backgroundColor: Colors.orange),
@@ -247,18 +219,46 @@ class _CreationDevisPageState extends ConsumerState<CreationDevisPage>
       return;
     }
 
+    final token = ref.read(authTokenProvider);
+    if (token == null || token.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Utilisateur non authentifié.'), backgroundColor: Colors.red),
+      );
+      return;
+    }
+
     setState(() => _isSubmitting = true);
     try {
-      // update provider values (TVA, main d'oeuvre, durée, date)
       final tva = double.tryParse(_tvaCtrl.text.replaceAll(',', '.')) ?? 20.0;
       final main = double.tryParse(_mainOeuvreCtrl.text.replaceAll(',', '.')) ?? 0.0;
+
+      // Update provider values (so UI totals stay coherent)
       ref.read(devisProvider.notifier).setTvaRate(tva);
       ref.read(devisProvider.notifier).setMaindoeuvre(main);
       ref.read(devisProvider.notifier).setEstimatedTime(_durationToEstimatedTime(_duree));
       ref.read(devisProvider.notifier).setInspectionDate(_date);
 
-      // ask provider to create a brouillon (provider handles API & token)
-      await ref.read(devisProvider.notifier).ajouterDevis();
+      // prepare data
+      final state = ref.read(devisProvider);
+      final services = state.services;
+
+      final created = await DevisApi.createDevis(
+        token: token,
+        clientId: state.clientId,
+        clientName: state.clientName,
+        vehicleInfo: state.vehicleInfo ?? '',
+        vehiculeId: state.vehiculeId ?? '',
+        inspectionDate: _date.toIso8601String(),
+        services: services,
+        tvaRate: tva,
+        maindoeuvre: main,
+        estimatedTime: _durationToEstimatedTime(_duree),
+      );
+
+      // refresh list in provider
+      try {
+        await ref.read(devisProvider.notifier).loadAll();
+      } catch (_) {}
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Brouillon enregistré avec succès'), backgroundColor: Color(0xFF50C878)),
@@ -294,9 +294,16 @@ class _CreationDevisPageState extends ConsumerState<CreationDevisPage>
       return;
     }
 
+    final token = ref.read(authTokenProvider);
+    if (token == null || token.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Utilisateur non authentifié.'), backgroundColor: Colors.red),
+      );
+      return;
+    }
+
     setState(() => _isSubmitting = true);
     try {
-      // update provider values
       final tva = double.tryParse(_tvaCtrl.text.replaceAll(',', '.')) ?? 20.0;
       final main = double.tryParse(_mainOeuvreCtrl.text.replaceAll(',', '.')) ?? 0.0;
       ref.read(devisProvider.notifier).setTvaRate(tva);
@@ -304,14 +311,56 @@ class _CreationDevisPageState extends ConsumerState<CreationDevisPage>
       ref.read(devisProvider.notifier).setEstimatedTime(_durationToEstimatedTime(_duree));
       ref.read(devisProvider.notifier).setInspectionDate(_date);
 
-      // create and send (provider will create the devis via API)
-      await ref.read(devisProvider.notifier).ajouterDevis();
+      final state = ref.read(devisProvider);
+      final services = state.services;
+
+      final created = await DevisApi.createDevis(
+        token: token,
+        clientId: state.clientId,
+        clientName: state.clientName,
+        vehicleInfo: state.vehicleInfo ?? '',
+        vehiculeId: state.vehiculeId ?? '',
+        inspectionDate: _date.toIso8601String(),
+        services: services,
+        tvaRate: tva,
+        maindoeuvre: main,
+        estimatedTime: _durationToEstimatedTime(_duree),
+      );
+
+      // essayer d'envoyer par email si on a un identifiant utilisable
+      String? sendId;
+      try {
+        // on tente d'utiliser les champs possibles (adapter selon ton modèle Devis)
+        if ((created.id ?? '').isNotEmpty) {
+          sendId = created.id;
+        } else if ((created.devisId ?? '').isNotEmpty) {
+          sendId = created.devisId;
+        }
+      } catch (_) {
+        // ignore if fields absent — protège si Devis n'expose pas ces props
+      }
+
+      if (sendId != null && sendId.isNotEmpty) {
+        try {
+          await DevisApi.sendDevisByEmail(token: token, devisId: sendId);
+        } catch (e) {
+          // l'envoi email échoue, on log/affiche mais ce n'est pas bloquant
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Devis créé mais envoi email échoué: ${e.toString()}'), backgroundColor: Colors.orange),
+          );
+        }
+      }
+
+      // refresh provider list
+      try {
+        await ref.read(devisProvider.notifier).loadAll();
+      } catch (_) {}
 
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Devis créé'), backgroundColor: Color(0xFF50C878)),
       );
 
-      // open preview
+      // ouvrir la preview (si ta page preview attend un objet, adapte l'appel)
       Get.to(() => const DevisPreviewPage());
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -325,7 +374,6 @@ class _CreationDevisPageState extends ConsumerState<CreationDevisPage>
   @override
   Widget build(BuildContext context) {
     final q = ref.watch(devisProvider); // DevisFilterState
-    final piecesState = ref.watch(piecesProvider); // PiecesState
     final clientsState = ref.watch(ficheClientsProvider); // FicheClientsState
     final vehState = ref.watch(vehiculesProvider); // VehiculesState
 
@@ -379,7 +427,6 @@ class _CreationDevisPageState extends ConsumerState<CreationDevisPage>
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Client & Véhicule
                       ModernCard(
                         title: 'Client & Véhicule',
                         icon: Icons.person_outline,
@@ -387,14 +434,13 @@ class _CreationDevisPageState extends ConsumerState<CreationDevisPage>
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            // Clients dropdown
                             if (clientsState.loading)
                               const SizedBox(height: 56, child: Center(child: CircularProgressIndicator()))
                             else if (clientsState.error != null)
                               Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  const Text('Erreur chargement clients', style: TextStyle(color: Colors.red)),
+                                  Text('Erreur chargement clients: ${clientsState.error}', style: const TextStyle(color: Colors.red)),
                                   const SizedBox(height: 8),
                                   ElevatedButton(onPressed: () => ref.read(ficheClientsProvider.notifier).loadNoms(), child: const Text('Réessayer')),
                                 ],
@@ -416,10 +462,7 @@ class _CreationDevisPageState extends ConsumerState<CreationDevisPage>
                                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey[300]!)),
                                 ),
                                 items: clientsState.clients.map((c) {
-                                  return DropdownMenuItem<FicheClient>(
-                                    value: c,
-                                    child: Text(c.nom),
-                                  );
+                                  return DropdownMenuItem<FicheClient>(value: c, child: Text(c.nom));
                                 }).toList(),
                                 onChanged: (c) async {
                                   setState(() {
@@ -433,7 +476,6 @@ class _CreationDevisPageState extends ConsumerState<CreationDevisPage>
 
                             const SizedBox(height: 16),
 
-                            // Vehicules dropdown (filtered by selected client)
                             if (_selectedClient == null)
                               Text('Sélectionnez un client pour afficher ses véhicules', style: TextStyle(color: Colors.grey[600]))
                             else if (_loadingVehiculesForClient || vehState.loading)
@@ -480,7 +522,6 @@ class _CreationDevisPageState extends ConsumerState<CreationDevisPage>
 
                             const SizedBox(height: 16),
 
-                            // Immatriculation read-only
                             TextFormField(
                               controller: _numLocalCtrl,
                               readOnly: true,
@@ -513,59 +554,12 @@ class _CreationDevisPageState extends ConsumerState<CreationDevisPage>
 
                       const SizedBox(height: 20),
 
-                      // Pièces de rechange
                       ModernCard(
                         title: 'Pièces de rechange',
                         icon: Icons.build_outlined,
                         borderColor: const Color(0xFF4A90E2),
                         child: Column(
                           children: [
-                            // Dropdown catalogue (piecesProvider is a StateNotifier)
-                            if (piecesState.loading)
-                              const SizedBox(height: 56, child: Center(child: CircularProgressIndicator()))
-                            else if (piecesState.error != null)
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text('Erreur chargement catalogue : ${piecesState.error}', style: const TextStyle(color: Colors.red)),
-                                  const SizedBox(height: 8),
-                                  ElevatedButton(onPressed: () => ref.read(piecesProvider.notifier).loadAll(), child: const Text('Réessayer')),
-                                ],
-                              )
-                            else
-                              DropdownButtonFormField<Piece?>(
-                                isExpanded: true,
-                                value: _selectedItem,
-                                decoration: InputDecoration(
-                                  labelText: 'Depuis le catalogue',
-                                  prefixIcon: const Icon(Icons.inventory, color: Color(0xFF4A90E2)),
-                                  filled: true,
-                                  fillColor: Colors.grey[50],
-                                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.grey[300]!)),
-                                ),
-                                items: piecesState.pieces.isEmpty
-                                    ? [
-                                        const DropdownMenuItem<Piece?>(value: null, child: Text('Aucun article dans le catalogue')),
-                                      ]
-                                    : piecesState.pieces.map((p) {
-                                        return DropdownMenuItem<Piece?>(value: p, child: Text('${p.name} — ${p.prix.toStringAsFixed(2)}'));
-                                      }).toList(),
-                                onChanged: (val) {
-                                  if (val == null) return;
-                                  setState(() => _selectedItem = val);
-                                  Future.microtask(() {
-                                    _pieceNomCtrl.text = val.name;
-                                    _puCtrl.text = val.prix.toStringAsFixed(2);
-                                    _qteCtrl.text = '1';
-                                    _addFromCatalog(val);
-                                    if (mounted) setState(() => _selectedItem = null);
-                                  });
-                                },
-                              ),
-
-                            const SizedBox(height: 16),
-
-                            // Inputs manuels
                             PieceInputs(
                               isTablet: isTablet,
                               pieceNomCtrl: _pieceNomCtrl,
@@ -584,7 +578,6 @@ class _CreationDevisPageState extends ConsumerState<CreationDevisPage>
                               onPressed: () {
                                 _addFromInputs();
                                 setState(() {
-                                  _selectedItem = null;
                                   _pieceNomCtrl.clear();
                                   _qteCtrl.text = '1';
                                   _puCtrl.clear();
@@ -594,7 +587,6 @@ class _CreationDevisPageState extends ConsumerState<CreationDevisPage>
 
                             const SizedBox(height: 16),
 
-                            // Liste des services/pièces (utilise services du provider)
                             ...q.services.asMap().entries.map((e) {
                               final Service srv = e.value;
                               return Padding(
@@ -611,7 +603,6 @@ class _CreationDevisPageState extends ConsumerState<CreationDevisPage>
 
                       const SizedBox(height: 20),
 
-                      // Main d'oeuvre & durée
                       ModernCard(
                         title: 'Main d\'œuvre & Durée',
                         icon: Icons.timer_outlined,
@@ -629,16 +620,23 @@ class _CreationDevisPageState extends ConsumerState<CreationDevisPage>
                             ),
                             const SizedBox(height: 16),
                             TvaAndTotals(
-  isTablet: isTablet,
-  tvaCtrl: _tvaCtrl,
-  remiseCtrl: _remiseCtrl,
-  maindoeuvreCtrl: _mainOeuvreCtrl,
-),
+                              isTablet: isTablet,
+                              tvaCtrl: _tvaCtrl,
+                              remiseCtrl: _remiseCtrl,
+                              maindoeuvreCtrl: _mainOeuvreCtrl,
+                            ),
                           ],
                         ),
                       ),
 
                       const SizedBox(height: 32),
+
+                      ModernCard(
+                        title: 'Résumé des Totaux',
+                        icon: Icons.summarize_outlined,
+                        borderColor: const Color(0xFF4A90E2),
+                        child: const TotalsCard(),
+                      ),
 
                       Row(
                         children: [
@@ -653,25 +651,7 @@ class _CreationDevisPageState extends ConsumerState<CreationDevisPage>
                             ),
                           ),
                           const SizedBox(width: 12),
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              icon: _isSubmitting
-                                  ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                                  : const Icon(Icons.send, color: Colors.white),
-                              label: const Text('Générer & Envoyer', style: TextStyle(color: Colors.white)),
-                              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF4A90E2), padding: const EdgeInsets.symmetric(vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                              onPressed: _isSubmitting
-                                  ? null
-                                  : () async {
-                                      setState(() => _isSubmitting = true);
-                                      try {
-                                        await _generateAndSendDevis();
-                                      } finally {
-                                        setState(() => _isSubmitting = false);
-                                      }
-                                    },
-                            ),
-                          ),
+                        
                         ],
                       ),
 

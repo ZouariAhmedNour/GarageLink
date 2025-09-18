@@ -50,7 +50,6 @@ void onAddPiece({
 
     // Construire la ligne Service
     final line = Service(
-      pieceId: selectedItem.id?.toString() ?? '',
       piece: name,
       quantity: quantite,
       unitPrice: prixUnit,
@@ -83,7 +82,6 @@ void onAddPiece({
   }
 
   final line = Service(
-    pieceId: '',
     piece: name,
     quantity: qte,
     unitPrice: pu,

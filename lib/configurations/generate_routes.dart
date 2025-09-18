@@ -27,12 +27,16 @@ import 'package:garagelink/MecanicienScreens/mecaHome.dart';
 import 'package:garagelink/MecanicienScreens/meca_services/add_edit_service_screen.dart';
 import 'package:garagelink/MecanicienScreens/meca_services/meca_services.dart';
 import 'package:garagelink/MecanicienScreens/stock/stock_dashboard.dart';
+// create_order_screen ne doit plus être instanciée sans argument ici,
+// on l'utilisera via route en lui passant un Devis en argument.
 import 'package:garagelink/MecanicienScreens/ordreTravail/create_order_screen.dart';
 import 'package:garagelink/MecanicienScreens/ordreTravail/work_order_page.dart';
 import 'package:garagelink/models/ficheClient.dart';
 import 'package:garagelink/models/facture.dart';
+import 'package:garagelink/models/devis.dart'; // <-- ajouté
 import 'package:garagelink/splash_screen.dart';
 import 'package:get/get.dart';
+import 'package:flutter/material.dart';
 
 class GenerateRoutes {
   static final getPages = [
@@ -50,8 +54,37 @@ class GenerateRoutes {
     GetPage(name: AppRoutes.creationDevis, page: () => CreationDevisPage()),
     GetPage(name: AppRoutes.devisPreviewPage, page: () => DevisPreviewPage()),
     GetPage(name: AppRoutes.historiqueDevis, page: () => HistoriqueDevisPage()),
-    // GetPage(name: AppRoutes.workOrderPage, page: () => WorkOrderPage()),
-    // GetPage(name: AppRoutes.createOrderScreen, page: () => CreateOrderScreen()),
+    GetPage(name: AppRoutes.workOrderPage, page: () => WorkOrderPage()),
+
+    // <-- ici on exige maintenant un argument de type Devis
+    GetPage(
+      name: AppRoutes.createOrderScreen,
+      page: () {
+        final args = Get.arguments;
+        if (args is Devis) {
+          return CreateOrderScreen(devis: args);
+        }
+        // Si aucun Devis n'est fourni on affiche une page d'erreur friendly
+        return Scaffold(
+          appBar: AppBar(
+            title: const Text('Création d\'ordre'),
+            backgroundColor: const Color(0xFF357ABD),
+          ),
+          body: const Center(
+            child: Padding(
+              padding: EdgeInsets.all(16.0),
+              child: Text(
+                'Impossible de créer un ordre : devis manquant.\n'
+                'L\'ordre doit être créé depuis la page d\'historique des devis.',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 16),
+              ),
+            ),
+          ),
+        );
+      },
+    ),
+
     GetPage(
       name: AppRoutes.addEditServiceScreen,
       page: () => AddEditServiceScreen(),
@@ -97,10 +130,7 @@ class GenerateRoutes {
         return EntretienScreen(vehiculeId: vehiculeId);
       },
     ),
-    GetPage(
-      name: AppRoutes.reservationScreen,
-      page: () => const ReservationScreen(),
-    ),
+    GetPage(name: AppRoutes.reservationScreen, page: () => const ReservationScreen()),
     // GetPage(
     //   name: AppRoutes.clientVehiclesScreen,
     //   page: () => const ClientVehiclesScreen(),

@@ -52,16 +52,7 @@ class TvaAndTotals extends ConsumerWidget {
           },
         ),
         const SizedBox(height: 12),
-        ModernTextField(
-          controller: maindoeuvreCtrl,
-          label: 'Main d\'œuvre (HT)',
-          icon: Icons.work_outline,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          onChanged: (v) {
-            final m = _parseDouble(v);
-            notifier.setMaindoeuvre(m);
-          },
-        ),
+
       ],
     );
 

@@ -4,6 +4,7 @@ import 'package:garagelink/MecanicienScreens/devis/creation_devis.dart';
 import 'package:garagelink/MecanicienScreens/edit_localisation.dart';
 import 'package:garagelink/MecanicienScreens/gestion%20mec/mec_list_screen.dart';
 import 'package:garagelink/MecanicienScreens/meca_services/meca_services.dart';
+import 'package:garagelink/MecanicienScreens/ordreTravail/work_order_page.dart';
 import 'package:garagelink/MecanicienScreens/stock/stock_dashboard.dart';
 import 'package:get/get.dart';
 import 'package:garagelink/components/default_app_bar.dart';
@@ -392,6 +393,13 @@ class _MecaHomePageState extends ConsumerState<MecaHomePage> {
               description: 'Création et gestion des factures',
               color: const Color.fromARGB(255, 11, 131, 187),
               onTap: () => Get.to(() => FactureScreen()),
+            ),
+            buildMenuCard(
+              icon: Icons.assignment,
+              title: 'Ordres',
+              description: 'Création et gestion des Ordres',
+              color: const Color.fromARGB(255, 11, 131, 187),
+              onTap: () => Get.to(() => WorkOrderPage()),
             ),
 
             // 🚀 FUTURES FONCTIONNALITÉS

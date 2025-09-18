@@ -6,12 +6,15 @@ import 'package:garagelink/MecanicienScreens/devis/devis_widgets/modern_card.dar
 import 'package:garagelink/MecanicienScreens/devis/devis_widgets/modern_text_field.dart';
 import 'package:garagelink/MecanicienScreens/devis/devis_widgets/num_serie_input.dart';
 import 'package:garagelink/MecanicienScreens/ordreTravail/work_order_page.dart';
+import 'package:garagelink/models/devis.dart';
 import 'package:garagelink/models/ordre.dart';
 import 'package:garagelink/providers/ordres_provider.dart';
 import 'package:get/get.dart';
 
 class CreateOrderScreen extends ConsumerStatefulWidget {
-  const CreateOrderScreen({super.key});
+  // on garde le Devis passé (obligatoire)
+  final Devis devis;
+  const CreateOrderScreen({super.key, required this.devis});
 
   @override
   ConsumerState<CreateOrderScreen> createState() => _CreateOrderScreenState();
@@ -47,6 +50,15 @@ class _CreateOrderScreenState extends ConsumerState<CreateOrderScreen>
       curve: Curves.easeInOut,
     );
     _animationController.forward();
+
+    // Pré-remplir certains champs depuis le devis passé
+    clientCtrl.text = widget.devis.clientName.isNotEmpty ? widget.devis.clientName : '';
+    // Si ton modèle Devis a vin/numLocal, décommente:
+    // vinCtrl.text = widget.devis.vin ?? '';
+    // numLocalCtrl.text = widget.devis.numLocal ?? '';
+
+    final idToShow = widget.devis.devisId.isNotEmpty ? widget.devis.devisId : (widget.devis.id ?? '');
+    descriptionCtrl.text = 'Travail lié au devis $idToShow';
   }
 
   @override
@@ -76,8 +88,13 @@ class _CreateOrderScreenState extends ConsumerState<CreateOrderScreen>
     );
 
     try {
+      // Utiliser l'ID du devis réel (devisId si présent sinon id)
+      final String linkedDevisId = widget.devis.devisId.isNotEmpty
+          ? widget.devis.devisId
+          : (widget.devis.id ?? '');
+
       await ref.read(ordresProvider.notifier).createOrdre(
-            devisId: '', // à remplacer si tu as un devis
+            devisId: linkedDevisId,
             dateCommence: date,
             atelierId: workshop ?? '',
             priorite: 'normale',
@@ -85,9 +102,16 @@ class _CreateOrderScreenState extends ConsumerState<CreateOrderScreen>
             taches: [tache],
           );
 
-      if (mounted) Get.off(() => const WorkOrderPage());
+      if (mounted) {
+        // Retourner à la liste des ordres
+        Get.off(() => const WorkOrderPage());
+      }
     } catch (e) {
-      rethrow;
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Erreur création ordre : $e')),
+        );
+      }
     } finally {
       if (mounted) setState(() => _submitting = false);
     }
@@ -192,12 +216,10 @@ class _CreateOrderScreenState extends ConsumerState<CreateOrderScreen>
                               ),
                               value: service,
                               items: ['Dépannage', 'Entretien', 'Diagnostic']
-                                  .map((e) => DropdownMenuItem(
-                                      value: e, child: Text(e)))
+                                  .map((e) => DropdownMenuItem(value: e, child: Text(e)))
                                   .toList(),
                               onChanged: (v) => setState(() => service = v),
-                              validator: (v) =>
-                                  v == null ? "Sélectionner un service" : null,
+                              validator: (v) => v == null ? "Sélectionner un service" : null,
                             ),
                             const SizedBox(height: 16),
                             DropdownButtonFormField<String>(
@@ -207,13 +229,10 @@ class _CreateOrderScreenState extends ConsumerState<CreateOrderScreen>
                               ),
                               value: mechanic,
                               items: ['Jean Dupont', 'Marie']
-                                  .map((e) => DropdownMenuItem(
-                                      value: e, child: Text(e)))
+                                  .map((e) => DropdownMenuItem(value: e, child: Text(e)))
                                   .toList(),
                               onChanged: (v) => setState(() => mechanic = v),
-                              validator: (v) => v == null
-                                  ? "Sélectionner un mécanicien"
-                                  : null,
+                              validator: (v) => v == null ? "Sélectionner un mécanicien" : null,
                             ),
                             const SizedBox(height: 16),
                             DropdownButtonFormField<String>(
@@ -223,12 +242,10 @@ class _CreateOrderScreenState extends ConsumerState<CreateOrderScreen>
                               ),
                               value: workshop,
                               items: ['Atelier 1', 'Atelier 2']
-                                  .map((e) => DropdownMenuItem(
-                                      value: e, child: Text(e)))
+                                  .map((e) => DropdownMenuItem(value: e, child: Text(e)))
                                   .toList(),
                               onChanged: (v) => setState(() => workshop = v),
-                              validator: (v) =>
-                                  v == null ? "Sélectionner un atelier" : null,
+                              validator: (v) => v == null ? "Sélectionner un atelier" : null,
                             ),
                             const SizedBox(height: 16),
                             TextFormField(
@@ -246,8 +263,7 @@ class _CreateOrderScreenState extends ConsumerState<CreateOrderScreen>
                             DatePicker(
                               date: date,
                               isTablet: isTablet,
-                              onDateChanged: (d) =>
-                                  setState(() => date = d),
+                              onDateChanged: (d) => setState(() => date = d),
                             ),
                           ],
                         ),
@@ -257,9 +273,7 @@ class _CreateOrderScreenState extends ConsumerState<CreateOrderScreen>
                         alignment: Alignment.center,
                         child: GenerateButton(
                           onPressed: _submitting ? null : _onCreatePressed,
-                          text: _submitting
-                              ? 'Création...'
-                              : 'Créer et retourner',
+                          text: _submitting ? 'Création...' : 'Créer et retourner',
                         ),
                       ),
                     ],

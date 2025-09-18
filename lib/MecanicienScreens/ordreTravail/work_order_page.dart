@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:garagelink/MecanicienScreens/devis/devis_widgets/modern_card.dart';
-import 'package:garagelink/MecanicienScreens/ordreTravail/create_order_screen.dart';
 import 'package:garagelink/models/ordre.dart';
 import 'package:garagelink/providers/ordres_provider.dart';
 import 'package:get/get.dart';
@@ -116,12 +115,7 @@ class _WorkOrderPageState extends ConsumerState<WorkOrderPage> with TickerProvid
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => Get.to(() => const CreateOrderScreen()),
-        backgroundColor: const Color(0xFF357ABD),
-        icon: const Icon(Icons.add, color: Colors.white),
-        label: const Text('Nouvel ordre', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-      ),
+      // FAB supprimé : création d'ordres uniquement depuis un devis
     );
   }
 

@@ -1,4 +1,4 @@
-// devis.dart
+// lib/models/devis.dart
 
 enum DevisStatus {
   brouillon,
@@ -8,14 +8,12 @@ enum DevisStatus {
 }
 
 class Service {
-  final String pieceId;
-  final String piece;
+  final String piece;        // Nom / désignation de la pièce ou service
   final int quantity;
   final double unitPrice;
   final double total;
 
   Service({
-    required this.pieceId,
     required this.piece,
     required this.quantity,
     required this.unitPrice,
@@ -24,7 +22,6 @@ class Service {
 
   factory Service.fromJson(Map<String, dynamic> json) {
     return Service(
-      pieceId: json['pieceId']?.toString() ?? '',
       piece: json['piece'] ?? '',
       quantity: json['quantity'] ?? 1,
       unitPrice: (json['unitPrice'] as num?)?.toDouble() ?? 0.0,
@@ -34,12 +31,11 @@ class Service {
 
   Map<String, dynamic> toJson() {
     return {
-      'pieceId': pieceId,
       'piece': piece,
       'quantity': quantity,
       'unitPrice': unitPrice,
       'total': total,
-    }..removeWhere((key, value) => value == null);
+    };
   }
 }
 
@@ -91,8 +87,8 @@ class Devis {
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
-  // Virtual fields as getters
-  double get totalCompletHT => totalHT + (maindoeuvre);
+  // Champs calculés
+  double get totalCompletHT => totalHT + maindoeuvre;
   double get montantTVA => totalCompletHT * (tvaRate / 100);
 
   Devis({
@@ -126,10 +122,9 @@ class Devis {
       vehiculeId: json['vehiculeId']?.toString() ?? '',
       factureId: json['factureId']?.toString(),
       inspectionDate: json['inspectionDate'] ?? '',
-      services: (json['services'] as List<dynamic>?)
-              ?.map((item) => Service.fromJson(item as Map<String, dynamic>))
-              .toList() ??
-          [],
+      services: (json['services'] as List<dynamic>? ?? [])
+          .map((item) => Service.fromJson(item as Map<String, dynamic>))
+          .toList(),
       totalHT: (json['totalHT'] as num?)?.toDouble() ?? 0.0,
       totalServicesHT: (json['totalServicesHT'] as num?)?.toDouble() ?? 0.0,
       totalTTC: (json['totalTTC'] as num?)?.toDouble() ?? 0.0,
