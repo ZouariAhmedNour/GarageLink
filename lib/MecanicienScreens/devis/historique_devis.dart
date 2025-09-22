@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:garagelink/MecanicienScreens/devis/devis_preview_page.dart';
 import 'package:garagelink/MecanicienScreens/devis/devis_widgets/num_serie_input.dart';
+import 'package:garagelink/MecanicienScreens/ordreTravail/create_ordre_screen.dart';
 import 'package:garagelink/configurations/app_routes.dart';
 import 'package:garagelink/models/ficheClient.dart';
 import 'package:garagelink/models/devis.dart';
@@ -647,9 +648,14 @@ if (devis.status == DevisStatus.accepte) {
   ),
   tooltip: 'Créer un ordre',
   onPressed: () {
-    // navigation nommée — on passe le Devis comme argument requis
-    Get.toNamed(AppRoutes.createOrderScreen, arguments: devis);
-  },
+  Get.to(() => CreateOrderScreen(
+  devis: devis,
+  // si tu veux encore utiliser Get.arguments pour vehicleInfo, tu peux aussi ajouter params au constructeur
+), arguments: {
+  'vehiculeId': devis.vehiculeId,
+  'vehicleInfo': devis.vehicleInfo,
+});
+},
 ),
     IconButton(
       icon: const Icon(Icons.visibility, color: primaryBlue, size: 18),

@@ -1,12 +1,9 @@
+import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:garagelink/models/ordre.dart';
 import 'package:garagelink/providers/auth_provider.dart';
 import 'package:garagelink/services/ordre_api.dart';
 
-// NOTE: Ne pas redeclarer authTokenProvider ici si tu l'as déjà ailleurs.
-// final authTokenProvider = StateProvider<String?>((ref) => null);
-
-// État des ordres de travail
 class OrdresState {
   final List<OrdreTravail> ordres;
   final bool loading;
@@ -40,15 +37,26 @@ class OrdresNotifier extends StateNotifier<OrdresState> {
 
   bool get _hasToken => _token != null && _token!.isNotEmpty;
 
-  void setLoading(bool value) => state = state.copyWith(loading: value, error: null);
-  void setError(String error) => state = state.copyWith(error: error, loading: false);
+ void setLoading(bool value) => state = state.copyWith(loading: value);
+// si tu veux effacer l'erreur quelque part explicitement :
+void clearError() => state = state.copyWith(error: null);
+
+void setError(String error) => state = state.copyWith(error: error, loading: false);
   void setOrdres(List<OrdreTravail> list) => state = state.copyWith(ordres: [...list], error: null);
   void clear() => state = const OrdresState();
 
-  // Helper pour comparer les ids (supporte id ou _id)
+  /// Normalise et retourne l'identifiant d'un OrdreTravail (id ou _id)
+  String? _normalizeId(OrdreTravail o) {
+    if (o.id != null && o.id!.isNotEmpty) return o.id;
+    final map = o.toJson();
+    final alt = map['_id'];
+    if (alt != null) return alt.toString();
+    return null;
+  }
+
   bool _matchesId(OrdreTravail o, String id) {
-    final oid = o.id ?? (o.toJson()['_id']?.toString());
-    return oid == id || (o.id == null && (o.toJson()['_id']?.toString() == id));
+    final oid = _normalizeId(o);
+    return oid != null && oid == id;
   }
 
   Future<void> loadAll({
@@ -89,7 +97,8 @@ class OrdresNotifier extends StateNotifier<OrdresState> {
 
       setOrdres(ordresList);
     } catch (e) {
-      setError(e.toString());
+      final msg = _extractErrorMessage(e);
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -106,7 +115,7 @@ class OrdresNotifier extends StateNotifier<OrdresState> {
       final ordre = await OrdreApi.getOrdreById(_token!, id);
       return ordre;
     } catch (e) {
-      setError(e.toString());
+      setError(_extractErrorMessage(e));
       return null;
     } finally {
       setLoading(false);
@@ -129,7 +138,7 @@ class OrdresNotifier extends StateNotifier<OrdresState> {
       }
       return null;
     } catch (e) {
-      setError(e.toString());
+      setError(_extractErrorMessage(e));
       return null;
     } finally {
       setLoading(false);
@@ -162,7 +171,7 @@ class OrdresNotifier extends StateNotifier<OrdresState> {
 
       setOrdres(ordresList);
     } catch (e) {
-      setError(e.toString());
+      setError(_extractErrorMessage(e));
     } finally {
       setLoading(false);
     }
@@ -194,7 +203,7 @@ class OrdresNotifier extends StateNotifier<OrdresState> {
 
       setOrdres(ordresList);
     } catch (e) {
-      setError(e.toString());
+      setError(_extractErrorMessage(e));
     } finally {
       setLoading(false);
     }
@@ -211,49 +220,55 @@ class OrdresNotifier extends StateNotifier<OrdresState> {
       final stats = await OrdreApi.getStatistiques(token: _token!, atelierId: atelierId);
       return stats;
     } catch (e) {
-      setError(e.toString());
+      setError(_extractErrorMessage(e));
       return null;
     } finally {
       setLoading(false);
     }
   }
 
-  Future<void> createOrdre({
-    required String devisId,
-    required DateTime dateCommence,
-    required String atelierId,
-    String priorite = 'normale',
-    String? description,
-    required List<Tache> taches,
-  }) async {
-    if (!_hasToken) {
-      state = state.copyWith(error: 'Token d\'authentification requis');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      final ordre = await OrdreApi.createOrdre(
-        token: _token!,
-        devisId: devisId,
-        dateCommence: dateCommence,
-        atelierId: atelierId,
-        priorite: priorite,
-        description: description,
-        taches: taches,
-      );
-
-      // Optionnel : éviter doublons (check id/_id)
-      final exists = state.ordres.any((o) => _matchesId(o, ordre.id ?? ordre.toJson()['_id']?.toString() ?? ''));
-      if (!exists) {
-        state = state.copyWith(ordres: [...state.ordres, ordre], error: null);
-      }
-    } catch (e) {
-      setError(e.toString());
-    } finally {
-      setLoading(false);
-    }
+  Future<OrdreTravail?> createOrdre({
+  required String devisId,
+  required DateTime dateCommence,
+  required String atelierId,
+  String priorite = 'normale',
+  String? description,
+  required List<Tache> taches,
+}) async {
+  if (!_hasToken) {
+    state = state.copyWith(error: 'Token d\'authentification requis');
+    return null;
   }
+
+  setLoading(true);
+  try {
+    final ordre = await OrdreApi.createOrdre(
+      token: _token!,
+      devisId: devisId,
+      dateCommence: dateCommence,
+      atelierId: atelierId,
+      priorite: priorite,
+      description: description,
+      taches: taches,
+    );
+
+    final newId = ordre.id ?? ordre.toJson()['_id']?.toString();
+    final exists = newId != null && state.ordres.any((o) => _normalizeId(o) == newId);
+
+    if (!exists) {
+      state = state.copyWith(ordres: [...state.ordres, ordre], error: null);
+    } else {
+      state = state.copyWith(error: null);
+    }
+
+    return ordre;
+  } catch (e) {
+    setError(_extractErrorMessage(e));
+    return null;
+  } finally {
+    setLoading(false);
+  }
+}
 
   Future<void> updateStatus(String id, String status) async {
     if (!_hasToken) {
@@ -265,13 +280,11 @@ class OrdresNotifier extends StateNotifier<OrdresState> {
     try {
       final updatedOrdre = await OrdreApi.updateStatusOrdre(token: _token!, id: id, status: status);
       state = state.copyWith(
-        ordres: state.ordres.map((o) {
-          return _matchesId(o, id) ? updatedOrdre : o;
-        }).toList(),
+        ordres: state.ordres.map((o) => _matchesId(o, id) ? updatedOrdre : o).toList(),
         error: null,
       );
     } catch (e) {
-      setError(e.toString());
+      setError(_extractErrorMessage(e));
     } finally {
       setLoading(false);
     }
@@ -291,7 +304,7 @@ class OrdresNotifier extends StateNotifier<OrdresState> {
         error: null,
       );
     } catch (e) {
-      setError(e.toString());
+      setError(_extractErrorMessage(e));
     } finally {
       setLoading(false);
     }
@@ -311,7 +324,7 @@ class OrdresNotifier extends StateNotifier<OrdresState> {
         error: null,
       );
     } catch (e) {
-      setError(e.toString());
+      setError(_extractErrorMessage(e));
     } finally {
       setLoading(false);
     }
@@ -331,7 +344,7 @@ class OrdresNotifier extends StateNotifier<OrdresState> {
         error: null,
       );
     } catch (e) {
-      setError(e.toString());
+      setError(_extractErrorMessage(e));
     } finally {
       setLoading(false);
     }
@@ -366,13 +379,45 @@ class OrdresNotifier extends StateNotifier<OrdresState> {
         error: null,
       );
     } catch (e) {
-      setError(e.toString());
+      setError(_extractErrorMessage(e));
     } finally {
       setLoading(false);
     }
   }
+
+  String _extractErrorMessage(Object e) {
+    // Essayer d'avoir un message lisible pour l'utilisateur
+    try {
+      final s = e.toString();
+      // Si c'est un JSON qui contient "error" ou "message", essayer de l'extraire
+      if (s.startsWith('{') || s.startsWith('[')) {
+        final decoded = jsonDecode(s);
+        if (decoded is Map && (decoded['error'] != null || decoded['message'] != null)) {
+          return (decoded['error'] ?? decoded['message']).toString();
+        }
+      }
+      return s;
+    } catch (_) {
+      return e.toString();
+    }
+  }
 }
 
-final ordresProvider = StateNotifierProvider<OrdresNotifier, OrdresState>((ref) {
-  return OrdresNotifier(ref);
+// Provider avec écoute du token : recharge automatiquement la liste après login
+final ordresProvider =
+    StateNotifierProvider<OrdresNotifier, OrdresState>((ref) {
+  final notifier = OrdresNotifier(ref);
+
+  // Quand le token change (login/logout), recharger ou vider automatiquement
+  ref.listen<String?>(authTokenProvider, (previous, next) {
+    if (next != null && next.isNotEmpty) {
+      // token disponible -> charger la liste (page 1)
+      notifier.loadAll();
+    } else {
+      // token supprimé -> vider l'état
+      notifier.clear();
+    }
+  });
+
+  return notifier;
 });

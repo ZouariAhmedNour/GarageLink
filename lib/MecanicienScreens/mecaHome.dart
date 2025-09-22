@@ -5,7 +5,7 @@ import 'package:garagelink/MecanicienScreens/devis/creation_devis.dart';
 import 'package:garagelink/MecanicienScreens/edit_localisation.dart';
 import 'package:garagelink/MecanicienScreens/gestion%20mec/mec_list_screen.dart';
 import 'package:garagelink/MecanicienScreens/meca_services/meca_services.dart';
-import 'package:garagelink/MecanicienScreens/ordreTravail/work_order_page.dart';
+import 'package:garagelink/MecanicienScreens/ordreTravail/work_ordre_page.dart';
 import 'package:garagelink/MecanicienScreens/stock/stock_dashboard.dart';
 import 'package:get/get.dart';
 import 'package:garagelink/components/default_app_bar.dart';
@@ -53,16 +53,12 @@ class _MecaHomePageState extends ConsumerState<MecaHomePage> {
       if (currentUser == null) {
         try {
           final profile = await UserApi.getProfile(token);
-          if (profile != null) {
-            // mettre à jour le provider
-            await ref.read(authNotifierProvider.notifier).setUser(profile);
-            setState(() {
-              _userName = (profile.username.isNotEmpty) ? profile.username : profile.email;
-            });
-          } else {
-            setState(() => _userName = 'Utilisateur');
-          }
-        } catch (_) {
+          // mettre à jour le provider
+          await ref.read(authNotifierProvider.notifier).setUser(profile);
+          setState(() {
+            _userName = (profile.username.isNotEmpty) ? profile.username : profile.email;
+          });
+                } catch (_) {
           // en cas d'erreur on continue avec valeur par défaut
           setState(() => _userName = 'Utilisateur');
         }

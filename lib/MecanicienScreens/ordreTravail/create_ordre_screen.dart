@@ -6,8 +6,7 @@ import 'package:garagelink/MecanicienScreens/devis/devis_widgets/date_picker.dar
 import 'package:garagelink/MecanicienScreens/devis/devis_widgets/generate_button.dart';
 import 'package:garagelink/MecanicienScreens/devis/devis_widgets/modern_card.dart';
 import 'package:garagelink/MecanicienScreens/devis/devis_widgets/modern_text_field.dart';
-import 'package:garagelink/MecanicienScreens/devis/devis_widgets/num_serie_input.dart';
-import 'package:garagelink/MecanicienScreens/ordreTravail/work_order_page.dart';
+import 'package:garagelink/MecanicienScreens/ordreTravail/work_ordre_page.dart';
 import 'package:garagelink/models/devis.dart';
 import 'package:garagelink/models/ordre.dart';
 import 'package:garagelink/providers/ordres_provider.dart';
@@ -35,6 +34,10 @@ class _CreateOrderScreenState extends ConsumerState<CreateOrderScreen>
   final numLocalCtrl = TextEditingController();
   final descriptionCtrl = TextEditingController();
 
+  late Devis devis;
+  String? vehiculeId;
+  String? vehicleInfo;
+
   // listes chargées depuis l'API
   List<Map<String, String>> services = [];
   List<Map<String, String>> mecaniciens = [];
@@ -55,31 +58,43 @@ class _CreateOrderScreenState extends ConsumerState<CreateOrderScreen>
   bool _loadingMeta = true;
   String? _metaError;
 
-  @override
-  void initState() {
-    super.initState();
-    _animationController = AnimationController(
-      duration: const Duration(milliseconds: 800),
-      vsync: this,
-    );
-    _fadeAnimation = CurvedAnimation(
-      parent: _animationController,
-      curve: Curves.easeInOut,
-    );
-    _animationController.forward();
+ @override
+void initState() {
+  super.initState();
 
-    // Pré-remplir certains champs depuis le devis passé
-    clientCtrl.text = widget.devis.clientName.isNotEmpty ? widget.devis.clientName : '';
-    // si le modèle Devis a VIN/numLocal décommenter ci-dessous
-    // vinCtrl.text = widget.devis.vin ?? '';
-    // numLocalCtrl.text = widget.devis.numLocal ?? '';
+  // Si tu as passé le Devis via le constructeur (recommandé), l'utiliser directement :
+  devis = widget.devis;
 
-    final idToShow = widget.devis.devisId.isNotEmpty ? widget.devis.devisId : (widget.devis.id ?? '');
-    descriptionCtrl.text = 'Travail lié au devis $idToShow';
-
-    // Charger les listes (services, ateliers) immédiatement
-    _loadMeta();
+  // Récupérer vehiculeId / vehicleInfo depuis Get.arguments si présent, sinon depuis le Devis
+  final args = Get.arguments;
+  if (args != null && args is Map<String, dynamic>) {
+    vehiculeId = args['vehiculeId'] as String? ?? widget.devis.vehiculeId;
+    vehicleInfo = args['vehicleInfo'] as String? ?? widget.devis.vehicleInfo;
+  } else {
+    vehiculeId = widget.devis.vehiculeId;
+    vehicleInfo = widget.devis.vehicleInfo;
   }
+
+  _animationController = AnimationController(
+    duration: const Duration(milliseconds: 800),
+    vsync: this,
+  );
+  _fadeAnimation = CurvedAnimation(
+    parent: _animationController,
+    curve: Curves.easeInOut,
+  );
+  _animationController.forward();
+
+  // Pré-remplir certains champs depuis le devis passé
+  clientCtrl.text = devis.clientName.isNotEmpty ? devis.clientName : '';
+
+  final idToShow = devis.devisId.isNotEmpty ? devis.devisId : (devis.id ?? '');
+  descriptionCtrl.text = 'Travail lié au devis $idToShow';
+
+  // Charger les listes (services, ateliers) immédiatement
+  _loadMeta();
+}
+
 
   @override
   void dispose() {
@@ -130,11 +145,16 @@ class _CreateOrderScreenState extends ConsumerState<CreateOrderScreen>
 
   Future<List<Map<String, String>>> _fetchServices(String token) async {
     final uri = Uri.parse('$UrlApi/getAllServices');
-    final resp = await http.get(uri, headers: {'Authorization': 'Bearer $token'});
+    final resp = await http.get(
+      uri,
+      headers: {'Authorization': 'Bearer $token'},
+    );
     if (resp.statusCode == 200) {
       final body = jsonDecode(resp.body);
       List<dynamic> list;
-      if (body is Map && body.containsKey('success') && body['success'] == true) {
+      if (body is Map &&
+          body.containsKey('success') &&
+          body['success'] == true) {
         list = body['services'] ?? body['data'] ?? [];
       } else if (body is List) {
         list = body;
@@ -144,7 +164,8 @@ class _CreateOrderScreenState extends ConsumerState<CreateOrderScreen>
       return list.map((item) {
         final m = item as Map<String, dynamic>;
         final id = (m['_id'] ?? m['id'] ?? '').toString();
-        final name = (m['name'] ?? m['nom'] ?? m['serviceNom'] ?? '').toString();
+        final name = (m['name'] ?? m['nom'] ?? m['serviceNom'] ?? '')
+            .toString();
         return {'id': id, 'name': name};
       }).toList();
     } else {
@@ -154,11 +175,16 @@ class _CreateOrderScreenState extends ConsumerState<CreateOrderScreen>
 
   Future<List<Map<String, String>>> _fetchAteliers(String token) async {
     final uri = Uri.parse('$UrlApi/getAllAteliers');
-    final resp = await http.get(uri, headers: {'Authorization': 'Bearer $token'});
+    final resp = await http.get(
+      uri,
+      headers: {'Authorization': 'Bearer $token'},
+    );
     if (resp.statusCode == 200) {
       final body = jsonDecode(resp.body);
       List<dynamic> list;
-      if (body is Map && body.containsKey('success') && body['success'] == true) {
+      if (body is Map &&
+          body.containsKey('success') &&
+          body['success'] == true) {
         list = body['ateliers'] ?? body['data'] ?? [];
       } else if (body is List) {
         list = body;
@@ -186,11 +212,16 @@ class _CreateOrderScreenState extends ConsumerState<CreateOrderScreen>
     if (token == null || token.isEmpty) return;
 
     final uri = Uri.parse('$UrlApi/mecaniciens/by-service/$serviceId');
-    final resp = await http.get(uri, headers: {'Authorization': 'Bearer $token'});
+    final resp = await http.get(
+      uri,
+      headers: {'Authorization': 'Bearer $token'},
+    );
     if (resp.statusCode == 200) {
       final body = jsonDecode(resp.body);
       List<dynamic> list;
-      if (body is Map && body.containsKey('success') && body['success'] == true) {
+      if (body is Map &&
+          body.containsKey('success') &&
+          body['success'] == true) {
         list = body['mecaniciens'] ?? body['data'] ?? [];
       } else if (body is List) {
         list = body;
@@ -217,22 +248,30 @@ class _CreateOrderScreenState extends ConsumerState<CreateOrderScreen>
     if (!_formKey.currentState!.validate()) return;
 
     if (selectedServiceId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sélectionner un service')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Sélectionner un service')));
       return;
     }
     if (selectedMecanicienId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sélectionner un mécanicien')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Sélectionner un mécanicien')),
+      );
       return;
     }
     if (selectedAtelierId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sélectionner un atelier')));
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Sélectionner un atelier')));
       return;
     }
 
     setState(() => _submitting = true);
 
     final tache = Tache(
-      description: descriptionCtrl.text.trim().isEmpty ? 'Travail' : descriptionCtrl.text.trim(),
+      description: descriptionCtrl.text.trim().isEmpty
+          ? 'Travail'
+          : descriptionCtrl.text.trim(),
       serviceId: selectedServiceId!,
       serviceNom: selectedServiceName ?? '',
       mecanicienId: selectedMecanicienId!,
@@ -241,32 +280,55 @@ class _CreateOrderScreenState extends ConsumerState<CreateOrderScreen>
     );
 
     try {
+
       // Utiliser l'ID du devis réel (devisId si présent sinon id)
-      final String linkedDevisId = widget.devis.devisId.isNotEmpty
-          ? widget.devis.devisId
-          : (widget.devis.id ?? '');
+      final String linkedDevisId = devis.devisId.isNotEmpty ? devis.devisId : (devis.id ?? '');
 
-      await ref.read(ordresProvider.notifier).createOrdre(
-            devisId: linkedDevisId,
-            dateCommence: date,
-            atelierId: selectedAtelierId!,
-            priorite: 'normale',
-            description: descriptionCtrl.text.trim(),
-            taches: [tache],
-          );
+      if (linkedDevisId.isEmpty) {
+  if (mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Impossible : identifiant du devis introuvable')),
+    );
+  }
+  setState(() => _submitting = false);
+  return;
+}
 
-      if (mounted) {
-        Get.off(() => const WorkOrderPage());
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur création ordre : $e')),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _submitting = false);
+
+  await ref.read(ordresProvider.notifier).createOrdre(
+    devisId: linkedDevisId,
+    dateCommence: date,
+    atelierId: selectedAtelierId!,
+    priorite: 'normale',
+    description: descriptionCtrl.text.trim(),
+    taches: [tache],
+  );
+
+  // Vérifier si le provider a enregistré une erreur
+  final currentState = ref.read(ordresProvider);
+  if (currentState.error != null) {
+    // erreur : afficher et rester sur la page
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erreur création ordre : ${currentState.error}')),
+      );
     }
+    return;
+  }
+
+  // tout va bien -> naviguer
+  if (mounted) Get.off(() => const WorkOrderPage());
+} catch (e) {
+  // sécurité : normalement createOrdre attrape déjà, mais on gère au cas où
+  if (mounted) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Erreur création ordre inattendue : $e')),
+    );
+  }
+} finally {
+  if (mounted) setState(() => _submitting = false);
+}
+
   }
 
   @override
@@ -331,7 +393,9 @@ class _CreateOrderScreenState extends ConsumerState<CreateOrderScreen>
                               controller: clientCtrl,
                               label: 'Client',
                               icon: Icons.person,
-                              validator: (v) => (v == null || v.isEmpty) ? 'Obligatoire' : null,
+                              validator: (v) => (v == null || v.isEmpty)
+                                  ? 'Obligatoire'
+                                  : null,
                             ),
                             const SizedBox(height: 16),
                           ],
@@ -344,10 +408,13 @@ class _CreateOrderScreenState extends ConsumerState<CreateOrderScreen>
                         borderColor: const Color(0xFF4A90E2),
                         child: Column(
                           children: [
-                            NumeroSerieInput(
-                              vinCtrl: vinCtrl,
-                              numLocalCtrl: numLocalCtrl,
-                              onChanged: (v) {},
+                            TextFormField(
+                              initialValue: vehicleInfo,
+                              readOnly: true,
+                              decoration: const InputDecoration(
+                                labelText: "Véhicule du client",
+                                prefixIcon: Icon(Icons.directions_car),
+                              ),
                             ),
                             const SizedBox(height: 16),
                           ],
@@ -367,53 +434,99 @@ class _CreateOrderScreenState extends ConsumerState<CreateOrderScreen>
                                     child: LinearProgressIndicator(),
                                   )
                                 : DropdownButtonFormField<String>(
-                                    decoration: const InputDecoration(labelText: 'Service', border: OutlineInputBorder()),
+                                    decoration: const InputDecoration(
+                                      labelText: 'Service',
+                                      border: OutlineInputBorder(),
+                                    ),
                                     value: selectedServiceId,
                                     items: services
-                                        .map((s) => DropdownMenuItem(value: s['id'], child: Text(s['name'] ?? '')))
+                                        .map(
+                                          (s) => DropdownMenuItem(
+                                            value: s['id'],
+                                            child: Text(s['name'] ?? ''),
+                                          ),
+                                        )
                                         .toList(),
                                     onChanged: (val) async {
                                       setState(() {
                                         selectedServiceId = val;
-                                        selectedServiceName = services.firstWhere((s) => s['id'] == val)['name'];
+                                        selectedServiceName = services
+                                            .firstWhere(
+                                              (s) => s['id'] == val,
+                                            )['name'];
                                       });
                                       if (val != null) {
                                         await _fetchMecaniciensForService(val);
                                       }
                                     },
-                                    validator: (v) => v == null ? "Sélectionner un service" : null,
+                                    validator: (v) => v == null
+                                        ? "Sélectionner un service"
+                                        : null,
                                   ),
                             const SizedBox(height: 16),
 
                             // Mécanicien (rempli après sélection service)
                             DropdownButtonFormField<String>(
-                              decoration: const InputDecoration(labelText: 'Mécanicien', border: OutlineInputBorder()),
+                              decoration: const InputDecoration(
+                                labelText: 'Mécanicien',
+                                border: OutlineInputBorder(),
+                              ),
                               value: selectedMecanicienId,
                               items: mecaniciens.isNotEmpty
-                                  ? mecaniciens.map((m) => DropdownMenuItem(value: m['id'], child: Text(m['name'] ?? ''))).toList()
+                                  ? mecaniciens
+                                        .map(
+                                          (m) => DropdownMenuItem(
+                                            value: m['id'],
+                                            child: Text(m['name'] ?? ''),
+                                          ),
+                                        )
+                                        .toList()
                                   : [
-                                      const DropdownMenuItem(value: null, child: Text('Sélectionner le service d\'abord'))
+                                      const DropdownMenuItem(
+                                        value: null,
+                                        child: Text(
+                                          'Sélectionner le service d\'abord',
+                                        ),
+                                      ),
                                     ],
                               onChanged: (val) => setState(() {
                                 selectedMecanicienId = val;
-                                selectedMecanicienName = mecaniciens.isNotEmpty && val != null
-                                    ? mecaniciens.firstWhere((m) => m['id'] == val)['name']
+                                selectedMecanicienName =
+                                    mecaniciens.isNotEmpty && val != null
+                                    ? mecaniciens.firstWhere(
+                                        (m) => m['id'] == val,
+                                      )['name']
                                     : null;
                               }),
-                              validator: (v) => v == null ? "Sélectionner un mécanicien" : null,
+                              validator: (v) => v == null
+                                  ? "Sélectionner un mécanicien"
+                                  : null,
                             ),
                             const SizedBox(height: 16),
 
                             // Atelier (chargé depuis API)
                             DropdownButtonFormField<String>(
-                              decoration: const InputDecoration(labelText: 'Atelier', border: OutlineInputBorder()),
+                              decoration: const InputDecoration(
+                                labelText: 'Atelier',
+                                border: OutlineInputBorder(),
+                              ),
                               value: selectedAtelierId,
-                              items: ateliers.map((a) => DropdownMenuItem(value: a['id'], child: Text(a['name'] ?? ''))).toList(),
+                              items: ateliers
+                                  .map(
+                                    (a) => DropdownMenuItem(
+                                      value: a['id'],
+                                      child: Text(a['name'] ?? ''),
+                                    ),
+                                  )
+                                  .toList(),
                               onChanged: (v) => setState(() {
                                 selectedAtelierId = v;
-                                selectedAtelierName = ateliers.firstWhere((a) => a['id'] == v)['name'];
+                                selectedAtelierName = ateliers.firstWhere(
+                                  (a) => a['id'] == v,
+                                )['name'];
                               }),
-                              validator: (v) => v == null ? "Sélectionner un atelier" : null,
+                              validator: (v) =>
+                                  v == null ? "Sélectionner un atelier" : null,
                             ),
                             const SizedBox(height: 16),
 
@@ -424,7 +537,9 @@ class _CreateOrderScreenState extends ConsumerState<CreateOrderScreen>
                                 border: OutlineInputBorder(),
                               ),
                               maxLines: 3,
-                              validator: (v) => (v == null || v.isEmpty) ? "Description obligatoire" : null,
+                              validator: (v) => (v == null || v.isEmpty)
+                                  ? "Description obligatoire"
+                                  : null,
                             ),
                             const SizedBox(height: 16),
                             DatePicker(
@@ -440,13 +555,18 @@ class _CreateOrderScreenState extends ConsumerState<CreateOrderScreen>
                         alignment: Alignment.center,
                         child: GenerateButton(
                           onPressed: _submitting ? null : _onCreatePressed,
-                          text: _submitting ? 'Création...' : 'Créer et retourner',
+                          text: _submitting
+                              ? 'Création...'
+                              : 'Créer et retourner',
                         ),
                       ),
                       if (_metaError != null) ...[
                         const SizedBox(height: 12),
-                        Text('Erreur chargement données: $_metaError', style: const TextStyle(color: Colors.red)),
-                      ]
+                        Text(
+                          'Erreur chargement données: $_metaError',
+                          style: const TextStyle(color: Colors.red),
+                        ),
+                      ],
                     ],
                   ),
                 ),

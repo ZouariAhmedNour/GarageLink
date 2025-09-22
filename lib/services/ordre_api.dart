@@ -5,8 +5,11 @@ import 'package:garagelink/models/ordre.dart';
 import 'package:garagelink/global.dart';
 
 class OrdreApi {
-  // Base cohérente : on suppose que le router backend est monté sur /ordres
-  static final String base = '$UrlApi/ordres';
+  // UrlApi vient de global.dart (ex: 'http://172.16.58.13:5000/api')
+  // Certaines routes du backend sont montées sur la racine /api,
+  // d'autres sont sous /api/ordres — on gère les deux bases ici.
+  static final String baseRoot = UrlApi; // ex: http://.../api
+  static final String baseOrdres = '$UrlApi/ordres'; // ex: http://.../api/ordres
 
   static const Map<String, String> _headers = {
     'Content-Type': 'application/json',
@@ -17,7 +20,15 @@ class OrdreApi {
         'Authorization': 'Bearer $token',
       };
 
-  /// Récupérer tous les ordres (GET /ordres)
+  // Helper pour vérifier si la réponse est du JSON
+  static void _ensureJsonResponse(http.Response response) {
+    final contentType = (response.headers['content-type'] ?? '').toLowerCase();
+    if (!contentType.contains('application/json')) {
+      throw Exception('Réponse inattendue du serveur (${response.statusCode}) : ${response.body}');
+    }
+  }
+
+  /// Récupérer tous les ordres (GET /api)
   static Future<Map<String, dynamic>> getAllOrdres({
     required String token,
     int page = 1,
@@ -42,8 +53,9 @@ class OrdreApi {
       'sortOrder': sortOrder,
     };
 
-    final url = Uri.parse(base).replace(queryParameters: queryParams);
+    final url = Uri.parse(baseRoot).replace(queryParameters: queryParams);
     final response = await http.get(url, headers: _authHeaders(token));
+    _ensureJsonResponse(response);
 
     final json = jsonDecode(response.body) as Map<String, dynamic>;
     if (response.statusCode == 200 && (json['success'] == true || json.containsKey('ordres'))) {
@@ -59,10 +71,11 @@ class OrdreApi {
     }
   }
 
-  /// Récupérer un ordre par ID (GET /ordres/getOrdreTravailById/:id)
+  /// Récupérer un ordre par ID (GET /api/getOrdreTravailById/:id)
   static Future<OrdreTravail> getOrdreById(String token, String id) async {
-    final url = Uri.parse('$base/getOrdreTravailById/$id');
+    final url = Uri.parse('$baseRoot/getOrdreTravailById/$id');
     final response = await http.get(url, headers: _authHeaders(token));
+    _ensureJsonResponse(response);
 
     final json = jsonDecode(response.body) as Map<String, dynamic>;
     if (response.statusCode == 200 && json['success'] == true) {
@@ -72,7 +85,7 @@ class OrdreApi {
     }
   }
 
-  /// Créer un nouvel ordre (POST /ordres)
+  /// Créer un nouvel ordre (POST /api)  <-- backend: router.post('/', createOrdreTravail)
   static Future<OrdreTravail> createOrdre({
     required String token,
     required String devisId,
@@ -82,7 +95,7 @@ class OrdreApi {
     String? description,
     required List<Tache> taches,
   }) async {
-    final url = Uri.parse(base);
+    final url = Uri.parse(baseRoot); // POST sur la racine /api
     final body = jsonEncode({
       'devisId': devisId,
       'dateCommence': dateCommence.toIso8601String(),
@@ -92,25 +105,34 @@ class OrdreApi {
       'taches': taches.map((t) => t.toJson()).toList(),
     });
 
+    print('⤴ POST $url');
+    print('Headers: ${_authHeaders(token)}');
+    print('Body: $body');
+
     final response = await http.post(url, headers: _authHeaders(token), body: body);
+    print('⤵ Response ${response.statusCode}: ${response.body}');
+    _ensureJsonResponse(response);
+
     final json = jsonDecode(response.body) as Map<String, dynamic>;
-    if (response.statusCode == 201 && json['success'] == true) {
+    if ((response.statusCode == 201 || response.statusCode == 200) && json['success'] == true) {
       return OrdreTravail.fromJson(json['ordre'] as Map<String, dynamic>);
     } else {
       throw Exception(json['error'] ?? json['message'] ?? 'Erreur lors de la création de l\'ordre');
     }
   }
 
-  /// Mettre à jour le statut (PUT /ordres/:id/status)
+  /// Mettre à jour le statut (PUT /api/:id/status)
   static Future<OrdreTravail> updateStatusOrdre({
     required String token,
     required String id,
     required String status,
   }) async {
-    final url = Uri.parse('$base/$id/status');
+    final url = Uri.parse('$baseRoot/$id/status');
     final body = jsonEncode({'status': status});
 
     final response = await http.put(url, headers: _authHeaders(token), body: body);
+    _ensureJsonResponse(response);
+
     final json = jsonDecode(response.body) as Map<String, dynamic>;
     if (response.statusCode == 200 && json['success'] == true) {
       return OrdreTravail.fromJson(json['ordre'] as Map<String, dynamic>);
@@ -119,10 +141,12 @@ class OrdreApi {
     }
   }
 
-  /// Démarrer un ordre (PUT /ordres/ordre-travail/:id/demarrer)
+  /// Démarrer un ordre (PUT /api/ordre-travail/:id/demarrer)
   static Future<OrdreTravail> demarrerOrdre(String token, String id) async {
-    final url = Uri.parse('$base/ordre-travail/$id/demarrer');
+    final url = Uri.parse('$baseRoot/ordre-travail/$id/demarrer');
     final response = await http.put(url, headers: _authHeaders(token));
+    _ensureJsonResponse(response);
+
     final json = jsonDecode(response.body) as Map<String, dynamic>;
     if (response.statusCode == 200 && json['success'] == true) {
       return OrdreTravail.fromJson(json['ordre'] as Map<String, dynamic>);
@@ -131,10 +155,12 @@ class OrdreApi {
     }
   }
 
-  /// Terminer un ordre (PUT /ordres/ordre-travail/:id/terminer)
+  /// Terminer un ordre (PUT /api/ordre-travail/:id/terminer)
   static Future<OrdreTravail> terminerOrdre(String token, String id) async {
-    final url = Uri.parse('$base/ordre-travail/$id/terminer');
+    final url = Uri.parse('$baseRoot/ordre-travail/$id/terminer');
     final response = await http.put(url, headers: _authHeaders(token));
+    _ensureJsonResponse(response);
+
     final json = jsonDecode(response.body) as Map<String, dynamic>;
     if (response.statusCode == 200 && json['success'] == true) {
       return OrdreTravail.fromJson(json['ordre'] as Map<String, dynamic>);
@@ -143,10 +169,12 @@ class OrdreApi {
     }
   }
 
-  /// Supprimer un ordre (soft delete) (DELETE /ordres/:id)
+  /// Supprimer un ordre (soft delete) (DELETE /api/:id)
   static Future<void> supprimerOrdre(String token, String id) async {
-    final url = Uri.parse('$base/$id');
+    final url = Uri.parse('$baseRoot/$id');
     final response = await http.delete(url, headers: _authHeaders(token));
+    _ensureJsonResponse(response);
+
     final json = jsonDecode(response.body) as Map<String, dynamic>;
     if (response.statusCode == 200 && json['success'] == true) {
       return;
@@ -155,10 +183,12 @@ class OrdreApi {
     }
   }
 
-  /// Récupérer un ordre par devisId (GET /ordres/ordre-travail/by-devis/:devisId)
+  /// Récupérer un ordre par devisId (GET /api/ordre-travail/by-devis/:devisId)
   static Future<Map<String, dynamic>> getOrdreByDevisId(String token, String devisId) async {
-    final url = Uri.parse('$base/ordre-travail/by-devis/$devisId');
+    final url = Uri.parse('$baseRoot/ordre-travail/by-devis/$devisId');
     final response = await http.get(url, headers: _authHeaders(token));
+    _ensureJsonResponse(response);
+
     final json = jsonDecode(response.body) as Map<String, dynamic>;
     if (response.statusCode == 200) {
       return {
@@ -170,7 +200,7 @@ class OrdreApi {
     }
   }
 
-  /// Récupérer les ordres par statut (GET /ordres/status/:status)
+  /// Récupérer les ordres par statut (GET /api/ordres/status/:status)
   static Future<Map<String, dynamic>> getOrdresByStatus({
     required String token,
     required String status,
@@ -182,8 +212,10 @@ class OrdreApi {
       'limit': limit.toString(),
     };
 
-    final url = Uri.parse('$base/status/$status').replace(queryParameters: queryParams);
+    final url = Uri.parse('$baseOrdres/status/$status').replace(queryParameters: queryParams);
     final response = await http.get(url, headers: _authHeaders(token));
+    _ensureJsonResponse(response);
+
     final json = jsonDecode(response.body) as Map<String, dynamic>;
     if (response.statusCode == 200 && json['success'] == true) {
       return {
@@ -198,7 +230,7 @@ class OrdreApi {
     }
   }
 
-  /// Récupérer les ordres par atelier (GET /ordres/atelier/:atelierId)
+  /// Récupérer les ordres par atelier (GET /api/ordres/atelier/:atelierId)
   static Future<Map<String, dynamic>> getOrdresByAtelier({
     required String token,
     required String atelierId,
@@ -210,8 +242,10 @@ class OrdreApi {
       'limit': limit.toString(),
     };
 
-    final url = Uri.parse('$base/atelier/$atelierId').replace(queryParameters: queryParams);
+    final url = Uri.parse('$baseOrdres/atelier/$atelierId').replace(queryParameters: queryParams);
     final response = await http.get(url, headers: _authHeaders(token));
+    _ensureJsonResponse(response);
+
     final json = jsonDecode(response.body) as Map<String, dynamic>;
     if (response.statusCode == 200 && json['success'] == true) {
       return {
@@ -226,14 +260,16 @@ class OrdreApi {
     }
   }
 
-  /// Récupérer les statistiques (GET /ordres/statistiques)
+  /// Récupérer les statistiques (GET /api/statistiques)
   static Future<Map<String, dynamic>> getStatistiques({
     required String token,
     String? atelierId,
   }) async {
     final Map<String, String> queryParams = atelierId != null ? {'atelierId': atelierId} : {};
-    final url = Uri.parse('$base/statistiques').replace(queryParameters: queryParams);
+    final url = Uri.parse('$baseRoot/statistiques').replace(queryParameters: queryParams);
     final response = await http.get(url, headers: _authHeaders(token));
+    _ensureJsonResponse(response);
+
     final json = jsonDecode(response.body) as Map<String, dynamic>;
     if (response.statusCode == 200 && json['success'] == true) {
       return json['statistiques'] as Map<String, dynamic>;
@@ -242,7 +278,7 @@ class OrdreApi {
     }
   }
 
-  /// Mettre à jour un ordre (PUT /ordres/modifier/:id)
+  /// Mettre à jour un ordre (PUT /api/modifier/:id)
   static Future<OrdreTravail> updateOrdre({
     required String token,
     required String id,
@@ -252,7 +288,7 @@ class OrdreApi {
     String? description,
     List<Tache>? taches,
   }) async {
-    final url = Uri.parse('$base/modifier/$id');
+    final url = Uri.parse('$baseRoot/modifier/$id');
     final body = jsonEncode({
       'dateCommence': dateCommence?.toIso8601String(),
       'atelierId': atelierId,
@@ -262,6 +298,8 @@ class OrdreApi {
     });
 
     final response = await http.put(url, headers: _authHeaders(token), body: body);
+    _ensureJsonResponse(response);
+
     final json = jsonDecode(response.body) as Map<String, dynamic>;
     if (response.statusCode == 200 && json['success'] == true) {
       return OrdreTravail.fromJson(json['ordre'] as Map<String, dynamic>);

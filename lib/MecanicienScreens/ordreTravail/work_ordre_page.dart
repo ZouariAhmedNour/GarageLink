@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:garagelink/MecanicienScreens/devis/devis_widgets/modern_card.dart';
 import 'package:garagelink/models/ordre.dart';
 import 'package:garagelink/providers/ordres_provider.dart';
-import 'package:get/get.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 class WorkOrderPage extends ConsumerStatefulWidget {
