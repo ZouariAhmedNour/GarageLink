@@ -1,4 +1,4 @@
-// screens/add_mec_screen.dart
+// lib/screens/add_mec_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -6,6 +6,8 @@ import 'package:garagelink/components/default_app_bar.dart';
 import 'package:garagelink/models/mecanicien.dart';
 import 'package:garagelink/providers/auth_provider.dart';
 import 'package:garagelink/providers/mecaniciens_provider.dart';
+import 'package:garagelink/models/service.dart';
+import 'package:garagelink/services/service_api.dart';
 import 'package:get/get.dart';
 
 class AddMecScreen extends ConsumerStatefulWidget {
@@ -33,7 +35,11 @@ class _AddMecScreenState extends ConsumerState<AddMecScreen>
   Statut? statut;
   PermisConduire? permis; // maintenant enum
 
-  final Set<String> selectedServices = {};
+  // Nous stockons les ids des services sélectionnés
+  final Set<String> selectedServiceIds = {};
+
+  // Liste des services disponibles (provenant de l'API)
+  List<Service> _services = [];
 
   late AnimationController _animationController;
   late Animation<double> _fadeAnimation;
@@ -43,18 +49,6 @@ class _AddMecScreenState extends ConsumerState<AddMecScreen>
   static const cardColor = Colors.white;
   static const errorColor = Color(0xFFE53E3E);
   static const successColor = Color(0xFF38A169);
-
-  // Liste de base en fallback (sera combinée avec services existants)
-  final List<String> _baseServices = [
-    'Moteur',
-    'Transmission',
-    'Freinage',
-    'Suspension',
-    'Électricité',
-    'Diagnostic',
-    'Carrosserie',
-    'Climatisation'
-  ];
 
   @override
   void initState() {
@@ -68,6 +62,7 @@ class _AddMecScreenState extends ConsumerState<AddMecScreen>
     _animationController.forward();
 
     _initializeData();
+    _loadServicesFromApi();
   }
 
   void _initializeData() {
@@ -85,13 +80,84 @@ class _AddMecScreenState extends ConsumerState<AddMecScreen>
       typeContrat = m.typeContrat;
       statut = m.statut;
       permis = m.permisConduire;
-      // remplir selectedServices à partir de m.services (utilise name)
-      selectedServices.addAll(m.services.map((s) => s.name));
+      // remplir selectedServiceIds à partir de m.services (si existant)
+      selectedServiceIds.addAll(m.services.map((s) => s.serviceId));
     } else {
       poste = Poste.mecanicien;
       typeContrat = TypeContrat.cdi;
       statut = Statut.actif;
       permis = PermisConduire.b;
+    }
+  }
+
+  /// Affiche un dialog blanc et protège contre l'overflow.
+/// Retourne true si l'utilisateur confirme.
+Future<bool> _showEditConfirmationDialog({
+  String? title,
+  String? message,
+}) async {
+  final confirmed = await showDialog<bool>(
+    context: context,
+    barrierDismissible: true,
+    builder: (ctx) {
+      return AlertDialog(
+        backgroundColor: Colors.white, // fond blanc explicite
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+        title: Text(title ?? 'Confirmer les modifications'),
+        content: SingleChildScrollView(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(ctx).size.height * 0.45,
+            ),
+            child: Text(
+              message ??
+                  'Souhaitez-vous enregistrer les modifications apportées à ce mécanicien ?',
+              softWrap: true,
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Annuler'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: ElevatedButton.styleFrom(backgroundColor: primaryColor),
+            child: const Text('Enregistrer'),
+          ),
+        ],
+      );
+    },
+  );
+
+  return confirmed == true;
+}
+
+  Future<void> _loadServicesFromApi() async {
+    try {
+      final token = ref.read(authTokenProvider);
+      final services = await ServiceApi.getAllServices(token: token);
+      setState(() {
+        _services = services;
+      });
+
+      // Si on avait des selectedServiceIds initialisés (ex: édition), on peut filtrer/corriger:
+      // garder uniquement ceux présents dans l'API
+      final apiIds = _services.map((s) => s.id).toSet();
+      selectedServiceIds.retainWhere((id) => apiIds.contains(id));
+    } catch (e) {
+      // Afficher un message non bloquant — l'utilisateur pourra quand même créer le mécanicien
+      Get.snackbar(
+        'Erreur',
+        'Impossible de charger la liste des services: ${e.toString()}',
+        backgroundColor: errorColor,
+        colorText: Colors.white,
+        snackPosition: SnackPosition.BOTTOM,
+        icon: const Icon(Icons.error, color: Colors.white),
+        duration: const Duration(seconds: 4),
+      );
     }
   }
 
@@ -105,40 +171,6 @@ class _AddMecScreenState extends ConsumerState<AddMecScreen>
     salaireCtrl.dispose();
     experienceCtrl.dispose();
     super.dispose();
-  }
-
-  // Construire dynamiquement la liste des services disponibles
-  List<String> get _availableServices {
-    final mecs = ref.watch(mecaniciensProvider).mecaniciens;
-    final fromMecs = mecs
-        .expand((m) => m.services.map((s) => s.name))
-        .where((s) => s.trim().isNotEmpty)
-        .toSet();
-    final combined = {..._baseServices.map((s) => s.trim()), ...fromMecs};
-    final list = combined.toList()..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
-    return list;
-  }
-
-  Future<DateTime?> _pickDate(BuildContext context, DateTime? initial,
-      {required bool isBirth}) async {
-    HapticFeedback.lightImpact();
-    final now = DateTime.now();
-    final picked = await showDatePicker(
-      context: context,
-      initialDate: initial ?? (isBirth ? DateTime(now.year - 25) : now),
-      firstDate: DateTime(1950),
-      lastDate: isBirth ? now : DateTime(now.year + 1),
-      builder: (context, child) {
-        return Theme(
-          data: Theme.of(context).copyWith(
-            colorScheme:
-                Theme.of(context).colorScheme.copyWith(primary: primaryColor),
-          ),
-          child: child!,
-        );
-      },
-    );
-    return picked;
   }
 
   Widget _buildCard({required Widget child, EdgeInsets? padding}) {
@@ -278,89 +310,99 @@ class _AddMecScreenState extends ConsumerState<AddMecScreen>
     );
   }
 
+  Future<DateTime?> _pickDate(BuildContext context, DateTime? initial,
+      {required bool isBirth}) async {
+    HapticFeedback.lightImpact();
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: initial ?? (isBirth ? DateTime(now.year - 25) : now),
+      firstDate: DateTime(1950),
+      lastDate: isBirth ? now : DateTime(now.year + 1),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme:
+                Theme.of(context).colorScheme.copyWith(primary: primaryColor),
+          ),
+          child: child!,
+        );
+      },
+    );
+    return picked;
+  }
+
   Widget _buildServicesSection() {
-    final services = _availableServices;
+  // Si la liste n'est pas encore chargée, afficher un message/loader simple
+  if (_services.isEmpty) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(children: [
           const Icon(Icons.build, color: primaryColor, size: 20),
           const SizedBox(width: 8),
-          Text('Services',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: Colors.black87,
-                  )),
+          Text('Services', style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+                color: Colors.black87,
+              )),
         ]),
         const SizedBox(height: 12),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: services.map((service) {
-            final selected = selectedServices.contains(service);
-            return FilterChip(
-              label: Text(
-                service,
-                style: TextStyle(
-                  color: selected ? Colors.white : primaryColor,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              selected: selected,
-              selectedColor: primaryColor,
-              checkmarkColor: Colors.white,
-              backgroundColor: Colors.grey[100],
-              side: BorderSide(color: selected ? primaryColor : Colors.grey[300]!),
-              onSelected: (on) {
-                HapticFeedback.selectionClick();
-                setState(() {
-                  if (on)
-                    selectedServices.add(service);
-                  else
-                    selectedServices.remove(service);
-                });
-              },
-            );
-          }).toList(),
-        ),
-        const SizedBox(height: 8),
-        // Option pour ajouter un service personnalisé rapidement
-        TextButton.icon(
-          onPressed: () async {
-            final txt = await _showAddServiceDialog();
-            if (txt != null && txt.trim().isNotEmpty) {
-              setState(() {
-                selectedServices.add(txt.trim());
-              });
-            }
-          },
-          icon: const Icon(Icons.add, size: 18),
-          label: const Text('Ajouter un service personnalisé'),
-        ),
+        const Text('Chargement des services...'),
       ],
     );
   }
 
-  Future<String?> _showAddServiceDialog() async {
-    final controller = TextEditingController();
-    return showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Nouveau service'),
-        content: TextField(
-          controller: controller,
-          decoration: const InputDecoration(hintText: 'Nom du service'),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Annuler')),
-          ElevatedButton(
-            onPressed: () => Navigator.of(ctx).pop(controller.text),
-            child: const Text('Ajouter'),
-          ),
-        ],
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Row(children: [
+        const Icon(Icons.build, color: primaryColor, size: 20),
+        const SizedBox(width: 8),
+        Text('Services', style: Theme.of(context).textTheme.titleMedium?.copyWith(
+              fontWeight: FontWeight.w600,
+              color: Colors.black87,
+            )),
+      ]),
+      const SizedBox(height: 12),
+      Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: _services.map((service) {
+          final selected = service.id != null && selectedServiceIds.contains(service.id);
+          return FilterChip(
+            label: Text(
+              service.name,
+              style: TextStyle(
+                color: selected ? Colors.white : primaryColor,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            selected: selected,
+            selectedColor: primaryColor,
+            checkmarkColor: Colors.white,
+            backgroundColor: Colors.grey[100],
+            side: BorderSide(color: selected ? primaryColor : Colors.grey[300]!),
+            onSelected: (on) {
+              HapticFeedback.selectionClick();
+              final id = service.id;
+              if (id == null) {
+                // Optionnel : log / informer que ce service n'a pas d'id
+                return;
+              }
+              setState(() {
+                if (on) {
+                  selectedServiceIds.add(id);
+                } else {
+                  selectedServiceIds.remove(id);
+                }
+              });
+            },
+          );
+        }).toList(),
       ),
-    );
-  }
+    ],
+  );
+}
 
   String _labelPoste(Poste p) {
     switch (p) {
@@ -373,7 +415,7 @@ class _AddMecScreenState extends ConsumerState<AddMecScreen>
       case Poste.apprenti:
         return 'Apprenti';
       case Poste.mecanicien:
-      return 'Mécanicien';
+        return 'Mécanicien';
     }
   }
 
@@ -386,7 +428,7 @@ class _AddMecScreenState extends ConsumerState<AddMecScreen>
       case TypeContrat.apprentissage:
         return 'Apprentissage';
       case TypeContrat.cdi:
-      return 'CDI';
+        return 'CDI';
     }
   }
 
@@ -401,7 +443,7 @@ class _AddMecScreenState extends ConsumerState<AddMecScreen>
       case Statut.demissionne:
         return 'Démissionné';
       case Statut.actif:
-      return 'Actif';
+        return 'Actif';
     }
   }
 
@@ -448,81 +490,86 @@ class _AddMecScreenState extends ConsumerState<AddMecScreen>
 
   final salaire = double.tryParse(salaireCtrl.text.replaceAll(',', '.')) ?? 0.0;
 
-  final services = selectedServices
-      .map((s) => ServiceMecanicien(
-            serviceId: s.toLowerCase().replaceAll(' ', '_'),
-            name: s,
-          ))
-      .toList();
+  // Construire la liste ServiceMecanicien à partir des ids sélectionnés et de la liste _services
+  final services = selectedServiceIds.map((id) {
+    final s = _services.firstWhere(
+      (sv) => sv.id == id,
+      orElse: () => Service(
+        id: id,
+        name: id,
+        description: '',
+        statut: ServiceStatut.actif,
+      ),
+    );
+    return ServiceMecanicien(
+      serviceId: s.id ?? id,
+      name: s.name,
+    );
+  }).toList();
 
   final mecanicienId = widget.mecanicien?.id; // null si création
 
   // Indiquer visuellement que l'on soumet via provider
   ref.read(mecaniciensProvider.notifier).setLoading(true);
-
-  try {
-    if (mecanicienId == null) {
-      debugPrint('AddMecScreen -> creating mecanicien...');
-      await ref.read(mecaniciensProvider.notifier).addMecanicien(
-            nom: nomCtrl.text.trim(),
-            dateNaissance: dn,
-            telephone: telCtrl.text.trim(),
-            email: emailCtrl.text.trim(),
-            poste: poste ?? Poste.mecanicien,
-            dateEmbauche: de,
-            typeContrat: typeContrat ?? TypeContrat.cdi,
-            statut: statut ?? Statut.actif,
-            salaire: salaire,
-            services: services,
-            experience: experienceCtrl.text.trim(),
-            permisConduire: permis ?? PermisConduire.b,
-          );
-    } else {
-      debugPrint('AddMecScreen -> updating mecanicien id=$mecanicienId ...');
-      await ref.read(mecaniciensProvider.notifier).updateMecanicien(
-            id: mecanicienId,
-            nom: nomCtrl.text.trim(),
-            dateNaissance: dn,
-            telephone: telCtrl.text.trim(),
-            email: emailCtrl.text.trim(),
-            poste: poste,
-            dateEmbauche: de,
-            typeContrat: typeContrat,
-            statut: statut,
-            salaire: salaire,
-            services: services,
-            experience: experienceCtrl.text.trim(),
-            permisConduire: permis,
-          );
-    }
-
-    Get.snackbar(
-      'Succès',
-      mecanicienId == null ? 'Mécanicien ajouté' : 'Modifications enregistrées',
-      backgroundColor: successColor,
-      colorText: Colors.white,
-      icon: const Icon(Icons.check, color: Colors.white),
-      snackPosition: SnackPosition.BOTTOM,
-      duration: const Duration(seconds: 3),
+try {
+  if (mecanicienId == null) {
+    debugPrint('AddMecScreen -> creating mecanicien...');
+    await ref.read(mecaniciensProvider.notifier).addMecanicien(
+      nom: nomCtrl.text.trim(),
+      dateNaissance: dn,
+      telephone: telCtrl.text.trim(),
+      email: emailCtrl.text.trim(),
+      poste: poste ?? Poste.mecanicien,
+      dateEmbauche: de,
+      typeContrat: typeContrat ?? TypeContrat.cdi,
+      statut: statut ?? Statut.actif,
+      salaire: salaire,
+      services: services,
+      experience: experienceCtrl.text.trim(),
+      permisConduire: permis ?? PermisConduire.b,
     );
-
-    Get.back(result: true);
-  } catch (e, st) {
-    debugPrint('Erreur add/update mecanicien: $e\n$st');
-    final providerError = ref.read(mecaniciensProvider).error;
-    Get.snackbar(
-      'Erreur',
-      providerError ?? 'Une erreur est survenue lors de l\'enregistrement : ${e.toString()}',
-      backgroundColor: errorColor,
-      colorText: Colors.white,
-      icon: const Icon(Icons.error, color: Colors.white),
-      snackPosition: SnackPosition.BOTTOM,
-      duration: const Duration(seconds: 4),
+  } else {
+    debugPrint('AddMecScreen -> updating mecanicien id=$mecanicienId ...');
+    await ref.read(mecaniciensProvider.notifier).updateMecanicien(
+      id: mecanicienId,
+      nom: nomCtrl.text.trim(),
+      dateNaissance: dn,
+      telephone: telCtrl.text.trim(),
+      email: emailCtrl.text.trim(),
+      poste: poste,
+      dateEmbauche: de,
+      typeContrat: typeContrat,
+      statut: statut,
+      salaire: salaire,
+      services: services,
+      experience: experienceCtrl.text.trim(),
+      permisConduire: permis,
     );
-  } finally {
-    ref.read(mecaniciensProvider.notifier).setLoading(false);
   }
+
+  // --- NE PAS attendre loadAll() ici : fermer l'écran IMMEDIATEMENT
+  // Envoie true au caller pour lui indiquer le succès.
+  Get.back(result: true);
+
+  // Optionnel : recharger le provider en tâche de fond (ne bloque pas la navigation)
+
+} catch (e, st) {
+  debugPrint('Erreur add/update mecanicien: $e\n$st');
+  final providerError = ref.read(mecaniciensProvider).error;
+  Get.snackbar(
+    'Erreur',
+    providerError ?? 'Une erreur est survenue lors de l\'enregistrement : ${e.toString()}',
+    backgroundColor: errorColor,
+    colorText: Colors.white,
+    icon: const Icon(Icons.error, color: Colors.white),
+    snackPosition: SnackPosition.BOTTOM,
+    duration: const Duration(seconds: 4),
+  );
+} finally {
+  ref.read(mecaniciensProvider.notifier).setLoading(false);
 }
+}
+
 
   @override
   Widget build(BuildContext context) {
@@ -716,7 +763,15 @@ class _AddMecScreenState extends ConsumerState<AddMecScreen>
                     isEdit ? 'Enregistrer les modifications' : 'Ajouter le mécanicien',
                     style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                   ),
-                  onPressed: isSubmitting ? null : () async => await _save(),
+                  onPressed: isSubmitting
+    ? null
+    : () async {
+        if (isEdit) {
+          final ok = await _showEditConfirmationDialog();
+          if (!ok) return;
+        }
+        await _save();
+      },
                 ),
                 if (providerState.error != null) ...[
                   const SizedBox(height: 12),

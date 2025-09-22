@@ -129,20 +129,28 @@ class _MecListItemState extends ConsumerState<MecListItem>
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: MecItemColors.danger.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child:
-                  const Icon(Icons.warning_amber, color: MecItemColors.danger, size: 24),
-            ),
-            const SizedBox(width: 12),
-            const Text('Supprimer mécanicien'),
-          ],
-        ),
+  children: [
+    Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: MecItemColors.danger.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: const Icon(Icons.warning_amber, color: MecItemColors.danger, size: 24),
+    ),
+    const SizedBox(width: 12),
+    // Expanded / Flexible évite l'overflow dans les petits écrans/dialogs
+    Flexible(
+  child: Text(
+    'Supprimer le mécanicien',
+    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+    maxLines: 2, // autorise 2 lignes si nécessaire (évite l'overflow)
+    overflow: TextOverflow.ellipsis,
+    softWrap: true,
+  ),
+),
+  ],
+),
         content: Text(
           'Êtes-vous sûr de vouloir supprimer ${widget.mec.nom} ?\nCette action est irréversible.',
           style: const TextStyle(color: MecItemColors.textSecondary),

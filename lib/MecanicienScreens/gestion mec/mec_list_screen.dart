@@ -1,4 +1,3 @@
-// screens/mec_list_screen.dart
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -8,11 +7,10 @@ import 'package:garagelink/providers/mecaniciens_provider.dart';
 import 'package:get/get.dart';
 import 'add_mec_screen.dart';
 import 'widgets/search_and_sort_row.dart';
-// import 'widgets/service_chips.dart'; // plus utilisé (chips construits dynamiquement ici)
 import 'widgets/mec_list_item.dart';
 import 'widgets/pagination_controls.dart';
 
-// Palette de couleurs optimisée
+
 class MecColors {
   static const primary = Color(0xFF357ABD);
   static const primaryLight = Color(0xFF5A9BD8);
@@ -120,6 +118,62 @@ class _MecListScreenState extends ConsumerState<MecListScreen>
     final end = math.min(list.length, start + pageSize);
     return list.sublist(start, end);
   }
+
+ Future<bool> _showDeleteConfirmationDialog({
+  String? title,
+  String? message,
+}) async {
+  final confirmed = await showDialog<bool>(
+    context: context,
+    barrierDismissible: true,
+    builder: (ctx) {
+      return AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+        // Par défaut on affiche le texte complet si title non fourni
+        title: Text(
+          title ?? 'Supprimer le mécanicien',
+          style: const TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+            color: MecColors.textPrimary,
+          ),
+        ),
+        content: SingleChildScrollView(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(ctx).size.height * 0.45,
+            ),
+            child: Text(
+              message ??
+                  'Voulez-vous vraiment supprimer ce mécanicien ? Cette action est irréversible.',
+              style: const TextStyle(fontSize: 14, color: MecColors.textSecondary),
+            ),
+          ),
+        ),
+        actionsPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Annuler'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+            ),
+            child: const Text('Supprimer'),
+          ),
+        ],
+      );
+    },
+  );
+  return confirmed == true;
+}
 
   Future<void> _refreshData() async {
     HapticFeedback.mediumImpact();
@@ -490,14 +544,26 @@ class _MecListScreenState extends ConsumerState<MecListScreen>
         child: MecListItem(
           mec: pageItems[i],
           onDelete: (id) async {
-            // supprime via le provider
-            try {
-              await ref.read(mecaniciensProvider.notifier).removeMecanicien(id);
-              _showSnackBar('Mécanicien supprimé', Icons.delete, MecColors.success);
-            } catch (e) {
-              _showSnackBar('Erreur suppression', Icons.error, Colors.red);
-            }
-          },
+  // 1) demander confirmation (popup blanc)
+  final confirmed = await _showDeleteConfirmationDialog(
+    title: 'Supprimer',
+    message: 'Voulez-vous vraiment supprimer ce mécanicien ? Cette action est irréversible.',
+  );
+  if (!confirmed) return;
+
+  // 2) protéger si l'écran a été démonté entre-temps
+  if (!mounted) return;
+
+  // 3) suppression via le provider + feedback + refresh
+  try {
+    await ref.read(mecaniciensProvider.notifier).removeMecanicien(id);
+    // recharge la liste (optionnel mais utile)
+    await ref.read(mecaniciensProvider.notifier).loadAll();
+    _showSnackBar('Mécanicien supprimé', Icons.delete, MecColors.success);
+  } catch (e) {
+    _showSnackBar('Erreur suppression', Icons.error, Colors.red);
+  }
+},
           expanded: _expanded,
           onToggle: (id) {
             setState(() {
@@ -600,24 +666,21 @@ class _MecListScreenState extends ConsumerState<MecListScreen>
             ),
           ],
         ),
-        child: FloatingActionButton.extended(
-          onPressed: () async {
-            HapticFeedback.mediumImpact();
-            // on attend le résultat du AddMecScreen; s'il renvoie quelque chose,
-            // on rafraîchit la liste (AddMecScreen devrait renvoyer true ou l'objet créé si tu veux)
-            final result = await Get.to(() => const AddMecScreen());
-            if (result != null) {
-              await ref.read(mecaniciensProvider.notifier).loadAll();
-            }
-          },
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          icon: const Icon(Icons.person_add, color: Colors.white),
-          label: const Text(
-            'Nouveau',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-          ),
-        ),
+       child: FloatingActionButton(
+  onPressed: () async {
+    HapticFeedback.mediumImpact();
+    // on attend le résultat du AddMecScreen; s'il renvoie quelque chose,
+    // on rafraîchit la liste (AddMecScreen devrait renvoyer true ou l'objet créé si tu veux)
+    final result = await Get.to(() => const AddMecScreen());
+    if (result != null) {
+      await ref.read(mecaniciensProvider.notifier).loadAll();
+    }
+  },
+  backgroundColor: Colors.transparent, // ou primaryColor si tu veux une couleur pleine
+  elevation: 0,
+  tooltip: 'Ajouter',
+  child: const Icon(Icons.person_add, color: Colors.white),
+)
       ),
     );
   }

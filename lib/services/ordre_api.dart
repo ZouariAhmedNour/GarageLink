@@ -5,8 +5,7 @@ import 'package:garagelink/models/ordre.dart';
 import 'package:garagelink/global.dart';
 
 class OrdreApi {
-  // base: UrlApi is the API root, we append route segments exactly as in your router file.
-  // If your UrlApi already ends with "/ordres", change `base` to just UrlApi.
+  // Base cohérente : on suppose que le router backend est monté sur /ordres
   static final String base = '$UrlApi/ordres';
 
   static const Map<String, String> _headers = {
@@ -60,8 +59,7 @@ class OrdreApi {
     }
   }
 
-  /// Récupérer un ordre par ID
-  /// Note: backend route = GET /ordres/getOrdreTravailById/:id
+  /// Récupérer un ordre par ID (GET /ordres/getOrdreTravailById/:id)
   static Future<OrdreTravail> getOrdreById(String token, String id) async {
     final url = Uri.parse('$base/getOrdreTravailById/$id');
     final response = await http.get(url, headers: _authHeaders(token));
@@ -121,9 +119,9 @@ class OrdreApi {
     }
   }
 
-  /// Démarrer un ordre (PUT /ordre-travail/:id/demarrer)
+  /// Démarrer un ordre (PUT /ordres/ordre-travail/:id/demarrer)
   static Future<OrdreTravail> demarrerOrdre(String token, String id) async {
-    final url = Uri.parse('$UrlApi/ordre-travail/$id/demarrer');
+    final url = Uri.parse('$base/ordre-travail/$id/demarrer');
     final response = await http.put(url, headers: _authHeaders(token));
     final json = jsonDecode(response.body) as Map<String, dynamic>;
     if (response.statusCode == 200 && json['success'] == true) {
@@ -133,9 +131,9 @@ class OrdreApi {
     }
   }
 
-  /// Terminer un ordre (PUT /ordre-travail/:id/terminer)
+  /// Terminer un ordre (PUT /ordres/ordre-travail/:id/terminer)
   static Future<OrdreTravail> terminerOrdre(String token, String id) async {
-    final url = Uri.parse('$UrlApi/ordre-travail/$id/terminer');
+    final url = Uri.parse('$base/ordre-travail/$id/terminer');
     final response = await http.put(url, headers: _authHeaders(token));
     final json = jsonDecode(response.body) as Map<String, dynamic>;
     if (response.statusCode == 200 && json['success'] == true) {
@@ -157,9 +155,9 @@ class OrdreApi {
     }
   }
 
-  /// Récupérer un ordre par devisId (GET /ordre-travail/by-devis/:devisId)
+  /// Récupérer un ordre par devisId (GET /ordres/ordre-travail/by-devis/:devisId)
   static Future<Map<String, dynamic>> getOrdreByDevisId(String token, String devisId) async {
-    final url = Uri.parse('$UrlApi/ordre-travail/by-devis/$devisId');
+    final url = Uri.parse('$base/ordre-travail/by-devis/$devisId');
     final response = await http.get(url, headers: _authHeaders(token));
     final json = jsonDecode(response.body) as Map<String, dynamic>;
     if (response.statusCode == 200) {
@@ -184,7 +182,7 @@ class OrdreApi {
       'limit': limit.toString(),
     };
 
-    final url = Uri.parse('$UrlApi/ordres/status/$status').replace(queryParameters: queryParams);
+    final url = Uri.parse('$base/status/$status').replace(queryParameters: queryParams);
     final response = await http.get(url, headers: _authHeaders(token));
     final json = jsonDecode(response.body) as Map<String, dynamic>;
     if (response.statusCode == 200 && json['success'] == true) {
@@ -212,7 +210,7 @@ class OrdreApi {
       'limit': limit.toString(),
     };
 
-    final url = Uri.parse('$UrlApi/ordres/atelier/$atelierId').replace(queryParameters: queryParams);
+    final url = Uri.parse('$base/atelier/$atelierId').replace(queryParameters: queryParams);
     final response = await http.get(url, headers: _authHeaders(token));
     final json = jsonDecode(response.body) as Map<String, dynamic>;
     if (response.statusCode == 200 && json['success'] == true) {
@@ -228,15 +226,13 @@ class OrdreApi {
     }
   }
 
-  /// Récupérer les statistiques (GET /ordres/statistiques) -> route backend: /statistiques
+  /// Récupérer les statistiques (GET /ordres/statistiques)
   static Future<Map<String, dynamic>> getStatistiques({
     required String token,
     String? atelierId,
   }) async {
     final Map<String, String> queryParams = atelierId != null ? {'atelierId': atelierId} : {};
-    // backend route shown: router.get('/statistiques', getStatistiques);
-    // if the router is mounted at /ordres, full path is /ordres/statistiques
-    final url = Uri.parse('$UrlApi/ordres/statistiques').replace(queryParameters: queryParams);
+    final url = Uri.parse('$base/statistiques').replace(queryParameters: queryParams);
     final response = await http.get(url, headers: _authHeaders(token));
     final json = jsonDecode(response.body) as Map<String, dynamic>;
     if (response.statusCode == 200 && json['success'] == true) {
