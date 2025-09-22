@@ -1,5 +1,4 @@
 // lib/services/atelier_api.dart
-
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:garagelink/models/atelier.dart';
@@ -20,7 +19,6 @@ class AtelierApi {
     };
   }
 
-  /// Récupérer tous les ateliers
   /// GET /getAllAteliers
   static Future<List<Atelier>> getAllAteliers({String? token}) async {
     final url = Uri.parse('$UrlApi/getAllAteliers');
@@ -28,13 +26,10 @@ class AtelierApi {
 
     if (response.statusCode == 200) {
       try {
-        final body = jsonDecode(response.body);
+        final dynamic body = jsonDecode(response.body);
         if (body is List) {
-          return body
-              .map((e) => Atelier.fromJson(e as Map<String, dynamic>))
-              .toList();
+          return body.map((e) => Atelier.fromJson(e as Map<String, dynamic>)).toList();
         } else if (body is Map && body['ateliers'] is List) {
-          // fallback si structure différente
           return (body['ateliers'] as List)
               .map((e) => Atelier.fromJson(e as Map<String, dynamic>))
               .toList();
@@ -42,19 +37,15 @@ class AtelierApi {
           throw Exception('Format inattendu reçu depuis le serveur');
         }
       } catch (e) {
-        throw Exception('Erreur parsing response: $e');
+        throw Exception('Erreur lors du parsing de la réponse : $e');
       }
+    } else if (response.statusCode == 204) {
+      return [];
     } else {
-      String message = 'Erreur serveur (${response.statusCode})';
-      try {
-        final json = jsonDecode(response.body);
-        if (json is Map && json['error'] != null) message = json['error'].toString();
-      } catch (_) {}
-      throw Exception(message);
+      throw _buildExceptionFromResponse(response, 'Erreur lors de la récupération des ateliers');
     }
   }
 
-  /// Récupérer un atelier par son id
   /// GET /getAtelierById/:id
   static Future<Atelier> getAtelierById(String id, {String? token}) async {
     final url = Uri.parse('$UrlApi/getAtelierById/$id');
@@ -65,21 +56,15 @@ class AtelierApi {
         final body = jsonDecode(response.body) as Map<String, dynamic>;
         return Atelier.fromJson(body);
       } catch (e) {
-        throw Exception('Erreur parsing response: $e');
+        throw Exception('Erreur lors du parsing de la réponse : $e');
       }
     } else if (response.statusCode == 404) {
       throw Exception('Atelier non trouvé');
     } else {
-      String message = 'Erreur serveur (${response.statusCode})';
-      try {
-        final json = jsonDecode(response.body);
-        if (json is Map && json['error'] != null) message = json['error'].toString();
-      } catch (_) {}
-      throw Exception(message);
+      throw _buildExceptionFromResponse(response, 'Erreur lors de la récupération de l\'atelier');
     }
   }
 
-  /// Créer un atelier
   /// POST /createAtelier
   static Future<Atelier> createAtelier({
     required String name,
@@ -87,32 +72,22 @@ class AtelierApi {
     String? token,
   }) async {
     final url = Uri.parse('$UrlApi/createAtelier');
-    final body = jsonEncode({
-      'name': name,
-      'localisation': localisation,
-    });
+    final body = jsonEncode({'name': name, 'localisation': localisation});
 
     final response = await http.post(url, headers: _authHeaders(token), body: body);
 
     if (response.statusCode == 201 || response.statusCode == 200) {
       try {
         final json = jsonDecode(response.body) as Map<String, dynamic>;
-        // si le controller retourne directement l'objet atelier
         return Atelier.fromJson(json);
       } catch (e) {
-        throw Exception('Erreur parsing response: $e');
+        throw Exception('Erreur lors du parsing de la réponse : $e');
       }
     } else {
-      String message = 'Erreur création atelier (${response.statusCode})';
-      try {
-        final json = jsonDecode(response.body);
-        if (json is Map && json['error'] != null) message = json['error'].toString();
-      } catch (_) {}
-      throw Exception(message);
+      throw _buildExceptionFromResponse(response, 'Erreur création atelier (${response.statusCode})');
     }
   }
 
-  /// Mettre à jour un atelier
   /// PUT /updateAtelier/:id
   static Future<Atelier> updateAtelier({
     required String id,
@@ -132,38 +107,40 @@ class AtelierApi {
         final json = jsonDecode(response.body) as Map<String, dynamic>;
         return Atelier.fromJson(json);
       } catch (e) {
-        throw Exception('Erreur parsing response: $e');
+        throw Exception('Erreur lors du parsing de la réponse : $e');
       }
     } else if (response.statusCode == 404) {
       throw Exception('Atelier non trouvé');
     } else {
-      String message = 'Erreur mise à jour atelier (${response.statusCode})';
-      try {
-        final json = jsonDecode(response.body);
-        if (json is Map && json['error'] != null) message = json['error'].toString();
-      } catch (_) {}
-      throw Exception(message);
+      throw _buildExceptionFromResponse(response, 'Erreur mise à jour atelier (${response.statusCode})');
     }
   }
 
-  /// Supprimer un atelier
   /// DELETE /deleteAtelier/:id
   static Future<void> deleteAtelier(String id, {String? token}) async {
     final url = Uri.parse('$UrlApi/deleteAtelier/$id');
     final response = await http.delete(url, headers: _authHeaders(token));
 
-    if (response.statusCode == 200) {
-      // backend renvoie probablement { message: ... } ou l'objet supprimé
+    if (response.statusCode == 200 || response.statusCode == 204) {
       return;
     } else if (response.statusCode == 404) {
       throw Exception('Atelier non trouvé');
     } else {
-      String message = 'Erreur suppression atelier (${response.statusCode})';
-      try {
-        final json = jsonDecode(response.body);
-        if (json is Map && json['error'] != null) message = json['error'].toString();
-      } catch (_) {}
-      throw Exception(message);
+      throw _buildExceptionFromResponse(response, 'Erreur suppression atelier (${response.statusCode})');
     }
+  }
+
+  // Helper : extraire message d'erreur utile depuis la réponse serveur
+  static Exception _buildExceptionFromResponse(http.Response response, String fallback) {
+    try {
+      final decoded = jsonDecode(response.body);
+      if (decoded is Map) {
+        if (decoded['error'] != null) return Exception(decoded['error'].toString());
+        if (decoded['message'] != null) return Exception(decoded['message'].toString());
+      }
+    } catch (_) {
+      // ignore parsing errors
+    }
+    return Exception(fallback);
   }
 }

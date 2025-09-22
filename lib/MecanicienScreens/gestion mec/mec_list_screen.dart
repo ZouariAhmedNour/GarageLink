@@ -8,7 +8,7 @@ import 'package:garagelink/providers/mecaniciens_provider.dart';
 import 'package:get/get.dart';
 import 'add_mec_screen.dart';
 import 'widgets/search_and_sort_row.dart';
-import 'widgets/service_chips.dart';
+// import 'widgets/service_chips.dart'; // plus utilisé (chips construits dynamiquement ici)
 import 'widgets/mec_list_item.dart';
 import 'widgets/pagination_controls.dart';
 
@@ -114,10 +114,10 @@ class _MecListScreenState extends ConsumerState<MecListScreen>
     return filtered;
   }
 
-  List<Mecanicien> _paginate(List<Mecanicien> list) {
-    final start = _page * _pageSize;
+  List<Mecanicien> _paginate(List<Mecanicien> list, int page, int pageSize) {
+    final start = page * pageSize;
     if (start >= list.length) return [];
-    final end = math.min(list.length, start + _pageSize);
+    final end = math.min(list.length, start + pageSize);
     return list.sublist(start, end);
   }
 
@@ -172,7 +172,18 @@ class _MecListScreenState extends ConsumerState<MecListScreen>
 
     final filteredSorted = _applyFiltersAndSort(mecs);
     final pageCount = (filteredSorted.isEmpty) ? 0 : (filteredSorted.length / _pageSize).ceil();
-    final pageItems = _paginate(filteredSorted);
+
+    // safe page calculation (évite out-of-range si la liste rapetisse)
+    final effectivePage = pageCount == 0 ? 0 : (_page < pageCount ? _page : math.max(0, pageCount - 1));
+    final pageItems = _paginate(filteredSorted, effectivePage, _pageSize);
+
+    // Construire la liste des services disponibles dynamiquement (uniques, triés)
+    final availableServices = mecs
+        .expand((m) => m.services.map((s) => s.name))
+        .where((name) => name.trim().isNotEmpty)
+        .toSet()
+        .toList()
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
 
     return Scaffold(
       backgroundColor: MecColors.surface,
@@ -190,7 +201,7 @@ class _MecListScreenState extends ConsumerState<MecListScreen>
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   _buildHeader(filteredSorted.length),
-                  _buildFiltersSection(),
+                  _buildFiltersSection(availableServices),
                   const SizedBox(height: 8),
                   // contenu principal
                   if (isLoading)
@@ -213,7 +224,7 @@ class _MecListScreenState extends ConsumerState<MecListScreen>
                       margin: const EdgeInsets.all(16),
                       child: _buildContent(pageItems, filteredSorted),
                     ),
-                  _buildPagination(pageCount),
+                  _buildPagination(pageCount, effectivePage),
                 ],
               ),
             ),
@@ -340,7 +351,7 @@ class _MecListScreenState extends ConsumerState<MecListScreen>
     );
   }
 
-  Widget _buildFiltersSection() {
+  Widget _buildFiltersSection(List<String> availableServices) {
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       padding: const EdgeInsets.all(16),
@@ -411,13 +422,8 @@ class _MecListScreenState extends ConsumerState<MecListScreen>
           if (_selectedFilterIndex == 3) ...[
             _buildSectionHeader(Icons.home_repair_service, 'Services'),
             const SizedBox(height: 8),
-            ServicesChips(
-              onServiceSelected: (c, on) => _updateFilter(() {
-                if (on) _filterState.servicesFilter.add(c);
-                else _filterState.servicesFilter.remove(c);
-              }),
-              servicesFilter: _filterState.servicesFilter,
-            ),
+            // Chips dynamiques construits à partir des services disponibles
+            _buildDynamicServiceChips(availableServices),
           ],
           if (_selectedFilterIndex == 4) // Ancienneté
             DropdownButtonFormField<String>(
@@ -430,6 +436,36 @@ class _MecListScreenState extends ConsumerState<MecListScreen>
             ),
         ],
       ),
+    );
+  }
+
+  Widget _buildDynamicServiceChips(List<String> availableServices) {
+    if (availableServices.isEmpty) {
+      return const Text('Aucun service trouvé', style: TextStyle(color: Colors.black54));
+    }
+
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: availableServices.map((serviceName) {
+        final selected = _filterState.servicesFilter.contains(serviceName);
+        return FilterChip(
+          label: Text(serviceName),
+          selected: selected,
+          onSelected: (on) {
+            _updateFilter(() {
+              if (on) {
+                _filterState.servicesFilter.add(serviceName);
+              } else {
+                _filterState.servicesFilter.remove(serviceName);
+              }
+            });
+          },
+          selectedColor: MecColors.primary.withOpacity(0.12),
+          backgroundColor: MecColors.cardBg,
+          side: BorderSide(color: selected ? MecColors.primary : Colors.grey.shade200),
+        );
+      }).toList(),
     );
   }
 
@@ -520,7 +556,7 @@ class _MecListScreenState extends ConsumerState<MecListScreen>
     );
   }
 
-  Widget _buildPagination(int pageCount) {
+  Widget _buildPagination(int pageCount, int effectivePage) {
     if (pageCount <= 1) return const SizedBox.shrink();
 
     return Container(
@@ -528,14 +564,14 @@ class _MecListScreenState extends ConsumerState<MecListScreen>
       padding: const EdgeInsets.all(16),
       decoration: _buildCardDecoration(),
       child: PaginationControls(
-        page: _page,
+        page: effectivePage,
         pageCount: pageCount,
         pageSize: _pageSize,
         onPrevPage: () {
-          if (_page > 0) setState(() => _page--);
+          if (effectivePage > 0) setState(() => _page = effectivePage - 1);
         },
         onNextPage: () {
-          if (_page + 1 < pageCount) setState(() => _page++);
+          if (effectivePage + 1 < pageCount) setState(() => _page = effectivePage + 1);
         },
         onPageSizeChanged: (v) => setState(() {
           _pageSize = v;
@@ -565,9 +601,14 @@ class _MecListScreenState extends ConsumerState<MecListScreen>
           ],
         ),
         child: FloatingActionButton.extended(
-          onPressed: () {
+          onPressed: () async {
             HapticFeedback.mediumImpact();
-            Get.to(() => const AddMecScreen());
+            // on attend le résultat du AddMecScreen; s'il renvoie quelque chose,
+            // on rafraîchit la liste (AddMecScreen devrait renvoyer true ou l'objet créé si tu veux)
+            final result = await Get.to(() => const AddMecScreen());
+            if (result != null) {
+              await ref.read(mecaniciensProvider.notifier).loadAll();
+            }
           },
           backgroundColor: Colors.transparent,
           elevation: 0,

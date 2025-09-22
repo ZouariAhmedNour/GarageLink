@@ -1,9 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:garagelink/models/service.dart';
+import 'package:garagelink/providers/auth_provider.dart';
 import 'package:garagelink/services/service_api.dart';
-
-// Provider pour le token d'authentification (partagé avec vehicules_provider.dart)
-final authTokenProvider = StateProvider<String?>((ref) => null);
 
 // État des services
 class ServicesState {
@@ -58,7 +56,8 @@ class ServicesNotifier extends StateNotifier<ServicesState> {
 
     setLoading(true);
     try {
-      final services = await ServiceApi.getAllServices(_token!);
+      // <-- utilisation du paramètre nommé 'token'
+      final services = await ServiceApi.getAllServices(token: _token);
       setServices(services);
     } catch (e) {
       setError(e.toString());
@@ -81,7 +80,7 @@ class ServicesNotifier extends StateNotifier<ServicesState> {
     setLoading(true);
     try {
       final service = await ServiceApi.createService(
-        token: _token!,
+        token: _token,
         name: name,
         description: description,
         statut: statut,
@@ -109,7 +108,7 @@ class ServicesNotifier extends StateNotifier<ServicesState> {
     setLoading(true);
     try {
       final updatedService = await ServiceApi.updateService(
-        token: _token!,
+        token: _token,
         id: id,
         name: name,
         description: description,
@@ -135,7 +134,8 @@ class ServicesNotifier extends StateNotifier<ServicesState> {
 
     setLoading(true);
     try {
-      await ServiceApi.deleteService(_token!, id);
+      // <-- utilisation du paramètre nommé 'token' et 'id'
+      await ServiceApi.deleteService(token: _token, id: id);
       state = state.copyWith(
         services: state.services.where((s) => s.id != id).toList(),
         error: null,
@@ -164,7 +164,7 @@ class ServicesNotifier extends StateNotifier<ServicesState> {
     try {
       final newStatut = service.statut == ServiceStatut.actif ? ServiceStatut.desactive : ServiceStatut.actif;
       final updatedService = await ServiceApi.updateService(
-        token: _token!,
+        token: _token,
         id: id,
         statut: newStatut,
       );

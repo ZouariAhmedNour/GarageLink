@@ -81,7 +81,7 @@ class _WorkOrderPageState extends ConsumerState<WorkOrderPage> with TickerProvid
 
     filtered.sort((a, b) => b.dateCommence.compareTo(a.dateCommence));
     return filtered;
-  }
+  }    
 
   @override
   Widget build(BuildContext context) {

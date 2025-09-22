@@ -2,9 +2,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:garagelink/MecanicienScreens/gestion%20mec/mec_list_screen.dart';
 import 'package:garagelink/components/default_app_bar.dart';
 import 'package:garagelink/models/mecanicien.dart';
+import 'package:garagelink/providers/auth_provider.dart';
 import 'package:garagelink/providers/mecaniciens_provider.dart';
 import 'package:get/get.dart';
 
@@ -44,8 +44,8 @@ class _AddMecScreenState extends ConsumerState<AddMecScreen>
   static const errorColor = Color(0xFFE53E3E);
   static const successColor = Color(0xFF38A169);
 
-  // Liste simple de services (strings) — adapte si tu veux des ids différents
-  final List<String> allServices = [
+  // Liste de base en fallback (sera combinée avec services existants)
+  final List<String> _baseServices = [
     'Moteur',
     'Transmission',
     'Freinage',
@@ -105,6 +105,18 @@ class _AddMecScreenState extends ConsumerState<AddMecScreen>
     salaireCtrl.dispose();
     experienceCtrl.dispose();
     super.dispose();
+  }
+
+  // Construire dynamiquement la liste des services disponibles
+  List<String> get _availableServices {
+    final mecs = ref.watch(mecaniciensProvider).mecaniciens;
+    final fromMecs = mecs
+        .expand((m) => m.services.map((s) => s.name))
+        .where((s) => s.trim().isNotEmpty)
+        .toSet();
+    final combined = {..._baseServices.map((s) => s.trim()), ...fromMecs};
+    final list = combined.toList()..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    return list;
   }
 
   Future<DateTime?> _pickDate(BuildContext context, DateTime? initial,
@@ -267,6 +279,7 @@ class _AddMecScreenState extends ConsumerState<AddMecScreen>
   }
 
   Widget _buildServicesSection() {
+    final services = _availableServices;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -283,7 +296,7 @@ class _AddMecScreenState extends ConsumerState<AddMecScreen>
         Wrap(
           spacing: 8,
           runSpacing: 8,
-          children: allServices.map((service) {
+          children: services.map((service) {
             final selected = selectedServices.contains(service);
             return FilterChip(
               label: Text(
@@ -310,7 +323,42 @@ class _AddMecScreenState extends ConsumerState<AddMecScreen>
             );
           }).toList(),
         ),
+        const SizedBox(height: 8),
+        // Option pour ajouter un service personnalisé rapidement
+        TextButton.icon(
+          onPressed: () async {
+            final txt = await _showAddServiceDialog();
+            if (txt != null && txt.trim().isNotEmpty) {
+              setState(() {
+                selectedServices.add(txt.trim());
+              });
+            }
+          },
+          icon: const Icon(Icons.add, size: 18),
+          label: const Text('Ajouter un service personnalisé'),
+        ),
       ],
+    );
+  }
+
+  Future<String?> _showAddServiceDialog() async {
+    final controller = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Nouveau service'),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(hintText: 'Nom du service'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(ctx).pop(), child: const Text('Annuler')),
+          ElevatedButton(
+            onPressed: () => Navigator.of(ctx).pop(controller.text),
+            child: const Text('Ajouter'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -362,101 +410,126 @@ class _AddMecScreenState extends ConsumerState<AddMecScreen>
   }
 
   Future<void> _save() async {
-    HapticFeedback.mediumImpact();
+  HapticFeedback.mediumImpact();
 
-    if (!_formKey.currentState!.validate()) {
-      Get.snackbar(
-        'Erreur de validation',
-        'Veuillez corriger les erreurs dans le formulaire',
-        backgroundColor: errorColor,
-        colorText: Colors.white,
-        snackPosition: SnackPosition.BOTTOM,
-        icon: const Icon(Icons.error, color: Colors.white),
-        duration: const Duration(seconds: 3),
-      );
-      return;
-    }
-
-    // fallback raisonnables si dates manquantes
-    final now = DateTime.now();
-    final dn = dateNaissance ?? DateTime(now.year - 25);
-    final de = dateEmbauche ?? now;
-
-    final salaire = double.tryParse(salaireCtrl.text.replaceAll(',', '.')) ?? 0.0;
-
-    // convertir selectedServices en List<ServiceMecanicien>
-    final services = selectedServices
-        .map((s) => ServiceMecanicien(
-              serviceId: s.toLowerCase().replaceAll(' ', '_'),
-              name: s,
-            ))
-        .toList();
-
-    final mecanicienId = widget.mecanicien?.id; // null si création
-
-    try {
-      if (mecanicienId == null) {
-        // création via le provider (méthode asynchrone)
-        await ref.read(mecaniciensProvider.notifier).addMecanicien(
-              nom: nomCtrl.text.trim(),
-              dateNaissance: dn,
-              telephone: telCtrl.text.trim(),
-              email: emailCtrl.text.trim(),
-              poste: poste ?? Poste.mecanicien,
-              dateEmbauche: de,
-              typeContrat: typeContrat ?? TypeContrat.cdi,
-              statut: statut ?? Statut.actif,
-              salaire: salaire,
-              services: services,
-              experience: experienceCtrl.text.trim(),
-              permisConduire: permis ?? PermisConduire.b,
-            );
-      } else {
-        // mise à jour : on envoie les champs modifiables
-        await ref.read(mecaniciensProvider.notifier).updateMecanicien(
-              id: mecanicienId,
-              nom: nomCtrl.text.trim(),
-              dateNaissance: dn,
-              telephone: telCtrl.text.trim(),
-              email: emailCtrl.text.trim(),
-              poste: poste,
-              dateEmbauche: de,
-              typeContrat: typeContrat,
-              statut: statut,
-              salaire: salaire,
-              services: services,
-              experience: experienceCtrl.text.trim(),
-              permisConduire: permis,
-            );
-      }
-
-      Get.snackbar(
-        'Succès',
-        mecanicienId == null ? 'Mécanicien ajouté' : 'Modifications enregistrées',
-        backgroundColor: successColor,
-        colorText: Colors.white,
-        icon: const Icon(Icons.check, color: Colors.white),
-        snackPosition: SnackPosition.BOTTOM,
-        duration: const Duration(seconds: 3),
-      );
-
-      // retourner à la liste (remplace la page actuelle)
-      Get.off(() => const MecListScreen());
-    } catch (e) {
-      Get.snackbar(
-        'Erreur',
-        'Une erreur est survenue lors de l\'enregistrement : ${e.toString()}',
-        backgroundColor: errorColor,
-        colorText: Colors.white,
-        icon: const Icon(Icons.error, color: Colors.white),
-        snackPosition: SnackPosition.BOTTOM,
-      );
-    }
+  if (!_formKey.currentState!.validate()) {
+    Get.snackbar(
+      'Erreur de validation',
+      'Veuillez corriger les erreurs dans le formulaire',
+      backgroundColor: errorColor,
+      colorText: Colors.white,
+      snackPosition: SnackPosition.BOTTOM,
+      icon: const Icon(Icons.error, color: Colors.white),
+      duration: const Duration(seconds: 3),
+    );
+    return;
   }
+
+  // Vérifier la présence du token AVANT d'appeler le provider
+  final token = ref.read(authTokenProvider);
+  debugPrint('AddMecScreen._save -> token: $token');
+  if (token == null || token.isEmpty) {
+    Get.snackbar(
+      'Non authentifié',
+      'Vous devez être connecté pour ajouter un mécanicien.',
+      backgroundColor: errorColor,
+      colorText: Colors.white,
+      snackPosition: SnackPosition.BOTTOM,
+      icon: const Icon(Icons.lock, color: Colors.white),
+      duration: const Duration(seconds: 3),
+    );
+    return;
+  }
+
+  // fallback raisonnables si dates manquantes
+  final now = DateTime.now();
+  final dn = dateNaissance ?? DateTime(now.year - 25);
+  final de = dateEmbauche ?? now;
+
+  final salaire = double.tryParse(salaireCtrl.text.replaceAll(',', '.')) ?? 0.0;
+
+  final services = selectedServices
+      .map((s) => ServiceMecanicien(
+            serviceId: s.toLowerCase().replaceAll(' ', '_'),
+            name: s,
+          ))
+      .toList();
+
+  final mecanicienId = widget.mecanicien?.id; // null si création
+
+  // Indiquer visuellement que l'on soumet via provider
+  ref.read(mecaniciensProvider.notifier).setLoading(true);
+
+  try {
+    if (mecanicienId == null) {
+      debugPrint('AddMecScreen -> creating mecanicien...');
+      await ref.read(mecaniciensProvider.notifier).addMecanicien(
+            nom: nomCtrl.text.trim(),
+            dateNaissance: dn,
+            telephone: telCtrl.text.trim(),
+            email: emailCtrl.text.trim(),
+            poste: poste ?? Poste.mecanicien,
+            dateEmbauche: de,
+            typeContrat: typeContrat ?? TypeContrat.cdi,
+            statut: statut ?? Statut.actif,
+            salaire: salaire,
+            services: services,
+            experience: experienceCtrl.text.trim(),
+            permisConduire: permis ?? PermisConduire.b,
+          );
+    } else {
+      debugPrint('AddMecScreen -> updating mecanicien id=$mecanicienId ...');
+      await ref.read(mecaniciensProvider.notifier).updateMecanicien(
+            id: mecanicienId,
+            nom: nomCtrl.text.trim(),
+            dateNaissance: dn,
+            telephone: telCtrl.text.trim(),
+            email: emailCtrl.text.trim(),
+            poste: poste,
+            dateEmbauche: de,
+            typeContrat: typeContrat,
+            statut: statut,
+            salaire: salaire,
+            services: services,
+            experience: experienceCtrl.text.trim(),
+            permisConduire: permis,
+          );
+    }
+
+    Get.snackbar(
+      'Succès',
+      mecanicienId == null ? 'Mécanicien ajouté' : 'Modifications enregistrées',
+      backgroundColor: successColor,
+      colorText: Colors.white,
+      icon: const Icon(Icons.check, color: Colors.white),
+      snackPosition: SnackPosition.BOTTOM,
+      duration: const Duration(seconds: 3),
+    );
+
+    Get.back(result: true);
+  } catch (e, st) {
+    debugPrint('Erreur add/update mecanicien: $e\n$st');
+    final providerError = ref.read(mecaniciensProvider).error;
+    Get.snackbar(
+      'Erreur',
+      providerError ?? 'Une erreur est survenue lors de l\'enregistrement : ${e.toString()}',
+      backgroundColor: errorColor,
+      colorText: Colors.white,
+      icon: const Icon(Icons.error, color: Colors.white),
+      snackPosition: SnackPosition.BOTTOM,
+      duration: const Duration(seconds: 4),
+    );
+  } finally {
+    ref.read(mecaniciensProvider.notifier).setLoading(false);
+  }
+}
 
   @override
   Widget build(BuildContext context) {
     final isEdit = widget.mecanicien != null;
+    final providerState = ref.watch(mecaniciensProvider);
+    final isSubmitting = providerState.loading;
+
     return Scaffold(
       backgroundColor: backgroundColor,
       appBar: CustomAppBar(
@@ -643,8 +716,12 @@ class _AddMecScreenState extends ConsumerState<AddMecScreen>
                     isEdit ? 'Enregistrer les modifications' : 'Ajouter le mécanicien',
                     style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                   ),
-                  onPressed: () async => await _save(),
+                  onPressed: isSubmitting ? null : () async => await _save(),
                 ),
+                if (providerState.error != null) ...[
+                  const SizedBox(height: 12),
+                  Text(providerState.error!, style: const TextStyle(color: Colors.red)),
+                ],
               ],
             ),
           ),

@@ -1,5 +1,3 @@
-// service.dart
-
 enum ServiceStatut {
   actif,
   desactive,
@@ -7,46 +5,45 @@ enum ServiceStatut {
 
 class Service {
   final String? id; // _id from MongoDB
-  final String serviceId; // Corresponds to 'id' field in schema
   final String name;
   final String description;
   final ServiceStatut statut;
 
   Service({
     this.id,
-    required this.serviceId,
     required this.name,
     required this.description,
     this.statut = ServiceStatut.actif,
   });
 
   factory Service.fromJson(Map<String, dynamic> json) {
+    final String? rawStatut = json['statut']?.toString();
     return Service(
-      id: json['_id']?.toString(),
-      serviceId: json['id'] ?? '',
-      name: json['name'] ?? '',
-      description: json['description'] ?? '',
-      statut: _parseStatut(json['statut']),
+      id: json['_id']?.toString() ?? json['id']?.toString(),
+      name: json['name']?.toString() ?? '',
+      description: json['description']?.toString() ?? '',
+      statut: _parseStatut(rawStatut),
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
-      '_id': id,
-      'id': serviceId,
+      if (id != null) '_id': id,
       'name': name,
       'description': description,
-      'statut': statut.toString().split('.').last.replaceAll('actif', 'Actif').replaceAll('desactive', 'Désactivé'),
-    }..removeWhere((key, value) => value == null);
+      'statut': statutToString(statut), // méthode publique utilisée ici
+    };
   }
 
   static ServiceStatut _parseStatut(String? statut) {
-    switch (statut) {
-      case 'Désactivé':
-        return ServiceStatut.desactive;
-      case 'Actif':
-      default:
-        return ServiceStatut.actif;
-    }
+    if (statut == null) return ServiceStatut.actif;
+    final s = statut.toLowerCase();
+    if (s.contains('desact') || s.contains('désact')) return ServiceStatut.desactive;
+    return ServiceStatut.actif;
+  }
+
+  // méthode publique => accessible depuis d'autres fichiers (ServiceApi)
+  static String statutToString(ServiceStatut statut) {
+    return statut == ServiceStatut.actif ? 'Actif' : 'Désactivé';
   }
 }

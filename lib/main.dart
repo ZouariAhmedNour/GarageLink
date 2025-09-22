@@ -1,4 +1,4 @@
-
+// lib/main.dart
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
@@ -9,6 +9,9 @@ import 'package:garagelink/configurations/generate_routes.dart';
 import 'package:get/get.dart';
 import 'package:garagelink/firebase_options.dart';
 
+// IMPORTS POUR LES PROVIDERS
+import 'package:garagelink/providers/auth_provider.dart';
+import 'package:garagelink/providers/mecaniciens_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -19,19 +22,37 @@ void main() async {
   runApp(const ProviderScope(child: MyApp()));
 }
 
-class MyApp extends StatefulWidget {
+class MyApp extends ConsumerStatefulWidget {
   const MyApp({super.key});
 
   @override
-  State<MyApp> createState() => _MyAppState();
+  ConsumerState<MyApp> createState() => _MyAppState();
 }
 
-class _MyAppState extends State<MyApp> {
+class _MyAppState extends ConsumerState<MyApp> {
   @override
   void initState() {
     super.initState();
 
-    // Mettre à jour la navigation en fonction du statut utilisateur
+    // 1) Charger token + user depuis le secure storage au démarrage,
+    // puis, si on a un token, précharger les mécaniciens.
+    Future.microtask(() async {
+      try {
+        await ref.read(authNotifierProvider.notifier).loadFromStorage();
+        final token = ref.read(authTokenProvider);
+        debugPrint('🔐 Token chargé au démarrage: $token');
+
+        if (token != null && token.isNotEmpty) {
+          // Précharger la liste des mécaniciens (optionnel mais pratique)
+          await ref.read(mecaniciensProvider.notifier).loadAll();
+          debugPrint('🔁 Liste des mécaniciens préchargée');
+        }
+      } catch (e) {
+        debugPrint('⚠️ Erreur lors de l\'initialisation auth: $e');
+      }
+    });
+
+    // 2) Navigation basée sur l'état Firebase Auth (ta logique existante)
     FirebaseAuth.instance.authStateChanges().listen((User? user) {
       if (user == null) {
         Get.offAllNamed(AppRoutes.login);
@@ -62,7 +83,7 @@ class _MyAppState extends State<MyApp> {
       getPages: GenerateRoutes.getPages,
       initialRoute: AppRoutes.splashScreen, // nouvelle route par défaut
 
-       // 🔹 Ajout pour le DatePicker
+      // 🔹 Ajout pour le DatePicker
       localizationsDelegates: GlobalMaterialLocalizations.delegates,
       supportedLocales: const [Locale('fr'), Locale('en')],
       locale: const Locale('fr'), // pour que le DatePicker soit en français

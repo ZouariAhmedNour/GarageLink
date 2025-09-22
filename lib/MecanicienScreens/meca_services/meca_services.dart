@@ -1,4 +1,3 @@
-
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:garagelink/MecanicienScreens/meca_services/add_edit_service_screen.dart';
@@ -7,6 +6,7 @@ import 'package:garagelink/components/default_app_bar.dart';
 import 'package:garagelink/models/service.dart';
 import 'package:garagelink/providers/service_provider.dart';
 import 'package:garagelink/vehicules/car%20widgets/ui_constants.dart';
+import 'package:get/get.dart';
 
 class MecaServicesPage extends ConsumerStatefulWidget {
   const MecaServicesPage({super.key});
@@ -26,6 +26,7 @@ class _MecaServicesPageState extends ConsumerState<MecaServicesPage>
   @override
   void initState() {
     super.initState();
+
     _animationController = AnimationController(
       duration: const Duration(milliseconds: 800),
       vsync: this,
@@ -35,8 +36,13 @@ class _MecaServicesPageState extends ConsumerState<MecaServicesPage>
       curve: Curves.easeInOut,
     );
     _animationController.forward();
+
+   
+
     // Load services on init
+     WidgetsBinding.instance.addPostFrameCallback((_) {
     ref.read(serviceProvider.notifier).loadAll();
+  });
   }
 
   @override
@@ -68,6 +74,20 @@ class _MecaServicesPageState extends ConsumerState<MecaServicesPage>
 
   @override
   Widget build(BuildContext context) {
+     // Écoute des erreurs pour afficher un snackbar automatiquement
+    ref.listen<ServicesState>(serviceProvider, (previous, next) {
+      if (next.error != null && previous?.error != next.error) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Erreur: ${next.error}'),
+              backgroundColor: errorRed,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        });
+      }
+    });
     final serviceState = ref.watch(serviceProvider);
     final filteredServices = _getFilteredServices(serviceState.services);
     final stats = _getServiceStats(serviceState.services);
@@ -123,18 +143,22 @@ class _MecaServicesPageState extends ConsumerState<MecaServicesPage>
                   ],
                 ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => Navigator.push(
-          context,
-          MaterialPageRoute(builder: (c) => const AddEditServiceScreen()),
-        ),
-        backgroundColor: primaryBlue,
-        icon: const Icon(Icons.add, color: Colors.white),
-        label: const Text(
-          'Nouveau service',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-        ),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
+  onPressed: () async {
+    // Ouvre l'écran en plein écran avec Get et attend le résultat
+    final result = await Get.to<bool>(() => const AddEditServiceScreen());
+    if (result == true) {
+      // Si l'écran enfant a renvoyé true => recharger la liste
+      await ref.read(serviceProvider.notifier).loadAll();
+    }
+  },
+  backgroundColor: primaryBlue,
+  icon: const Icon(Icons.add, color: Colors.white),
+  label: const Text(
+    'Nouveau service',
+    style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+  ),
+  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+),
     );
   }
 
@@ -312,67 +336,57 @@ class _MecaServicesPageState extends ConsumerState<MecaServicesPage>
               ],
             ),
           ),
-          GridView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
-            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: screenWidth > 768 ? 2 : 1,
-              childAspectRatio: screenWidth > 768 ? 2.8 : 2.2,
-              crossAxisSpacing: 16,
-              mainAxisSpacing: 16,
-            ),
-            itemCount: services.length,
-            itemBuilder: (context, index) {
-              final service = services[index];
-              return ServiceCard(
-                service: service,
-                onEdit: () => _showEditBottomSheet(service),
-                onDelete: () => _showDeleteDialog(service),
-              );
-            },
-          ),
+         Column(
+  children: services.map((service) => 
+    Padding(
+      padding: const EdgeInsets.only(bottom: 16),
+      child: ServiceCard(
+        service: service,
+        onEdit: () => _navigateToEdit(service),
+        onDelete: () => _showDeleteDialog(service),
+      ),
+    ),
+  ).toList(),
+),
         ],
       ),
     );
   }
 
-  void _showEditBottomSheet(Service service) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        child: DraggableScrollableSheet(
-          initialChildSize: 0.9,
-          maxChildSize: 0.9,
-          minChildSize: 0.5,
-          expand: false,
-          builder: (context, scrollController) => SingleChildScrollView(
-            controller: scrollController,
-            child: AddEditServiceScreen(service: service),
-          ),
-        ),
-      ),
-    );
+ Future<void> _navigateToEdit(Service service) async {
+  final result = await Get.to<bool>(
+    () => AddEditServiceScreen(service: service),
+  );
+
+  if (result == true) {
+    await ref.read(serviceProvider.notifier).loadAll();
   }
+}
+
 
   void _showDeleteDialog(Service service) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
+        backgroundColor: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: const Row(
-          children: [
-            Icon(Icons.warning, color: errorRed),
-            SizedBox(width: 12),
-            Text('Supprimer le service'),
-          ],
+       title: Row(
+  children: const [
+    Icon(Icons.warning, color: errorRed),
+    SizedBox(width: 12),
+    Expanded(
+      child: Text(
+        'Supprimer le service',
+        style: TextStyle(
+          fontSize: 18,
+          fontWeight: FontWeight.w600,
+          color: darkBlue,
         ),
+        overflow: TextOverflow.ellipsis, // évite tout débordement
+      ),
+    ),
+  ],
+),
         content: Text(
           'Êtes-vous sûr de vouloir supprimer "${service.name}" ?\nCette action est irréversible.',
         ),

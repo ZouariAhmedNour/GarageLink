@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:garagelink/models/service.dart';
-import 'package:garagelink/global.dart'; 
+import 'package:garagelink/global.dart';
 
 class ServiceApi {
   // En-têtes par défaut pour les requêtes JSON
@@ -9,115 +9,124 @@ class ServiceApi {
     'Content-Type': 'application/json',
   };
 
-  // En-têtes avec authentification
-  static Map<String, String> _authHeaders(String token) => {
-        ..._headers,
-        'Authorization': 'Bearer $token',
-      };
+  // En-têtes avec authentification si token fourni
+  static Map<String, String> _headersWithOptionalToken(String? token) {
+    if (token == null || token.isEmpty) return _headers;
+    return {
+      ..._headers,
+      'Authorization': 'Bearer $token',
+    };
+  }
 
   /// Récupérer tous les services
-  static Future<List<Service>> getAllServices(String token) async {
-    final url = Uri.parse('$UrlApi/services');
+  static Future<List<Service>> getAllServices({String? token}) async {
+    final url = Uri.parse('$UrlApi/getAllServices');
     final response = await http.get(
       url,
-      headers: _authHeaders(token),
+      headers: _headersWithOptionalToken(token),
     );
 
     if (response.statusCode == 200) {
       final List<dynamic> jsonList = jsonDecode(response.body);
       return jsonList.map((json) => Service.fromJson(json)).toList();
     } else {
-      final json = jsonDecode(response.body);
-      throw Exception(json['error'] ?? 'Erreur lors de la récupération des services');
+      _throwApiError(response);
     }
   }
 
   /// Récupérer un service par ID
-  static Future<Service> getServiceById(String token, String id) async {
-    final url = Uri.parse('$UrlApi/services/$id');
+  static Future<Service> getServiceById({String? token, required String id}) async {
+    final url = Uri.parse('$UrlApi/getServiceById/$id');
     final response = await http.get(
       url,
-      headers: _authHeaders(token),
+      headers: _headersWithOptionalToken(token),
     );
 
     if (response.statusCode == 200) {
       return Service.fromJson(jsonDecode(response.body));
     } else {
-      final json = jsonDecode(response.body);
-      throw Exception(json['error'] ?? 'Erreur lors de la récupération du service');
+      _throwApiError(response);
     }
   }
 
   /// Créer un nouveau service
   static Future<Service> createService({
-    required String token,
+    String? token,
     required String name,
     required String description,
     ServiceStatut? statut,
   }) async {
-    final url = Uri.parse('$UrlApi/services');
+    final url = Uri.parse('$UrlApi/createService');
     final body = jsonEncode({
       'name': name,
       'description': description,
-      'statut': statut?.toString().split('.').last.replaceAll('actif', 'Actif').replaceAll('desactive', 'Désactivé'),
-    }..removeWhere((key, value) => value == null));
+      if (statut != null) 'statut': Service.statutToString(statut),
+    });
 
     final response = await http.post(
       url,
-      headers: _authHeaders(token),
+      headers: _headersWithOptionalToken(token),
       body: body,
     );
 
-    if (response.statusCode == 201) {
+    if (response.statusCode == 201 || response.statusCode == 200) {
       return Service.fromJson(jsonDecode(response.body));
     } else {
-      final json = jsonDecode(response.body);
-      throw Exception(json['error'] ?? 'Erreur lors de la création du service');
+      _throwApiError(response);
     }
   }
 
   /// Mettre à jour un service
   static Future<Service> updateService({
-    required String token,
+    String? token,
     required String id,
     String? name,
     String? description,
     ServiceStatut? statut,
   }) async {
-    final url = Uri.parse('$UrlApi/services/$id');
+    final url = Uri.parse('$UrlApi/updateService/$id');
     final body = jsonEncode({
-      'name': name,
-      'description': description,
-      'statut': statut?.toString().split('.').last.replaceAll('actif', 'Actif').replaceAll('desactive', 'Désactivé'),
-    }..removeWhere((key, value) => value == null));
+      if (name != null) 'name': name,
+      if (description != null) 'description': description,
+      if (statut != null) 'statut': Service.statutToString(statut),
+    });
 
     final response = await http.put(
       url,
-      headers: _authHeaders(token),
+      headers: _headersWithOptionalToken(token),
       body: body,
     );
 
     if (response.statusCode == 200) {
       return Service.fromJson(jsonDecode(response.body));
     } else {
-      final json = jsonDecode(response.body);
-      throw Exception(json['error'] ?? 'Erreur lors de la mise à jour du service');
+      _throwApiError(response);
     }
   }
 
   /// Supprimer un service
-  static Future<void> deleteService(String token, String id) async {
-    final url = Uri.parse('$UrlApi/services/$id');
+  static Future<void> deleteService({String? token, required String id}) async {
+    final url = Uri.parse('$UrlApi/deleteService/$id');
     final response = await http.delete(
       url,
-      headers: _authHeaders(token),
+      headers: _headersWithOptionalToken(token),
     );
 
     if (response.statusCode == 200) {
       return;
     } else {
-      final json = jsonDecode(response.body);
-      throw Exception(json['error'] ?? 'Erreur lors de la suppression du service');
+      _throwApiError(response);
+    }
+  }
+
+  // Helper pour parser et lancer une exception lisible
+  static Never _throwApiError(http.Response response) {
+    try {
+      final jsonBody = jsonDecode(response.body);
+      final message = (jsonBody is Map && jsonBody['error'] != null) ? jsonBody['error'] : response.body;
+      throw Exception('API Error (${response.statusCode}): $message');
+    } catch (_) {
+      throw Exception('API Error (${response.statusCode}): ${response.reasonPhrase ?? 'Unknown error'}');
     }
   }
 }

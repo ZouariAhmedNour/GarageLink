@@ -20,7 +20,7 @@ class _ModifierAtelierScreenState extends ConsumerState<ModifierAtelierScreen> w
   final _formKey = GlobalKey<FormState>();
   late TextEditingController _nameCtrl;
   late TextEditingController _localisationCtrl;
-  bool _submitting = false;
+  bool _localSubmitting = false;
 
   @override
   void initState() {
@@ -39,46 +39,49 @@ class _ModifierAtelierScreenState extends ConsumerState<ModifierAtelierScreen> w
   Future<void> _onSave() async {
     if (!_formKey.currentState!.validate()) return;
 
-    setState(() => _submitting = true);
+    // Use local submitting flag to control the button immediately
+    setState(() => _localSubmitting = true);
+
+    final notifier = ref.read(ateliersProvider.notifier);
 
     try {
-      final updated = await ref.read(ateliersProvider.notifier).update(
-            id: widget.atelier.id ?? '',
-            name: _nameCtrl.text.trim(),
-            localisation: _localisationCtrl.text.trim(),
-          );
+      final updated = await notifier.update(
+        id: widget.atelier.id ?? '',
+        name: _nameCtrl.text.trim(),
+        localisation: _localisationCtrl.text.trim(),
+      );
 
       if (updated != null) {
-        // recharge la liste pour s'assurer d'avoir l'état à jour
+        // Optionally reload list in background (not strictly necessary if notifier already updated cache)
         await ref.read(ateliersProvider.notifier).loadAll();
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Atelier modifié avec succès'), backgroundColor: Colors.green),
-          );
-          Get.back(result: true);
-        }
+
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Atelier modifié avec succès'), backgroundColor: Colors.green),
+        );
+        // Return true so calling screen can refresh if needed
+        Get.back(result: true);
       } else {
         final err = ref.read(ateliersProvider).error;
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Erreur lors de la modification : ${err ?? "inconnue"}'), backgroundColor: Colors.red),
-          );
-        }
-      }
-    } catch (e) {
-      if (mounted) {
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur lors de la modification : $e'), backgroundColor: Colors.red),
+          SnackBar(content: Text('Erreur lors de la modification : ${err ?? "inconnue"}'), backgroundColor: Colors.red),
         );
       }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erreur lors de la modification : ${e.toString()}'), backgroundColor: Colors.red),
+      );
     } finally {
-      if (mounted) setState(() => _submitting = false);
+      if (mounted) setState(() => _localSubmitting = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(ateliersProvider);
+    final isLoading = state.loading || _localSubmitting;
     final screenWidth = MediaQuery.of(context).size.width;
     final isTablet = screenWidth > 768;
 
@@ -178,14 +181,14 @@ class _ModifierAtelierScreenState extends ConsumerState<ModifierAtelierScreen> w
                       width: double.infinity,
                       height: 48,
                       child: ElevatedButton(
-                        onPressed: _submitting ? null : _onSave,
+                        onPressed: isLoading ? null : _onSave,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: primaryBlue,
                           foregroundColor: Colors.white,
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                           elevation: 2,
                         ),
-                        child: _submitting
+                        child: isLoading
                             ? const SizedBox(height: 18, width: 18, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
                             : const Text('Enregistrer', style: TextStyle(fontWeight: FontWeight.w700)),
                       ),

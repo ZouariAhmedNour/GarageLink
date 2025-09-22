@@ -22,8 +22,26 @@ class _AtelierDashScreenState extends ConsumerState<AtelierDashScreen>
   @override
   void initState() {
     super.initState();
+
+    // Charger la liste au démarrage
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(ateliersProvider.notifier).loadAll();
+    });
+
+    // Écoute des erreurs pour afficher un snackbar automatiquement
+    ref.listen<AteliersState>(ateliersProvider, (previous, next) {
+      final prevErr = previous?.error;
+      final nextErr = next.error;
+      if (nextErr != null && nextErr != prevErr) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(nextErr),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
     });
   }
 
@@ -31,7 +49,7 @@ class _AtelierDashScreenState extends ConsumerState<AtelierDashScreen>
     await ref.read(ateliersProvider.notifier).loadAll();
   }
 
-  void _onDeleteTap(BuildContext context, Atelier atelier) async {
+  Future<void> _onDeleteTap(BuildContext context, Atelier atelier) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -51,7 +69,14 @@ class _AtelierDashScreenState extends ConsumerState<AtelierDashScreen>
 
     if (confirmed == true) {
       final notifier = ref.read(ateliersProvider.notifier);
+      // afficher un petit indicateur modal pendant la suppression
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const Center(child: CircularProgressIndicator()),
+      );
       final success = await notifier.delete(atelier.id ?? '');
+      if (mounted) Navigator.pop(context); // fermer l'indicateur
       if (success) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -70,14 +95,26 @@ class _AtelierDashScreenState extends ConsumerState<AtelierDashScreen>
   }
 
   void _onEditTap(Atelier atelier) {
-    Get.to(() => ModifierAtelierScreen(atelier: atelier))?.then((_) {
-      ref.read(ateliersProvider.notifier).loadAll();
+    // Attendre le résultat du screen d'édition ; si true => reload
+    Get.to(() => ModifierAtelierScreen(atelier: atelier))?.then((result) {
+      if (result == true) {
+        ref.read(ateliersProvider.notifier).loadAll();
+      }
+    });
+  }
+
+  void _onAddTap() {
+    Get.to(() => const AjouterAtelierScreen())?.then((result) {
+      if (result == true) {
+        ref.read(ateliersProvider.notifier).loadAll();
+      }
     });
   }
 
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(ateliersProvider);
+
     return Scaffold(
       backgroundColor: const Color(0xFFF6F9FB),
       appBar: AppBar(
@@ -94,7 +131,8 @@ class _AtelierDashScreenState extends ConsumerState<AtelierDashScreen>
           child: state.loading
               ? const Center(child: CircularProgressIndicator())
               : state.ateliers.isEmpty
-                  ? ListView( // ListView to enable pull-to-refresh even when empty
+                  ? ListView(
+                      // ListView to enable pull-to-refresh even when empty
                       children: [
                         const SizedBox(height: 80),
                         Center(
@@ -105,14 +143,13 @@ class _AtelierDashScreenState extends ConsumerState<AtelierDashScreen>
                               gradient: const LinearGradient(colors: [Color(0xFFEAF4FF), Color(0xFFDFF6FF)]),
                               borderRadius: BorderRadius.circular(16),
                             ),
-                            child: Center(
+                            child: const Center(
                               child: Icon(Icons.storefront_outlined, size: 54, color: primaryBlue),
                             ),
                           ),
                         ),
                         const SizedBox(height: 24),
-                        const Center(
-                            child: Text('Aucun atelier trouvé', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700))),
+                        const Center(child: Text('Aucun atelier trouvé', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700))),
                         if (state.error != null) ...[
                           const SizedBox(height: 8),
                           Center(child: Text(state.error!, style: const TextStyle(color: Colors.red))),
@@ -131,11 +168,7 @@ class _AtelierDashScreenState extends ConsumerState<AtelierDashScreen>
         ),
       ),
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-  Get.to(() => const AjouterAtelierScreen())!.then((_) {
-    ref.read(ateliersProvider.notifier).loadAll();
-  });
-},
+        onPressed: state.loading ? null : _onAddTap,
         backgroundColor: primaryBlue,
         icon: const Icon(Icons.add, color: Colors.white),
         label: const Text('Ajouter', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
@@ -144,18 +177,14 @@ class _AtelierDashScreenState extends ConsumerState<AtelierDashScreen>
   }
 
   Widget _atelierCard(BuildContext context, Atelier atelier) {
-    // Badges: si tu veux plusieurs infos (services/prix) adapte selon ton modèle
-    final servicesText = '—'; // ex: atelier.services?.length ?? '—'
-    final prixText = '—'; // ex: atelier.moyenPrix != null ? '${atelier.moyenPrix} DT' : '—'
+    // si ton modèle Atelier contient d'autres champs, remplace les placeholders
+    final servicesText = '—';
+    final prixText = '—';
 
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
-        gradient: const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color(0xFFFFFFFF), Color(0xFFF7FBFF)],
-        ),
+        gradient: const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color(0xFFFFFFFF), Color(0xFFF7FBFF)]),
         boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 12, offset: const Offset(0, 6))],
         border: Border.all(color: const Color(0xFFE6EEF8)),
       ),

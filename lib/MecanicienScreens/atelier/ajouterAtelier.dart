@@ -1,10 +1,8 @@
 // lib/MecanicienScreens/atelier/ajouterAtelierScreen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:garagelink/MecanicienScreens/atelier/atelier_dash.dart';
 import 'package:garagelink/providers/atelier_provider.dart';
 import 'package:get/get.dart';
-
 
 class AjouterAtelierScreen extends ConsumerStatefulWidget {
   const AjouterAtelierScreen({Key? key}) : super(key: key);
@@ -17,7 +15,6 @@ class _AjouterAtelierScreenState extends ConsumerState<AjouterAtelierScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameCtrl = TextEditingController();
   final _localisationCtrl = TextEditingController();
-  bool _submitting = false;
 
   static const Color primaryBlue = Color(0xFF357ABD);
 
@@ -31,49 +28,49 @@ class _AjouterAtelierScreenState extends ConsumerState<AjouterAtelierScreen> {
   Future<void> _onSubmit() async {
     if (!_formKey.currentState!.validate()) return;
 
-    setState(() => _submitting = true);
+    // on utilise l'indicateur de chargement du provider
+    final notifier = ref.read(ateliersProvider.notifier);
 
     try {
-      final atelier = await ref.read(ateliersProvider.notifier).create(
-            name: _nameCtrl.text.trim(),
-            localisation: _localisationCtrl.text.trim(),
-          );
+      final atelier = await notifier.create(
+        name: _nameCtrl.text.trim(),
+        localisation: _localisationCtrl.text.trim(),
+      );
 
-     if (atelier != null) {
-  if (mounted) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Atelier créé avec succès'),
-        backgroundColor: Colors.green,
-      ),
-    );
-    // 🔥 Redirection vers le dashboard des ateliers
-    Get.offAll(() => const AtelierDashScreen());
-  }
-} else {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Échec création atelier'),
-              backgroundColor: Colors.orange,
-            ),
-          );
-        }
-      }
-    } catch (e) {
-      if (mounted) {
+      if (atelier != null) {
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur: ${e.toString()}')),
+          const SnackBar(
+            content: Text('Atelier créé avec succès'),
+            backgroundColor: Colors.green,
+          ),
+        );
+        // Retourne true pour indiquer au caller de rafraîchir la liste
+        Get.back(result: true);
+        return;
+      } else {
+        // provider a géré l'erreur et rempli state.error probablement
+        final state = ref.read(ateliersProvider);
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(state.error ?? 'Échec création atelier'),
+            backgroundColor: Colors.orange,
+          ),
         );
       }
-    } finally {
-      if (mounted) setState(() => _submitting = false);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Erreur: ${e.toString()}')),
+      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final isLoading = _submitting || ref.watch(ateliersProvider).loading;
+    final providerState = ref.watch(ateliersProvider);
+    final isLoading = providerState.loading;
     final screenWidth = MediaQuery.of(context).size.width;
     final isTablet = screenWidth > 768;
 
@@ -234,6 +231,16 @@ class _AjouterAtelierScreenState extends ConsumerState<AjouterAtelierScreen> {
                         Expanded(child: Text('Les ateliers seront affichés dans votre tableau de bord et pourront être sélectionnés lors de la création d\'ordres.')),
                       ],
                     ),
+                    if (providerState.error != null) ...[
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          const Icon(Icons.error_outline, color: Colors.redAccent),
+                          const SizedBox(width: 8),
+                          Expanded(child: Text(providerState.error!, style: const TextStyle(color: Colors.red))),
+                        ],
+                      )
+                    ],
                   ],
                 ),
               ),
