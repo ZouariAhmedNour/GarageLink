@@ -77,9 +77,16 @@ class _AjouterAtelierScreenState extends ConsumerState<AjouterAtelierScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
+        iconTheme: const IconThemeData(color: Colors.white),
         backgroundColor: primaryBlue,
         elevation: 0,
-        title: const Text('Ajouter un atelier', style: TextStyle(fontWeight: FontWeight.w700)),
+        title:
+         const Text('Ajouter un atelier',
+         style: TextStyle(
+          fontWeight: FontWeight.w700,
+          color: Colors.white,
+          ),
+          ),
         centerTitle: true,
       ),
       body: SafeArea(

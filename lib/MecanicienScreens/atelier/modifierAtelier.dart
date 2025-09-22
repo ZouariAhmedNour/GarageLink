@@ -78,6 +78,61 @@ class _ModifierAtelierScreenState extends ConsumerState<ModifierAtelierScreen> w
     }
   }
 
+  Future<void> _confirmAndSave() async {
+    // Affiche un pop-up de confirmation avec fond blanc
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 14.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Confirmer la modification', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+              const SizedBox(height: 8),
+              const Text('Voulez-vous enregistrer les modifications apportées à cet atelier ?', textAlign: TextAlign.center),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(ctx, false),
+                      style: OutlinedButton.styleFrom(
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        side: BorderSide(color: primaryBlue.withOpacity(0.12)),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                      child: Text('Annuler', style: TextStyle(color: primaryBlue, fontWeight: FontWeight.w600)),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.pop(ctx, true),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: primaryBlue,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      child: const Text('Enregistrer', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    if (confirmed == true) {
+      await _onSave();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(ateliersProvider);
@@ -88,13 +143,19 @@ class _ModifierAtelierScreenState extends ConsumerState<ModifierAtelierScreen> w
     return Scaffold(
       backgroundColor: const Color(0xFFF6F9FB),
       appBar: AppBar(
+        iconTheme: const IconThemeData(color: Colors.white),
         backgroundColor: primaryBlue,
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back, color: Colors.white),
           onPressed: () => Get.back(),
         ),
-        title: const Text('Modifier Atelier', style: TextStyle(fontWeight: FontWeight.w700)),
+        title: const Text('Modifier Atelier',
+         style: TextStyle(
+          fontWeight: FontWeight.w700,
+          color: Colors.white,
+          ),
+          ),
       ),
       body: SingleChildScrollView(
         padding: EdgeInsets.symmetric(horizontal: isTablet ? 36 : 16, vertical: 20),
@@ -176,12 +237,12 @@ class _ModifierAtelierScreenState extends ConsumerState<ModifierAtelierScreen> w
                     ),
                     const SizedBox(height: 16),
 
-                    // Save button
+                    // Save button now opens the confirmation popup
                     SizedBox(
                       width: double.infinity,
                       height: 48,
                       child: ElevatedButton(
-                        onPressed: isLoading ? null : _onSave,
+                        onPressed: isLoading ? null : _confirmAndSave,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: primaryBlue,
                           foregroundColor: Colors.white,

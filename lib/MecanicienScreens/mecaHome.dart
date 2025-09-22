@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:garagelink/MecanicienScreens/atelier/atelier_dash.dart';
 import 'package:garagelink/MecanicienScreens/devis/creation_devis.dart';
 import 'package:garagelink/MecanicienScreens/edit_localisation.dart';
 import 'package:garagelink/MecanicienScreens/gestion%20mec/mec_list_screen.dart';
@@ -351,6 +352,13 @@ class _MecaHomePageState extends ConsumerState<MecaHomePage> {
               description: 'Gestion des services mécaniques',
               color: const Color(0xFF34C759),
               onTap: () => Get.to(() => MecaServicesPage()),
+            ),
+            buildMenuCard(
+              icon: Icons.store,
+              title: 'Ateliers',
+              description: 'Gestion des ateliers mécaniques',
+              color: const Color.fromARGB(255, 228, 147, 25),
+              onTap: () => Get.to(() => AtelierDashScreen()),
             ),
             buildMenuCard(
               icon: Icons.location_on,

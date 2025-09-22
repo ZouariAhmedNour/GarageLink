@@ -27,22 +27,6 @@ class _AtelierDashScreenState extends ConsumerState<AtelierDashScreen>
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(ateliersProvider.notifier).loadAll();
     });
-
-    // Écoute des erreurs pour afficher un snackbar automatiquement
-    ref.listen<AteliersState>(ateliersProvider, (previous, next) {
-      final prevErr = previous?.error;
-      final nextErr = next.error;
-      if (nextErr != null && nextErr != prevErr) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(nextErr),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
-      }
-    });
   }
 
   Future<void> _refresh() async {
@@ -50,31 +34,80 @@ class _AtelierDashScreenState extends ConsumerState<AtelierDashScreen>
   }
 
   Future<void> _onDeleteTap(BuildContext context, Atelier atelier) async {
+    // Confirmation dialog with explicit white background
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
+      barrierDismissible: true,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        title: const Text('Confirmer la suppression'),
-        content: Text('Voulez-vous vraiment supprimer "${atelier.name}" ?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Annuler')),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Supprimer'),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 14.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Confirmer la suppression', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16)),
+              const SizedBox(height: 8),
+              Text('Voulez-vous vraiment supprimer "${atelier.name}" ?', textAlign: TextAlign.center),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(ctx, false),
+                      style: OutlinedButton.styleFrom(
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        side: BorderSide(color: primaryBlue.withOpacity(0.12)),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                      child: Text('Annuler', style: TextStyle(color: primaryBlue, fontWeight: FontWeight.w600)),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.pop(ctx, true),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      child: const Text('Supprimer', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
 
     if (confirmed == true) {
       final notifier = ref.read(ateliersProvider.notifier);
-      // afficher un petit indicateur modal pendant la suppression
+
+      // afficher un indicateur modal avec fond blanc pendant la suppression
       showDialog(
         context: context,
         barrierDismissible: false,
-        builder: (_) => const Center(child: CircularProgressIndicator()),
+        builder: (_) => Dialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: const [
+                SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2)),
+                SizedBox(width: 16),
+                Text('Suppression en cours...', style: TextStyle(fontSize: 14)),
+              ],
+            ),
+          ),
+        ),
       );
+
       final success = await notifier.delete(atelier.id ?? '');
       if (mounted) Navigator.pop(context); // fermer l'indicateur
       if (success) {
@@ -111,16 +144,74 @@ class _AtelierDashScreenState extends ConsumerState<AtelierDashScreen>
     });
   }
 
+  Widget _statsHeader(AteliersState state) {
+    final total = state.ateliers.length;
+    final lastAddedName = state.ateliers.isNotEmpty ? state.ateliers.last.name : '—';
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 8, offset: const Offset(0, 4))],
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Statistiques', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                const SizedBox(height: 6),
+                Text('$total atelier(s)', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Color(0xFF102035))),
+                const SizedBox(height: 4),
+                Text('Dernier : $lastAddedName', style: TextStyle(fontSize: 13, color: Colors.grey[600])),
+              ],
+            ),
+          ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: const [
+              Icon(Icons.insights, color: primaryBlue, size: 34),
+            ],
+          )
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    // ref.listen ici est OK (dans build)
+    ref.listen<AteliersState>(ateliersProvider, (previous, next) {
+      final prevErr = previous?.error;
+      final nextErr = next.error;
+      if (nextErr != null && nextErr != prevErr) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(nextErr), backgroundColor: Colors.red),
+          );
+        }
+      }
+    });
+
     final state = ref.watch(ateliersProvider);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF6F9FB),
       appBar: AppBar(
+        iconTheme: const IconThemeData(color: Colors.white),
         elevation: 0,
         backgroundColor: primaryBlue,
-        title: const Text('Mes Ateliers', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 20)),
+        title: const Text(
+          'Mes Ateliers',
+          style: TextStyle(
+            fontWeight: FontWeight.w700,
+            fontSize: 20,
+            color: Colors.white,
+          ),
+        ),
         centerTitle: false,
       ),
       body: RefreshIndicator(
@@ -129,11 +220,20 @@ class _AtelierDashScreenState extends ConsumerState<AtelierDashScreen>
         child: Padding(
           padding: const EdgeInsets.all(16.0),
           child: state.loading
-              ? const Center(child: CircularProgressIndicator())
+              ? ListView(
+                  // allow pull-to-refresh
+                  children: [
+                    _statsHeader(state),
+                    const SizedBox(height: 20),
+                    const Center(child: CircularProgressIndicator()),
+                  ],
+                )
               : state.ateliers.isEmpty
                   ? ListView(
                       // ListView to enable pull-to-refresh even when empty
                       children: [
+                        _statsHeader(state),
+                        const SizedBox(height: 20),
                         const SizedBox(height: 80),
                         Center(
                           child: Container(
@@ -158,10 +258,11 @@ class _AtelierDashScreenState extends ConsumerState<AtelierDashScreen>
                     )
                   : ListView.separated(
                       physics: const AlwaysScrollableScrollPhysics(),
-                      itemCount: state.ateliers.length,
+                      itemCount: state.ateliers.length + 1,
                       separatorBuilder: (_, __) => const SizedBox(height: 12),
                       itemBuilder: (context, index) {
-                        final atelier = state.ateliers[index];
+                        if (index == 0) return _statsHeader(state);
+                        final atelier = state.ateliers[index - 1];
                         return _atelierCard(context, atelier);
                       },
                     ),
@@ -177,10 +278,6 @@ class _AtelierDashScreenState extends ConsumerState<AtelierDashScreen>
   }
 
   Widget _atelierCard(BuildContext context, Atelier atelier) {
-    // si ton modèle Atelier contient d'autres champs, remplace les placeholders
-    final servicesText = '—';
-    final prixText = '—';
-
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
@@ -226,15 +323,6 @@ class _AtelierDashScreenState extends ConsumerState<AtelierDashScreen>
                       const SizedBox(width: 8),
                     ],
                   ),
-                  const SizedBox(height: 8),
-                  // badges row
-                  Row(
-                    children: [
-                      _badge(label: 'Services', value: servicesText),
-                      const SizedBox(width: 8),
-                      _badge(label: 'Prix moyen', value: prixText),
-                    ],
-                  ),
                 ],
               ),
             ),
@@ -256,24 +344,6 @@ class _AtelierDashScreenState extends ConsumerState<AtelierDashScreen>
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _badge({required String label, required String value}) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: const Color(0xFFEAF4FF),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFDCEFFA)),
-      ),
-      child: Row(
-        children: [
-          Text(label, style: const TextStyle(fontSize: 12, color: Color(0xFF4B6D8A), fontWeight: FontWeight.w600)),
-          const SizedBox(width: 8),
-          Text(value, style: const TextStyle(fontSize: 13, color: primaryBlue, fontWeight: FontWeight.w800)),
-        ],
       ),
     );
   }
