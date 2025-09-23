@@ -1,4 +1,3 @@
-// lib/mecanicien/intervention/intervention_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,11 +10,8 @@ class EntretienScreen extends ConsumerStatefulWidget {
   final String vehiculeId;
   final CarnetEntretien? initial;
 
-  const EntretienScreen({
-    required this.vehiculeId,
-    this.initial,
-    Key? key,
-  }) : super(key: key);
+  const EntretienScreen({required this.vehiculeId, this.initial, Key? key})
+    : super(key: key);
 
   @override
   ConsumerState<EntretienScreen> createState() => _EntretienScreenState();
@@ -23,10 +19,9 @@ class EntretienScreen extends ConsumerStatefulWidget {
 
 class _EntretienScreenState extends ConsumerState<EntretienScreen>
     with TickerProviderStateMixin {
-  late TextEditingController _tacheCtrl; // description / tâche
-  late TextEditingController _coutCtrl;
-  late TextEditingController _serviceCtrl; // type de service
+  // contrôleurs globaux (pour certains champs)
   late TextEditingController _kmCtrl;
+  late TextEditingController _serviceGlobalCtrl; // si tu veux un label global
   late AnimationController _fadeController;
   late AnimationController _scaleController;
   late Animation<double> _fadeAnimation;
@@ -36,7 +31,10 @@ class _EntretienScreenState extends ConsumerState<EntretienScreen>
   bool _isLoading = false;
   String? _errorMessage;
 
-  // Palette de couleurs unifiée
+  // dynamic rows
+  final List<_ServiceRow> _rows = [];
+
+  // Palette de couleurs unifiée (identique à ton UI)
   static const Color primaryBlue = Color(0xFF357ABD);
   static const Color lightBlue = Color(0xFFE3F2FD);
   static const Color darkBlue = Color(0xFF1565C0);
@@ -46,22 +44,34 @@ class _EntretienScreenState extends ConsumerState<EntretienScreen>
   @override
   void initState() {
     super.initState();
-    _initializeControllers();
+    _initFromInitial();
     _setupAnimations();
   }
 
-  void _initializeControllers() {
+  void _initFromInitial() {
     final init = widget.initial;
-    // Prise en compte que services peut être vide
-    final firstService = (init?.services.isNotEmpty ?? false) ? init!.services.first : null;
-
-    _tacheCtrl = TextEditingController(text: firstService?.nom ?? init?.notes ?? '');
-    _coutCtrl = TextEditingController(
-        text: init != null ? (init.totalTTC).toStringAsFixed(2) : '');
-    _serviceCtrl =
-        TextEditingController(text: firstService?.description ?? 'Entretien général');
+    _kmCtrl = TextEditingController(
+      text: init?.kilometrageEntretien?.toString() ?? '',
+    );
+    _serviceGlobalCtrl = TextEditingController(
+      text: init?.services.isNotEmpty == true
+          ? init!.services.first.description ?? ''
+          : 'Entretien général',
+    );
     _date = init?.dateCommencement ?? DateTime.now();
-    _kmCtrl = TextEditingController(text: init?.kilometrageEntretien?.toString() ?? '');
+
+    // Préparer les lignes : si initial != null et a des services, mapper, sinon une ligne vide
+    if (init != null && init.services.isNotEmpty) {
+      for (final s in init.services) {
+        final row = _ServiceRow.fromServiceEntretien(
+          s,
+          onChange: _recomputeTotal,
+        );
+        _rows.add(row);
+      }
+    } else {
+      _rows.add(_ServiceRow.empty(onChange: _recomputeTotal));
+    }
   }
 
   void _setupAnimations() {
@@ -87,26 +97,36 @@ class _EntretienScreenState extends ConsumerState<EntretienScreen>
 
   @override
   void dispose() {
-    _tacheCtrl.dispose();
-    _coutCtrl.dispose();
-    _serviceCtrl.dispose();
+    for (final r in _rows) r.dispose();
+    _kmCtrl.dispose();
+    _serviceGlobalCtrl.dispose();
     _fadeController.dispose();
     _scaleController.dispose();
-    _kmCtrl.dispose();
-
     super.dispose();
+  }
+
+  double _recomputeTotal() {
+    double total = 0.0;
+    for (final r in _rows) {
+      final price = r.parsePrice() ?? 0.0;
+      total += price; // quantité implicite = 1
+    }
+    setState(() {}); // pour rafraîchir l'affichage du total si besoin
+    return total;
+  }
+
+  double get _computedTotal => _recomputeTotal();
+
+  int? _parseInt(String s) {
+    final cleaned = s.trim();
+    if (cleaned.isEmpty) return null;
+    return int.tryParse(cleaned);
   }
 
   double? _parseDouble(String s) {
     final cleaned = s.replaceAll(',', '.').trim();
     if (cleaned.isEmpty) return null;
     return double.tryParse(cleaned);
-  }
-
-  int? _parseInt(String s) {
-    final cleaned = s.trim();
-    if (cleaned.isEmpty) return null;
-    return int.tryParse(cleaned);
   }
 
   void _showError(String message) {
@@ -136,7 +156,11 @@ class _EntretienScreenState extends ConsumerState<EntretienScreen>
       SnackBar(
         content: Row(
           children: [
-            const Icon(Icons.check_circle_outline, color: Colors.white, size: 20),
+            const Icon(
+              Icons.check_circle_outline,
+              color: Colors.white,
+              size: 20,
+            ),
             const SizedBox(width: 12),
             Text(message),
           ],
@@ -152,24 +176,28 @@ class _EntretienScreenState extends ConsumerState<EntretienScreen>
   bool _validateInputs() {
     setState(() => _errorMessage = null);
 
-    if (_tacheCtrl.text.trim().isEmpty) {
-      _showError('Veuillez saisir la description de la tâche');
+    // au moins une tâche non vide
+    final validRows = _rows
+        .where((r) => r.nomCtrl.text.trim().isNotEmpty)
+        .toList();
+    if (validRows.isEmpty) {
+      _showError(
+        'Veuillez ajouter au moins une tâche/service avec une description',
+      );
       return false;
     }
 
-    if (_serviceCtrl.text.trim().isEmpty) {
-      _showError('Veuillez préciser le type de service');
-      return false;
+    // vérifier prix
+    for (final r in validRows) {
+      final price = r.parsePrice();
+      if (r.priceCtrl.text.trim().isNotEmpty && price == null) {
+        _showError('Prix invalide sur une ligne');
+        return false;
+      }
     }
 
-    final cout = _parseDouble(_coutCtrl.text);
-    if (cout != null && cout < 0) {
-      _showError('Le coût ne peut pas être négatif');
-      return false;
-    }
-
-    final km = _parseInt(_kmCtrl.text);
-    if (_kmCtrl.text.trim().isNotEmpty && km == null) {
+    // kilométrage si renseigné
+    if (_kmCtrl.text.trim().isNotEmpty && _parseInt(_kmCtrl.text) == null) {
       _showError('Kilométrage invalide');
       return false;
     }
@@ -177,59 +205,84 @@ class _EntretienScreenState extends ConsumerState<EntretienScreen>
     return true;
   }
 
-  Future<void> _save() async {
+    Future<void> _save() async {
     if (!_validateInputs()) return;
 
     setState(() => _isLoading = true);
 
     try {
-      // Construire la liste de services (ici une seule tâche représentée)
-      final tache = _tacheCtrl.text.trim();
-      final cout = _parseDouble(_coutCtrl.text) ?? 0.0;
-      final serviceNom = _serviceCtrl.text.trim();
+      final taches = <ServiceEntretien>[];
+      for (final r in _rows) {
+        if (r.nomCtrl.text.trim().isEmpty) continue; // ignorer lignes vides
+        final nom = r.nomCtrl.text.trim();
+        final desc = r.descCtrl.text.trim().isEmpty
+            ? null
+            : r.descCtrl.text.trim();
+        final price = r.parsePrice();
 
-      // ServiceEntretien est défini dans ton modèle carnetEntretien.dart
-      final taches = [
-        ServiceEntretien(
-          nom: tache,
-          description: serviceNom,
-          quantite: 1,
-          prix: cout == 0.0 ? null : cout,
-        )
-      ];
+        taches.add(
+          ServiceEntretien(
+            nom: nom,
+            description: desc,
+            quantite: 1, // quantité implicite
+            prix: price,
+          ),
+        );
+      }
+
+      final cout = _computedTotal;
 
       final notifier = ref.read(carnetProvider.notifier);
 
       if (widget.initial == null) {
-        // Création d'une nouvelle entrée manuelle
-        await notifier.ajouterEntree(
+        // Création dynamique — on récupère l'objet retourné du provider
+        final created = await notifier.ajouterEntree(
           vehiculeId: widget.vehiculeId,
           date: _date,
           taches: taches,
           cout: cout,
-          notes: '${serviceNom.isNotEmpty ? "$serviceNom — " : ""}$tache',
+          notes:
+              '${_serviceGlobalCtrl.text.isNotEmpty ? "${_serviceGlobalCtrl.text} — " : ""}${taches.isNotEmpty ? taches.first.nom : ''}',
         );
         _showSuccess('Intervention ajoutée avec succès');
       } else {
-        // Édition : comme le provider n'a pas d'update général, on propose ici de marquer terminé
+        // EDITION COMPLÈTE : on utilise updateEntry pour appliquer les changements (et marquer terminé si nécessaire)
         final carnetId = widget.initial!.id;
         if (carnetId == null) {
           _showError('Impossible de modifier : identifiant introuvable');
         } else {
           final km = _parseInt(_kmCtrl.text);
-          await notifier.marquerTermine(
-            vehiculeId: widget.vehiculeId,
-            carnetId: carnetId,
-            dateFinCompletion: _date,
-            kilometrageEntretien: km,
-            notes: '${serviceNom.isNotEmpty ? "$serviceNom — " : ""}$tache',
-          );
-          _showSuccess('Intervention marquée comme terminée');
+
+          // Construire la map d'updates : n'inclure que les champs non-null
+          final updates = {
+            'dateCommencement': _date.toIso8601String(),
+            // on pose dateFinCompletion pour marquer terminé (conserve le comportement "Marquer terminé")
+            'dateFinCompletion': _date.toIso8601String(),
+            'kilometrageEntretien': km,
+            'notes': '${_serviceGlobalCtrl.text.isNotEmpty ? "${_serviceGlobalCtrl.text} — " : ""}${taches.isNotEmpty ? taches.first.nom : ''}',
+            'taches': taches.map((t) => t.toJson()).toList(),
+            'totalTTC': cout,
+          }..removeWhere((k, v) => v == null);
+
+          // debug
+          print('DEBUG: updateEntry body => ${updates}');
+
+          try {
+            await notifier.updateEntry(
+              vehiculeId: widget.vehiculeId,
+              carnetId: carnetId,
+              updates: updates,
+            );
+            _showSuccess('Intervention mise à jour et marquée comme terminée');
+          } catch (e) {
+            _showError('Erreur lors de la mise à jour: ${e.toString()}');
+            rethrow;
+          }
         }
       }
 
-      // Petite pause UX et retour
-      await Future.delayed(const Duration(milliseconds: 300));
+      // retour après courte pause UX
+      await Future.delayed(const Duration(milliseconds: 250));
       if (mounted) Navigator.of(context).pop();
     } catch (e) {
       _showError('Erreur lors de l\'enregistrement: ${e.toString()}');
@@ -237,7 +290,6 @@ class _EntretienScreenState extends ConsumerState<EntretienScreen>
       if (mounted) setState(() => _isLoading = false);
     }
   }
-
   Future<void> _delete() async {
     if (widget.initial == null) return;
 
@@ -247,12 +299,12 @@ class _EntretienScreenState extends ConsumerState<EntretienScreen>
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        icon: const Icon(Icons.warning_amber_rounded, color: errorRed, size: 32),
-        title: const Text('Supprimer l\'intervention ?'),
-        titleTextStyle: Theme.of(context).textTheme.headlineSmall?.copyWith(
-          fontWeight: FontWeight.w600,
-          color: Colors.black87,
+        icon: const Icon(
+          Icons.warning_amber_rounded,
+          color: errorRed,
+          size: 32,
         ),
+        title: const Text('Supprimer l\'intervention ?'),
         content: const Text(
           'Cette action est irréversible. L\'intervention sera définitivement supprimée.',
           style: TextStyle(color: Colors.black54),
@@ -264,10 +316,7 @@ class _EntretienScreenState extends ConsumerState<EntretienScreen>
           ),
           ElevatedButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: errorRed,
-              foregroundColor: Colors.white,
-            ),
+            style: ElevatedButton.styleFrom(backgroundColor: errorRed),
             child: const Text('Supprimer'),
           ),
         ],
@@ -283,7 +332,12 @@ class _EntretienScreenState extends ConsumerState<EntretienScreen>
 
       try {
         setState(() => _isLoading = true);
-        await ref.read(carnetProvider.notifier).supprimerEntree(widget.vehiculeId, carnetId);
+        print('DEBUG: suppression demande pour carnetId=$carnetId vehiculeId=${widget.vehiculeId}');
+        await ref
+            .read(carnetProvider.notifier)
+            
+            .supprimerEntree(widget.vehiculeId, carnetId);
+            print('DEBUG: suppression terminée (retour)');
         _showSuccess('Intervention supprimée');
         if (mounted) Navigator.of(context).pop();
       } catch (e) {
@@ -305,9 +359,9 @@ class _EntretienScreenState extends ConsumerState<EntretienScreen>
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
-            colorScheme: Theme.of(context).colorScheme.copyWith(
-              primary: primaryBlue,
-            ),
+            colorScheme: Theme.of(
+              context,
+            ).colorScheme.copyWith(primary: primaryBlue),
           ),
           child: child!,
         );
@@ -339,7 +393,11 @@ class _EntretienScreenState extends ConsumerState<EntretienScreen>
                   color: lightBlue,
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Icon(Icons.calendar_today, color: primaryBlue, size: 24),
+                child: const Icon(
+                  Icons.calendar_today,
+                  color: primaryBlue,
+                  size: 24,
+                ),
               ),
               const SizedBox(width: 16),
               Expanded(
@@ -372,15 +430,115 @@ class _EntretienScreenState extends ConsumerState<EntretienScreen>
     );
   }
 
-  Widget _buildInputCard({
-    required String title,
-    required TextEditingController controller,
-    required IconData icon,
-    String? hint,
-    int maxLines = 1,
-    TextInputType? keyboardType,
-    String? suffix,
-  }) {
+  Widget _buildLineControls() {
+    return Card(
+      elevation: 2,
+      color: Colors.white,
+      shadowColor: primaryBlue.withOpacity(0.1),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Tâches / Services',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: _isLoading
+                      ? null
+                      : () {
+                          setState(
+                            () => _rows.add(
+                              _ServiceRow.empty(onChange: _recomputeTotal),
+                            ),
+                          );
+                        },
+                  icon: const Icon(Icons.add),
+                  label: const Text('Ajouter une ligne'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            // list of rows
+            Column(
+              children: List.generate(_rows.length, (index) {
+                final r = _rows[index];
+                return Padding(
+                  padding: const EdgeInsets.only(top: 8.0),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        flex: 6,
+                        child: TextFormField(
+                          controller: r.nomCtrl,
+                          enabled: !_isLoading,
+                          decoration: InputDecoration(
+                            labelText: 'Description',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            filled: true,
+                            fillColor: Colors.grey[50],
+                          ),
+                          onChanged: (_) => _recomputeTotal(),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        flex: 4,
+                        child: TextFormField(
+                          controller: r.priceCtrl,
+                          enabled: !_isLoading,
+                          decoration: InputDecoration(
+                            labelText: 'Prix',
+                            suffixText: 'DT',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            filled: true,
+                            fillColor: Colors.grey[50],
+                          ),
+                          keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true,
+                          ),
+                          onChanged: (_) => _recomputeTotal(),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        icon: const Icon(
+                          Icons.delete_outline,
+                          color: Colors.redAccent,
+                        ),
+                        onPressed: _isLoading
+                            ? null
+                            : () {
+                                setState(() {
+                                  r.dispose();
+                                  _rows.removeAt(index);
+                                });
+                                _recomputeTotal();
+                              },
+                      ),
+                    ],
+                  ),
+                );
+              }),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildKmAndServiceCard() {
     return Card(
       elevation: 2,
       color: Colors.white,
@@ -399,37 +557,43 @@ class _EntretienScreenState extends ConsumerState<EntretienScreen>
                     color: lightBlue,
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: Icon(icon, color: primaryBlue, size: 20),
+                  child: const Icon(Icons.speed, color: primaryBlue, size: 20),
                 ),
                 const SizedBox(width: 12),
                 Text(
-                  title,
-                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    fontWeight: FontWeight.w600,
-                    color: Colors.black87,
+                  'Kilométrage',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w600),
+                ),
+                const Spacer(),
+                SizedBox(
+                  width: 140,
+                  child: TextFormField(
+                    controller: _kmCtrl,
+                    enabled: !_isLoading,
+                    keyboardType: TextInputType.number,
+                    decoration: InputDecoration(
+                      hintText: 'Ex: 120000',
+                      suffixText: 'km',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      filled: true,
+                      fillColor: Colors.grey[50],
+                    ),
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 16),
             TextFormField(
-              controller: controller,
-              maxLines: maxLines,
-              keyboardType: keyboardType,
+              controller: _serviceGlobalCtrl,
+              enabled: !_isLoading,
               decoration: InputDecoration(
-                hintText: hint,
-                suffixText: suffix,
+                labelText: 'Type de service (libellé général)',
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: Colors.grey[300]!),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: Colors.grey[300]!),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: primaryBlue, width: 2),
                 ),
                 filled: true,
                 fillColor: Colors.grey[50],
@@ -465,46 +629,18 @@ class _EntretienScreenState extends ConsumerState<EntretienScreen>
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 _buildDateCard(),
-                const SizedBox(height: 20),
-                _buildInputCard(
-                  title: 'Kilométrage',
-                  controller: _kmCtrl,
-                  icon: Icons.speed,
-                  hint: 'Ex: 120000',
-                  keyboardType: TextInputType.number,
-                  suffix: 'km',
-                ),
-                const SizedBox(height: 20),
-                _buildInputCard(
-                  title: 'Type de service',
-                  controller: _serviceCtrl,
-                  icon: Icons.build_circle_outlined,
-                  hint: 'Ex: Vidange, Révision, Réparation...',
-                ),
-                const SizedBox(height: 20),
-                _buildInputCard(
-                  title: 'Description de l\'intervention',
-                  controller: _tacheCtrl,
-                  icon: Icons.description_outlined,
-                  hint: 'Décrivez les travaux effectués...',
-                  maxLines: 3,
-                ),
-                const SizedBox(height: 20),
-                _buildInputCard(
-                  title: 'Coût total',
-                  controller: _coutCtrl,
-                  icon: Icons.monetization_on_outlined,
-                  hint: '0.00',
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  suffix: 'DT',
-                ),
-                const SizedBox(height: 32),
-                // Boutons d'action
+                const SizedBox(height: 16),
+                _buildKmAndServiceCard(),
+                const SizedBox(height: 16),
+                _buildLineControls(),
+                const SizedBox(height: 24),
                 Row(
                   children: [
                     Expanded(
                       child: OutlinedButton(
-                        onPressed: _isLoading ? null : () => Navigator.of(context).pop(),
+                        onPressed: _isLoading
+                            ? null
+                            : () => Navigator.of(context).pop(),
                         style: OutlinedButton.styleFrom(
                           padding: const EdgeInsets.symmetric(vertical: 16),
                           side: const BorderSide(color: primaryBlue),
@@ -545,7 +681,9 @@ class _EntretienScreenState extends ConsumerState<EntretienScreen>
                               )
                             : Text(
                                 isEditing ? 'Marquer terminé' : 'Ajouter',
-                                style: const TextStyle(fontWeight: FontWeight.w600),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                ),
                               ),
                       ),
                     ),
@@ -555,7 +693,9 @@ class _EntretienScreenState extends ConsumerState<EntretienScreen>
                 if (isEditing)
                   Text(
                     'Note: l\'édition complète des champs d\'une entrée existante n\'est pas implémentée. Le bouton "Marquer terminé" mettra l\'entrée à jour comme complétée.',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.black54),
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodySmall?.copyWith(color: Colors.black54),
                   ),
               ],
             ),
@@ -563,5 +703,77 @@ class _EntretienScreenState extends ConsumerState<EntretienScreen>
         ),
       ),
     );
+  }
+}
+
+/// Helper interne : représente une ligne de service avec ses controllers
+class _ServiceRow {
+  final TextEditingController nomCtrl;
+  final TextEditingController descCtrl;
+  final TextEditingController priceCtrl;
+  final VoidCallback? onChange;
+
+  _ServiceRow({
+    required this.nomCtrl,
+    required this.descCtrl,
+    required this.priceCtrl,
+    this.onChange,
+  }) {
+    nomCtrl.addListener(_onChanged);
+    descCtrl.addListener(_onChanged);
+    priceCtrl.addListener(_onChanged);
+  }
+
+  factory _ServiceRow.empty({VoidCallback? onChange}) {
+    return _ServiceRow(
+      nomCtrl: TextEditingController(),
+      descCtrl: TextEditingController(),
+      priceCtrl: TextEditingController(),
+      onChange: onChange,
+    );
+  }
+
+  factory _ServiceRow.fromServiceEntretien(
+    ServiceEntretien s, {
+    VoidCallback? onChange,
+  }) {
+    return _ServiceRow(
+      nomCtrl: TextEditingController(text: s.nom),
+      descCtrl: TextEditingController(text: s.description ?? ''),
+      priceCtrl: TextEditingController(text: s.prix?.toStringAsFixed(2) ?? ''),
+      onChange: onChange,
+    );
+  }
+
+  void _onChanged() {
+    if (onChange != null) onChange!();
+  }
+
+  double? parsePrice() {
+    try {
+      final t = priceCtrl.text.replaceAll(',', '.').trim();
+      if (t.isEmpty) return null;
+      return double.tryParse(t);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  ServiceEntretien toServiceEntretien() {
+    return ServiceEntretien(
+      nom: nomCtrl.text.trim(),
+      description: descCtrl.text.trim().isEmpty ? null : descCtrl.text.trim(),
+      quantite: 1,
+      prix: parsePrice(),
+    );
+  }
+
+  void dispose() {
+    nomCtrl.removeListener(_onChanged);
+    descCtrl.removeListener(_onChanged);
+    priceCtrl.removeListener(_onChanged);
+    nomCtrl.dispose();
+    descCtrl.dispose();
+    priceCtrl.dispose();
   }
 }

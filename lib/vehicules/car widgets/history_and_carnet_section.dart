@@ -4,6 +4,7 @@ import 'package:garagelink/carnetEntretien/entretien_screen.dart';
 import 'package:garagelink/models/carnetEntretien.dart';
 import 'package:garagelink/models/vehicule.dart';
 import 'package:garagelink/providers/carnetEntretien_provider.dart';
+import 'package:garagelink/providers/ordres_provider.dart';
 import 'package:garagelink/vehicules/car%20widgets/ui_constants.dart';
 import 'package:get/get.dart';
 
@@ -23,10 +24,22 @@ class _HistoryCarnetSectionState extends ConsumerState<HistoryCarnetSection> {
     super.initState();
     final vid = widget.veh.id;
     if (vid != null && vid.isNotEmpty) {
-      // Charger l'historique après que le widget soit monté
       WidgetsBinding.instance.addPostFrameCallback((_) {
         ref.read(carnetProvider.notifier).loadForVehicule(vid);
+        ref.read(carnetProvider.notifier).loadStats(vid);
+        ref.read(ordresProvider.notifier).loadByVehicule(vid);
       });
+    }
+  }
+
+   Future<void> _onRefresh() async {
+    final vid = widget.veh.id;
+    if (vid != null && vid.isNotEmpty) {
+      await Future.wait([
+        ref.read(carnetProvider.notifier).loadForVehicule(vid),
+        ref.read(carnetProvider.notifier).loadStats(vid),
+        ref.read(ordresProvider.notifier).loadByVehicule(vid),
+      ]);
     }
   }
 
@@ -102,38 +115,48 @@ class _HistoryCarnetSectionState extends ConsumerState<HistoryCarnetSection> {
               ],
             ),
             const SizedBox(height: 16),
-            if (!_showCarnet)
-              _buildHistoryList()
-            else
-              _buildCarnetList(),
+            if (!_showCarnet) _buildHistoryList() else _buildCarnetList(),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildHistoryList() {
-    // exemple statique — tu peux remplacer par un fetch si besoin
-    final List<Map<String, dynamic>> visites = [
-      {
-        'date': DateTime(2024, 1, 12),
-        'desc': 'Vidange moteur',
-        'atelier': 'Atelier Central',
-        'type': 'maintenance',
-      },
-      {
-        'date': DateTime(2024, 5, 23),
-        'desc': 'Révision complète',
-        'atelier': 'Garage Pro',
-        'type': 'revision',
-      },
-      {
-        'date': DateTime(2024, 8, 15),
-        'desc': 'Changement plaquettes',
-        'atelier': 'Atelier Central',
-        'type': 'reparation',
-      },
-    ];
+   Widget _buildHistoryList() {
+    final vid = widget.veh.id ?? '';
+    final ordresState = ref.watch(ordresProvider);
+    final carnetState = ref.watch(carnetProvider); // pour l'état loading/error partagé si souhaité
+
+    // Préférence : utiliser ordresState pour afficher l'historique d'ordres.
+    if (ordresState.loading || carnetState.loading) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 32),
+        child: Center(child: CircularProgressIndicator(color: primaryBlue)),
+      );
+    }
+
+    if (ordresState.error != null) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 32),
+        child: Column(
+          children: [
+            Icon(Icons.error_outline, size: 48, color: Colors.grey.shade500),
+            const SizedBox(height: 12),
+            Text(
+              'Erreur: ${ordresState.error}',
+              style: TextStyle(color: Colors.grey.shade600, fontSize: 16),
+            ),
+            const SizedBox(height: 12),
+            ElevatedButton(
+              onPressed: () => ref.read(ordresProvider.notifier).loadByVehicule(vid),
+              child: const Text('Réessayer'),
+            )
+          ],
+        ),
+      );
+    }
+
+    final visites = ordresState.ordres.where((o) => (o.vehiculedetails.vehiculeId ?? '') == vid).toList();
 
     if (visites.isEmpty) {
       return Padding(
@@ -151,113 +174,95 @@ class _HistoryCarnetSectionState extends ConsumerState<HistoryCarnetSection> {
             ),
             const SizedBox(height: 16),
             Text(
-              'Aucun historique disponible',
+              'Aucun ordre lié à ce véhicule',
               style: TextStyle(color: Colors.grey.shade600, fontSize: 16),
             ),
+            const SizedBox(height: 12),
+            ElevatedButton(
+              onPressed: () => ref.read(ordresProvider.notifier).loadByVehicule(vid),
+              child: const Text('Rafraîchir'),
+            )
           ],
         ),
       );
     }
 
-    return ListView.separated(
-      itemCount: visites.length,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      separatorBuilder: (_, __) => const SizedBox(height: 12),
-      itemBuilder: (context, index) {
-        final visite = visites[index];
-        final String desc = (visite['desc'] as String?) ?? '—';
-        final String atelier = (visite['atelier'] as String?) ?? '';
-        final DateTime? date = visite['date'] as DateTime?;
-        final String type = (visite['type'] as String?) ?? '';
+    // Tri décroissant par dateCommence
+    final sorted = [...visites];
+    sorted.sort((a, b) => b.dateCommence.compareTo(a.dateCommence));
 
-        final bool isMaintenance = type == 'maintenance';
-        final bool isRevision = type == 'revision';
-        final IconData icon = isRevision
-            ? Icons.build_circle
-            : isMaintenance
-                ? Icons.oil_barrel
-                : Icons.build;
-        final Color iconColor = isRevision
-            ? accentOrange
-            : isMaintenance
-                ? successGreen
-                : primaryBlue;
-        final Color bgColor = isRevision
-            ? accentOrange.withOpacity(0.2)
-            : isMaintenance
-                ? successGreen.withOpacity(0.2)
-                : lightBlue;
+    return RefreshIndicator(
+      onRefresh: _onRefresh,
+      child: ListView.separated(
+        itemCount: sorted.length,
+        shrinkWrap: true,
+        physics: const AlwaysScrollableScrollPhysics(),
+        separatorBuilder: (_, __) => const SizedBox(height: 12),
+        itemBuilder: (context, index) {
+          final e = sorted[index];
+          final dateStr = formatDate(e.dateCommence);
+          final service = e.taches.isNotEmpty ? e.taches.first.serviceNom : e.description ?? '—';
+          final atelier = e.atelierNom;
+          final progression = '${e.progressionPourcentage}%';
+          final status = e.status.toString().split('.').last;
 
-        return Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: surfaceColor,
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: iconColor.withOpacity(0.3),
-              width: 1,
+          return Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: surfaceColor,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.grey.shade200),
             ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.grey.withOpacity(0.1),
-                blurRadius: 4,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: bgColor,
-                  borderRadius: BorderRadius.circular(8),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: lightBlue,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.precision_manufacturing, color: primaryBlue),
                 ),
-                child: Icon(icon, color: iconColor, size: 20),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      desc,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: darkBlue,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Ordre: ${e.numeroOrdre.isNotEmpty ? e.numeroOrdre : e.devisId}',
+                        style: const TextStyle(fontWeight: FontWeight.w600),
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      atelier,
-                      style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
-                    ),
+                      const SizedBox(height: 4),
+                      Text(service, style: TextStyle(color: Colors.grey.shade600)),
+                      const SizedBox(height: 4),
+                      Text(atelier, style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+                    ],
+                  ),
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(dateStr, style: const TextStyle(fontWeight: FontWeight.w600, color: primaryBlue)),
+                    const SizedBox(height: 6),
+                    Text('$progression', style: const TextStyle(fontWeight: FontWeight.w700)),
+                    const SizedBox(height: 6),
+                    Text(status, style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
                   ],
                 ),
-              ),
-              Text(
-                formatDate(date),
-                style: const TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                  color: primaryBlue,
-                ),
-              ),
-            ],
-          ),
-        );
-      },
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
+
 
   Widget _buildCarnetList() {
     final carnetState = ref.watch(carnetProvider);
     final vehId = widget.veh.id ?? '';
     final List<CarnetEntretien> entries = carnetState.historique[vehId] ?? [];
 
-    // Loading
     if (carnetState.loading) {
       return const Center(
         child: Padding(
@@ -267,7 +272,6 @@ class _HistoryCarnetSectionState extends ConsumerState<HistoryCarnetSection> {
       );
     }
 
-    // Erreur
     if (carnetState.error != null) {
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 32),
@@ -308,16 +312,8 @@ class _HistoryCarnetSectionState extends ConsumerState<HistoryCarnetSection> {
       );
     }
 
-    // tri décroissant par dateCommencement
     final sorted = [...entries];
-    sorted.sort((a, b) {
-      final da = a.dateCommencement;
-      final db = b.dateCommencement;
-      if (da == null && db == null) return 0;
-      if (da == null) return 1;
-      if (db == null) return -1;
-      return db.compareTo(da);
-    });
+    sorted.sort((a, b) => b.dateCommencement.compareTo(a.dateCommencement));
 
     return ListView.separated(
       shrinkWrap: true,
@@ -326,7 +322,6 @@ class _HistoryCarnetSectionState extends ConsumerState<HistoryCarnetSection> {
       separatorBuilder: (_, __) => const SizedBox(height: 12),
       itemBuilder: (context, index) {
         final entry = sorted[index];
-
         final service = (entry.services.isNotEmpty ? (entry.services.first.description ?? '') : '');
         final tache = (entry.services.isNotEmpty
             ? (entry.services.first.nom ?? entry.notes ?? '')
@@ -413,34 +408,50 @@ class _HistoryCarnetSectionState extends ConsumerState<HistoryCarnetSection> {
                       IconButton(
                         icon: const Icon(Icons.delete_outline, size: 20, color: errorRed),
                         onPressed: () async {
-                          final ok = await showDialog<bool>(
-                            context: context,
-                            builder: (ctx) => AlertDialog(
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                              title: Row(
-                                children: const [
-                                  Icon(Icons.warning, color: errorRed),
-                                  SizedBox(width: 12),
-                                  Text('Supprimer l\'intervention'),
-                                ],
-                              ),
-                              content: const Text('Confirmez la suppression de cette intervention. Cette action est irréversible.'),
-                              actions: [
-                                TextButton(
-                                  onPressed: () => Navigator.of(ctx).pop(false),
-                                  child: const Text('Annuler'),
-                                ),
-                                ElevatedButton(
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: errorRed,
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                  ),
-                                  onPressed: () => Navigator.of(ctx).pop(true),
-                                  child: const Text('Supprimer', style: TextStyle(color: Colors.white)),
-                                ),
-                              ],
-                            ),
-                          );
+                         final ok = await showDialog<bool>(
+  context: context,
+  builder: (ctx) => AlertDialog(
+    backgroundColor: Colors.white, // 👈 force le fond en blanc
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+    title: Row(
+      children: [
+        const Icon(Icons.warning, color: errorRed),
+        const SizedBox(width: 12),
+        Expanded( // 👈 évite l’overflow en coupant le texte
+          child: Text(
+            "Supprimer l'intervention",
+            style: const TextStyle(
+              fontWeight: FontWeight.w600,
+              fontSize: 18,
+              color: darkBlue,
+            ),
+            overflow: TextOverflow.ellipsis, // coupe si trop long
+          ),
+        ),
+      ],
+    ),
+    content: const Text(
+      'Confirmez la suppression de cette intervention. '
+      'Cette action est irréversible.',
+      style: TextStyle(fontSize: 15, color: Colors.black87),
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.of(ctx).pop(false),
+        child: const Text('Annuler'),
+      ),
+      ElevatedButton(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: errorRed,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+        onPressed: () => Navigator.of(ctx).pop(true),
+        child: const Text('Supprimer', style: TextStyle(color: Colors.white)),
+      ),
+    ],
+  ),
+);
+
 
                           if (ok == true) {
                             final carnetId = entry.id;

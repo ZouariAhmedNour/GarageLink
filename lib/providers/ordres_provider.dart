@@ -122,6 +122,41 @@ void setError(String error) => state = state.copyWith(error: error, loading: fal
     }
   }
 
+   Future<void> loadByVehicule(String vehiculeId) async {
+    if (!_hasToken) {
+      state = state.copyWith(error: 'Token d\'authentification requis');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // Si on a déjà des ordres en mémoire, on les filtre.
+      if (state.ordres.isEmpty) {
+        // fallback : charger tout (ou une page large). Ajuste limit si besoin.
+        await loadAll(page: 1, limit: 1000);
+      }
+
+      final filtered = state.ordres
+          .where((o) => (o.vehiculedetails.vehiculeId?.toString() ?? '') == vehiculeId)
+          .toList();
+
+      // si aucun résultat et que tu veux forcer une requête back-end dédiée,
+      // tu peux ici appeler OrdreApi.getOrdresByVehicule(token, vehiculeId) si tu as cette méthode.
+      setOrdres(filtered);
+    } catch (e) {
+      setError(_extractErrorMessage(e));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  /// Petit helper synchronisé pour obtenir les ordres d'un véhicule à partir de l'état actuel
+  List<OrdreTravail> ordresForVehicule(String vehiculeId) {
+    return state.ordres
+        .where((o) => (o.vehiculedetails.vehiculeId?.toString() ?? '') == vehiculeId)
+        .toList();
+  }
+
   Future<OrdreTravail?> getByDevisId(String devisId) async {
     if (!_hasToken) {
       state = state.copyWith(error: 'Token d\'authentification requis');

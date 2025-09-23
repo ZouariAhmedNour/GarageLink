@@ -164,6 +164,9 @@ class OrdreApi {
     }
   }
 
+
+  
+
   /// Terminer un ordre (PUT /api/ordre-travail/:id/terminer)
   static Future<OrdreTravail> terminerOrdre(String token, String id) async {
     final url = Uri.parse('$baseRoot/ordre-travail/$id/terminer');
