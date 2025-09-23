@@ -1,14 +1,13 @@
-// lib/mecanicien/devis/devis_preview_page.dart
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
-
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:garagelink/models/devis.dart';
+import 'package:garagelink/models/facture.dart';
 import 'package:garagelink/providers/devis_provider.dart';
 import 'package:garagelink/services/pdf_service.dart';
 import 'package:garagelink/utils/devis_actions.dart';
@@ -24,9 +23,15 @@ class PreviewColors {
   static const Color surface = Color(0xFFFAFAFA);
 }
 
+/// Page polymorphe capable d'afficher un Devis OU une Facture.
+/// - Si `facture` non-null -> affiche facture.
+/// - Sinon si `devis` non-null -> affiche devis.
+/// - Sinon -> prend le Devis courant depuis le provider.
 class DevisPreviewPage extends ConsumerStatefulWidget {
   final Devis? devis;
-  const DevisPreviewPage({super.key, this.devis});
+  final Facture? facture;
+
+  const DevisPreviewPage({super.key, this.devis, this.facture});
 
   @override
   ConsumerState<DevisPreviewPage> createState() => _DevisPreviewPageState();
@@ -80,7 +85,10 @@ class _DevisPreviewPageState extends ConsumerState<DevisPreviewPage>
     }
   }
 
-  Future<void> _handleAction(String action, Devis devis, bool isFacture) async {
+  /// Unified action handler that supports Devis OR Facture.
+  /// - action: 'send' | 'download' | 'print'
+  /// - doc: Devis or Facture
+  Future<void> _handleAction(String action, {required Object doc}) async {
     setState(() {
       _isProcessing = true;
       _processingMessage = _getProcessingMessage(action);
@@ -88,98 +96,144 @@ class _DevisPreviewPageState extends ConsumerState<DevisPreviewPage>
 
     HapticFeedback.mediumImpact();
 
+    final bool isFacture = doc is Facture;
+    final bool isDevis = doc is Devis;
+
     try {
       switch (action) {
         case 'send':
-          // Essaie d'abord une capture visuelle; si elle échoue on envoie sans preview.
+          // Prefer to capture a PNG preview for email if possible
           final png = await _capturePreviewPng();
-          try {
-            if (png != null) {
-              await generateAndSendDevis(
-                ref,
-                context,
-                previewPng: png,
-                devisToSend: devis,
-              );
-            } else {
-              await generateAndSendDevis(ref, context, devisToSend: devis);
-            }
-            _showSuccessMessage('${isFacture ? 'Facture' : 'Devis'} envoyé avec succès');
-          } catch (e) {
-            debugPrint('Envoi avec preview échoué: $e — tentative d\'envoi sans preview');
+
+          if (isDevis) {
+            final Devis devis = doc as Devis;
             try {
-              await generateAndSendDevis(ref, context, devisToSend: devis);
-              _showSuccessMessage('${isFacture ? 'Facture' : 'Devis'} envoyé (sans preview)');
-            } catch (inner) {
-              debugPrint('Tentative d\'envoi sans preview également échouée: $inner');
-              // Proposer au moins de partager le PDF localement pour l'utilisateur
-              try {
-                final pdfBytes = await PdfService.instance.buildDevisPdfBytes(
-                  devis,
-                  footerNote: 'Généré par GarageLink',
+              if (png != null) {
+                await generateAndSendDevis(
+                  ref,
+                  context,
+                  previewPng: png,
+                  devisToSend: devis,
                 );
-                await Printing.sharePdf(
-                    bytes: pdfBytes,
-                    filename: '${isFacture ? 'facture' : 'devis'}_${devis.id ?? 'doc'}.pdf');
-                _showSuccessMessage(
-                    'Envoi automatique impossible — PDF partagé localement pour envoi manuel.');
-              } catch (shareErr) {
-                debugPrint('Erreur génération/partage PDF fallback: $shareErr');
-                _showErrorMessage('Impossible d\'envoyer le devis : $e');
+              } else {
+                await generateAndSendDevis(ref, context, devisToSend: devis);
               }
+              _showSuccessMessage('Devis envoyé avec succès');
+              break;
+            } catch (e) {
+              debugPrint('Envoi Devis avec preview échoué: $e — fallback share PDF');
+              // fallback to share PDF
+              final bytes = await PdfService.instance.buildDevisPdfBytes(devis, footerNote: 'Généré par GarageLink');
+              await Printing.sharePdf(bytes: bytes, filename: 'devis_${devis.id ?? 'doc'}.pdf');
+              _showSuccessMessage('Devis partagé localement (fallback)');
+              break;
             }
           }
-          break;
 
-        case 'download':
-          final bytes = await PdfService.instance.buildDevisPdfBytes(
-            devis,
-            footerNote: 'Généré par GarageLink',
-          );
-
-          if (kIsWeb) {
-            await Printing.sharePdf(
-                bytes: bytes,
-                filename:
-                    '${isFacture ? 'facture' : 'devis'}_${(devis.clientName).replaceAll(RegExp(r"[^A-Za-z0-9_]"), "_")}.pdf');
-            _showSuccessMessage('PDF prêt à être téléchargé (web).');
+          if (isFacture) {
+            final Facture facture = doc as Facture;
+            // Build and share the facture PDF (no special server send util here)
+            final bytes = await PdfService.instance.buildFacturePdfBytes(facture, footerNote: 'Généré par GarageLink');
+            await Printing.sharePdf(bytes: bytes, filename: 'facture_${facture.numeroFacture ?? facture.id ?? 'doc'}.pdf');
+            _showSuccessMessage('Facture partagée (PDF)');
             break;
           }
 
-          // Desktop / Mobile : essayer Downloads puis fallback vers Documents
-          Directory? targetDir;
-          try {
-            targetDir = await getDownloadsDirectory();
-          } catch (_) {
-            targetDir = null;
-          }
-          targetDir ??= await getApplicationDocumentsDirectory();
+          _showErrorMessage('Document inconnu pour envoi');
+          break;
 
-          final safeClient = (devis.clientName.isNotEmpty ? devis.clientName : 'client')
-              .replaceAll(RegExp(r'[^A-Za-z0-9_\-]'), '_');
-          final fileName =
-              '${isFacture ? 'facture' : 'devis'}_${safeClient}_${DateTime.now().millisecondsSinceEpoch}.pdf';
-          final filePath = '${targetDir.path}/$fileName';
+        case 'download':
+          if (isDevis) {
+            final Devis devis = doc as Devis;
+            final bytes = await PdfService.instance.buildDevisPdfBytes(devis, footerNote: 'Généré par GarageLink');
 
-          try {
-            final file = File(filePath);
-            await file.writeAsBytes(bytes, flush: true);
-            _showSuccessMessage('PDF enregistré :\n$filePath');
-          } catch (e) {
-            debugPrint('Erreur écriture fichier PDF: $e');
-            // fallback : partager le PDF si écriture locale échoue
-            await Printing.sharePdf(bytes: bytes, filename: fileName);
-            _showSuccessMessage('Impossible d\'écrire localement, PDF partagé.');
+            if (kIsWeb) {
+              await Printing.sharePdf(bytes: bytes, filename: 'devis_${(devis.clientName).replaceAll(RegExp(r"[^A-Za-z0-9_]"), "_")}.pdf');
+              _showSuccessMessage('PDF prêt à être téléchargé (web).');
+              break;
+            }
+
+            Directory? targetDir;
+            try {
+              targetDir = await getDownloadsDirectory();
+            } catch (_) {
+              targetDir = null;
+            }
+            targetDir ??= await getApplicationDocumentsDirectory();
+
+            final safeClient = (devis.clientName.isNotEmpty ? devis.clientName : 'client')
+                .replaceAll(RegExp(r'[^A-Za-z0-9_\-]'), '_');
+            final fileName = 'devis_${safeClient}_${DateTime.now().millisecondsSinceEpoch}.pdf';
+            final filePath = '${targetDir.path}/$fileName';
+
+            try {
+              final file = File(filePath);
+              await file.writeAsBytes(bytes, flush: true);
+              _showSuccessMessage('PDF enregistré :\n$filePath');
+            } catch (e) {
+              debugPrint('Erreur écriture fichier PDF: $e');
+              await Printing.sharePdf(bytes: bytes, filename: fileName);
+              _showSuccessMessage('Impossible d\'écrire localement, PDF partagé.');
+            }
+            break;
           }
+
+          if (isFacture) {
+            final Facture facture = doc as Facture;
+            final bytes = await PdfService.instance.buildFacturePdfBytes(facture, footerNote: 'Généré par GarageLink');
+
+            if (kIsWeb) {
+              await Printing.sharePdf(bytes: bytes, filename: 'facture_${(facture.clientInfo.nom ?? 'client').replaceAll(RegExp(r"[^A-Za-z0-9_]"), "_")}.pdf');
+              _showSuccessMessage('PDF prêt à être téléchargé (web).');
+              break;
+            }
+
+            Directory? targetDir;
+            try {
+              targetDir = await getDownloadsDirectory();
+            } catch (_) {
+              targetDir = null;
+            }
+            targetDir ??= await getApplicationDocumentsDirectory();
+
+            final safeClient = ((facture.clientInfo.nom?.isNotEmpty ?? false) ? facture.clientInfo.nom! : 'client')
+                .replaceAll(RegExp(r'[^A-Za-z0-9_\-]'), '_');
+            final fileName = 'facture_${safeClient}_${DateTime.now().millisecondsSinceEpoch}.pdf';
+            final filePath = '${targetDir.path}/$fileName';
+
+            try {
+              final file = File(filePath);
+              await file.writeAsBytes(bytes, flush: true);
+              _showSuccessMessage('PDF enregistré :\n$filePath');
+            } catch (e) {
+              debugPrint('Erreur écriture fichier PDF: $e');
+              await Printing.sharePdf(bytes: bytes, filename: fileName);
+              _showSuccessMessage('Impossible d\'écrire localement, PDF partagé.');
+            }
+            break;
+          }
+
+          _showErrorMessage('Document inconnu pour téléchargement');
           break;
 
         case 'print':
-          final bytes = await PdfService.instance.buildDevisPdfBytes(
-            devis,
-            footerNote: 'Généré par GarageLink',
-          );
-          await PdfService.instance.printPdfBytes(bytes);
-          _showSuccessMessage('Impression lancée');
+          if (isDevis) {
+            final Devis devis = doc as Devis;
+            final bytes = await PdfService.instance.buildDevisPdfBytes(devis, footerNote: 'Généré par GarageLink');
+            await PdfService.instance.printPdfBytes(bytes);
+            _showSuccessMessage('Impression Devis lancée');
+            break;
+          }
+
+          if (isFacture) {
+            final Facture facture = doc as Facture;
+            final bytes = await PdfService.instance.buildFacturePdfBytes(facture, footerNote: 'Généré par GarageLink');
+            await PdfService.instance.printPdfBytes(bytes);
+            _showSuccessMessage('Impression Facture lancée');
+            break;
+          }
+
+          _showErrorMessage('Document inconnu pour impression');
           break;
 
         default:
@@ -244,15 +298,24 @@ class _DevisPreviewPageState extends ConsumerState<DevisPreviewPage>
 
   @override
   Widget build(BuildContext context) {
-    // récupère l'état courant du provider et transforme en Devis via la méthode fournie
-    // (DevisFilterState contient bien toDevis()).
-    final Devis previewDevis =
-        widget.devis ?? ref.watch(devisProvider).toDevis();
-    final bool isFacture = previewDevis.status == DevisStatus.accepte;
+    // Determine the document to preview:
+    // priority: widget.facture > widget.devis > provider.devis
+    final Facture? previewFacture = widget.facture;
+    final Devis? previewDevisFromParam = widget.devis;
+    final Devis previewDevisFromProvider = ref.watch(devisProvider).toDevis();
 
-    // safe filename client name
-    final safeClientForFilename =
-        (previewDevis.clientName.isNotEmpty ? previewDevis.clientName : 'client')
+    final bool haveFacture = previewFacture != null;
+    final Devis previewDevis = previewDevisFromParam ?? previewDevisFromProvider;
+
+    // Decide which document to show (facture wins if present)
+    final bool isFacture = haveFacture;
+    final Object docToUse = isFacture ? previewFacture! : previewDevis;
+
+    // safe client name for filenames
+    final String safeClientForFilename = isFacture
+        ? ((previewFacture!.clientInfo.nom?.isNotEmpty ?? false) ? previewFacture.clientInfo.nom! : 'client')
+            .replaceAll(RegExp(r"[^A-Za-z0-9_]"), "_")
+        : ((previewDevis.clientName.isNotEmpty ? previewDevis.clientName : 'client'))
             .replaceAll(RegExp(r"[^A-Za-z0-9_]"), "_");
 
     return Scaffold(
@@ -261,7 +324,7 @@ class _DevisPreviewPageState extends ConsumerState<DevisPreviewPage>
         children: [
           CustomScrollView(
             slivers: [
-              _buildModernSliverAppBar(previewDevis, isFacture),
+              _buildModernSliverAppBar(isFacture ? null : previewDevis, isFacture),
               SliverFillRemaining(
                 child: Padding(
                   padding: const EdgeInsets.all(12),
@@ -285,13 +348,13 @@ class _DevisPreviewPageState extends ConsumerState<DevisPreviewPage>
                           canChangeOrientation: false,
                           canChangePageFormat: false,
                           build: (format) async {
-                            return await PdfService.instance.buildDevisPdfBytes(
-                              previewDevis,
-                              footerNote: 'Généré par GarageLink',
-                            );
+                            if (isFacture) {
+                              return await PdfService.instance.buildFacturePdfBytes(previewFacture!, footerNote: 'Généré par GarageLink');
+                            } else {
+                              return await PdfService.instance.buildDevisPdfBytes(previewDevis, footerNote: 'Généré par GarageLink');
+                            }
                           },
-                          pdfFileName:
-                              '${isFacture ? 'facture' : 'devis'}_$safeClientForFilename.pdf',
+                          pdfFileName: '${isFacture ? 'facture' : 'devis'}_$safeClientForFilename.pdf',
                           allowPrinting: true,
                           allowSharing: true,
                         ),
@@ -331,7 +394,16 @@ class _DevisPreviewPageState extends ConsumerState<DevisPreviewPage>
     );
   }
 
-  Widget _buildModernSliverAppBar(Devis devis, bool isFacture) {
+  Widget _buildModernSliverAppBar(Devis? devis, bool isFacture) {
+    // If facture mode, show generic "Facture" title and client from facture
+    final String title = isFacture ? 'Facture' : 'Devis';
+    final DevisStatus? status = isFacture ? null : devis?.status;
+    final String clientLabel = isFacture
+        ? (widget.facture?.clientInfo.nom?.isNotEmpty ?? false ? widget.facture!.clientInfo.nom! : 'Client')
+        : (devis?.clientName.isNotEmpty ?? false ? devis!.clientName : 'Client');
+
+    final bool accepted = (!isFacture && status == DevisStatus.accepte) || (isFacture);
+
     return SliverAppBar(
       expandedHeight: 140,
       pinned: true,
@@ -343,7 +415,7 @@ class _DevisPreviewPageState extends ConsumerState<DevisPreviewPage>
           return FlexibleSpaceBar(
             title: Transform.translate(
               offset: Offset(0, _slideAnimation.value * 0.3),
-              child: _buildTitleSection(devis, isFacture),
+              child: _buildTitleSectionGeneric(title, status, clientLabel, isFacture),
             ),
             background: Stack(
               children: [
@@ -426,11 +498,13 @@ class _DevisPreviewPageState extends ConsumerState<DevisPreviewPage>
           );
         },
       ),
-      actions: _buildAnimatedActions(devis, isFacture),
+      actions: _buildAnimatedActionsGeneric(isFacture),
     );
   }
 
-  Widget _buildTitleSection(Devis devis, bool isFacture) {
+  Widget _buildTitleSectionGeneric(String title, DevisStatus? status, String clientLabel, bool isFacture) {
+    final Color statusColor = isFacture ? PreviewColors.success : (status == null ? Colors.grey : _getStatusColor(status));
+    final String statusText = isFacture ? 'FACTURE' : (status == null ? '' : _getStatusText(status));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisAlignment: MainAxisAlignment.end,
@@ -438,7 +512,7 @@ class _DevisPreviewPageState extends ConsumerState<DevisPreviewPage>
         Row(
           children: [
             Text(
-              isFacture ? 'Facture' : 'Devis',
+              title,
               style: const TextStyle(
                 color: Colors.white,
                 fontSize: 16,
@@ -446,30 +520,51 @@ class _DevisPreviewPageState extends ConsumerState<DevisPreviewPage>
               ),
             ),
             const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-              decoration: BoxDecoration(
-                color: _getStatusColor(devis.status).withOpacity(0.2),
-                borderRadius: BorderRadius.circular(4),
-                border: Border.all(
-                  color: _getStatusColor(devis.status),
-                  width: 1,
+            if (!isFacture && status != null)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: statusColor.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(
+                    color: statusColor,
+                    width: 1,
+                  ),
+                ),
+                child: Text(
+                  statusText,
+                  style: TextStyle(
+                    color: statusColor,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
-              child: Text(
-                _getStatusText(devis.status),
-                style: TextStyle(
-                  color: _getStatusColor(devis.status),
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
+            if (isFacture)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: statusColor.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(
+                    color: statusColor,
+                    width: 1,
+                  ),
+                ),
+                child: Text(
+                  'FACTURE',
+                  style: TextStyle(
+                    color: statusColor,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
-            ),
           ],
         ),
         const SizedBox(height: 2),
         Text(
-          devis.clientName.isNotEmpty ? devis.clientName : 'Client non spécifié',
+          clientLabel,
           style: const TextStyle(
             color: Colors.white70,
             fontSize: 12,
@@ -479,23 +574,26 @@ class _DevisPreviewPageState extends ConsumerState<DevisPreviewPage>
     );
   }
 
-  List<Widget> _buildAnimatedActions(Devis devis, bool isFacture) {
+  List<Widget> _buildAnimatedActionsGeneric(bool isFacture) {
+    // Determine the doc to pass to handler
+    final Object docToUse = isFacture ? (widget.facture as Object) : (widget.devis ?? ref.watch(devisProvider).toDevis());
+
     final actions = [
       _buildActionButton(
         icon: Icons.send_rounded,
         tooltip: 'Envoyer ${isFacture ? 'facture' : 'devis'}',
-        onPressed: () => _handleAction('send', devis, isFacture),
+        onPressed: () => _handleAction('send', doc: docToUse),
         isPrimary: true,
       ),
       _buildActionButton(
         icon: Icons.download_rounded,
         tooltip: 'Télécharger PDF',
-        onPressed: () => _handleAction('download', devis, isFacture),
+        onPressed: () => _handleAction('download', doc: docToUse),
       ),
       _buildActionButton(
         icon: Icons.print_rounded,
         tooltip: 'Imprimer',
-        onPressed: () => _handleAction('print', devis, isFacture),
+        onPressed: () => _handleAction('print', doc: docToUse),
       ),
     ];
 
@@ -553,7 +651,7 @@ class _DevisPreviewPageState extends ConsumerState<DevisPreviewPage>
         return PreviewColors.success;
       case DevisStatus.refuse:
         return Colors.red;
-      }
+    }
   }
 
   String _getStatusText(DevisStatus status) {
@@ -566,6 +664,6 @@ class _DevisPreviewPageState extends ConsumerState<DevisPreviewPage>
         return 'ACCEPTÉ';
       case DevisStatus.refuse:
         return 'REFUSÉ';
-      }
+    }
   }
 }

@@ -284,117 +284,223 @@ Future<pw.Font?> _loadFont() async {
 
 extension PdfServiceFacture on PdfService {
   Future<Uint8List> buildFacturePdfBytes(Facture facture, {String? footerNote}) async {
-    final pdf = pw.Document();
-    final ttf = await _loadFont();
+  final pdf = pw.Document();
+  final ttf = await _loadFont();
 
-    final baseTextStyle = pw.TextStyle(font: ttf, fontSize: 10);
-    final headerTextStyle = pw.TextStyle(font: ttf, fontSize: 14, fontWeight: pw.FontWeight.bold);
-    final tableHeaderStyle = pw.TextStyle(font: ttf, fontSize: 10, fontWeight: pw.FontWeight.bold);
+  final baseTextStyle = pw.TextStyle(font: ttf, fontSize: 10);
+  final headerTextStyle = pw.TextStyle(font: ttf, fontSize: 14, fontWeight: pw.FontWeight.bold);
+  final tableHeaderStyle = pw.TextStyle(font: ttf, fontSize: 10, fontWeight: pw.FontWeight.bold);
 
-    pdf.addPage(
-      pw.MultiPage(
-        pageFormat: PdfPageFormat.a4,
-        margin: const pw.EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-        build: (context) {
-          return [
-            // HEADER
-            pw.Row(
-              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-              crossAxisAlignment: pw.CrossAxisAlignment.start,
-              children: [
-                pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    pw.Text(facture.clientInfo.nom ?? 'Client', style: headerTextStyle),
-                    if (facture.clientInfo.email != null)
-                      pw.Text(facture.clientInfo.email!, style: baseTextStyle),
-                    if (facture.clientInfo.telephone != null)
-                      pw.Text('Tel: ${facture.clientInfo.telephone}', style: baseTextStyle),
-                    pw.SizedBox(height: 6),
-                    pw.Text('Facture #: ${facture.numeroFacture}', style: baseTextStyle),
-                  ],
-                ),
-                pw.Column(
-                  crossAxisAlignment: pw.CrossAxisAlignment.end,
-                  children: [
-                    pw.Text('Date: ${_dateFmt.format(facture.invoiceDate)}', style: baseTextStyle),
-                    pw.SizedBox(height: 6),
+  // Calculs sûrs des totaux (préférence aux champs de facture s'ils sont valides)
+  final double partsTotalFromRows = facture.services.fold<double>(0.0, (sum, s) => sum + (s.total));
+  final double maindoeuvre = facture.maindoeuvre;
+  final double partsHT = (partsTotalFromRows > 0) ? partsTotalFromRows : 0.0;
+  final double totalHT = (facture.totalHT > 0) ? facture.totalHT : (partsHT + maindoeuvre);
+  final double tvaRate = (facture.tvaRate > 0) ? facture.tvaRate : 0.0;
+  final double totalTVA = (facture.totalTVA > 0) ? facture.totalTVA : (totalHT * tvaRate / 100.0);
+  final double totalTTC = (facture.totalTTC > 0) ? facture.totalTTC : (totalHT + totalTVA);
+
+  pdf.addPage(
+    pw.MultiPage(
+      pageFormat: PdfPageFormat.a4,
+      margin: const pw.EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+      build: (context) {
+        return <pw.Widget>[
+          // ----- HEADER (client + véhicule + mécano + infos facture) -----
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: pw.CrossAxisAlignment.start,
+            children: [
+              // gauche : client + véhicule
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Text(facture.clientInfo.nom ?? 'Client', style: headerTextStyle),
+                  if (facture.clientInfo.telephone != null && facture.clientInfo.telephone!.isNotEmpty)
+                    pw.Text('Tel: ${facture.clientInfo.telephone}', style: baseTextStyle),
+                  if (facture.clientInfo.email != null && facture.clientInfo.email!.isNotEmpty)
+                    pw.Text('${facture.clientInfo.email}', style: baseTextStyle),
+                  if (facture.clientInfo.adresse != null && facture.clientInfo.adresse!.isNotEmpty)
+                    pw.Text('${facture.clientInfo.adresse}', style: baseTextStyle),
+                  pw.SizedBox(height: 8),
+                  if ((facture.vehicleInfo?.isNotEmpty ?? false))
+                    pw.Column(
+                      crossAxisAlignment: pw.CrossAxisAlignment.start,
+                      children: [
+                        pw.Text('Véhicule :', style: pw.TextStyle(font: ttf, fontSize: 11, fontWeight: pw.FontWeight.bold)),
+                        pw.Text(facture.vehicleInfo, style: baseTextStyle),
+                        pw.SizedBox(height: 6),
+                      ],
+                    ),
+                ],
+              ),
+
+              // droite : infos facture + mécano
+              pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.end,
+                children: [
+                  pw.Text('Facture #: ${facture.numeroFacture}', style: baseTextStyle),
+                  pw.SizedBox(height: 4),
+                  pw.Text('Date: ${_dateFmt.format(facture.invoiceDate)}', style: baseTextStyle),
+                  pw.SizedBox(height: 6),
+                  if (facture.dueDate != null)
+                    pw.Text('Échéance: ${_dateFmt.format(facture.dueDate)}', style: baseTextStyle),
+                  if (facture.inspectionDate != null)
+                    pw.Text('Contrôle: ${_dateFmt.format(facture.inspectionDate)}', style: baseTextStyle),
+                  pw.SizedBox(height: 8),
+                  // Mécanicien (createdBy) — si createdBy contient un nom lisible
+                  if (facture.createdBy != null && facture.createdBy!.isNotEmpty)
                     pw.Container(
                       padding: const pw.EdgeInsets.all(6),
                       decoration: pw.BoxDecoration(border: pw.Border.all(color: PdfColors.grey300)),
-                      child: pw.Text(
-                        'Total TTC: ${_currency(facture.totalTTC)}',
-                        style: headerTextStyle,
-                      ),
+                      child: pw.Text('Mécanicien: ${facture.createdBy}', style: baseTextStyle),
                     ),
+                ],
+              ),
+            ],
+          ),
+
+          pw.SizedBox(height: 16),
+
+          // ----- TABLE HEADER -----
+          pw.Container(
+            decoration: pw.BoxDecoration(
+              border: pw.Border(bottom: pw.BorderSide(width: 1, color: PdfColors.grey)),
+            ),
+            padding: const pw.EdgeInsets.only(bottom: 8),
+            child: pw.Row(
+              children: [
+                pw.Expanded(flex: 6, child: pw.Text('Désignation', style: tableHeaderStyle)),
+                pw.Expanded(flex: 2, child: pw.Text('Réf', style: tableHeaderStyle, textAlign: pw.TextAlign.right)),
+                pw.Expanded(flex: 2, child: pw.Text('Qté', style: tableHeaderStyle, textAlign: pw.TextAlign.right)),
+                pw.Expanded(flex: 3, child: pw.Text('PU', style: tableHeaderStyle, textAlign: pw.TextAlign.right)),
+                pw.Expanded(flex: 3, child: pw.Text('Total', style: tableHeaderStyle, textAlign: pw.TextAlign.right)),
+              ],
+            ),
+          ),
+
+          pw.SizedBox(height: 8),
+
+          // ----- LIGNES DES SERVICES / PIÈCES -----
+          ...facture.services.map((s) {
+            final refStr = (s.pieceId != null && s.pieceId!.isNotEmpty) ? s.pieceId! : '-';
+            return pw.Padding(
+              padding: const pw.EdgeInsets.symmetric(vertical: 6),
+              child: pw.Row(
+                crossAxisAlignment: pw.CrossAxisAlignment.start,
+                children: [
+                  pw.Expanded(flex: 6, child: pw.Text(s.piece, style: baseTextStyle)),
+                  pw.Expanded(flex: 2, child: pw.Text(refStr, style: baseTextStyle, textAlign: pw.TextAlign.right)),
+                  pw.Expanded(flex: 2, child: pw.Text('${s.quantity}', style: baseTextStyle, textAlign: pw.TextAlign.right)),
+                  pw.Expanded(flex: 3, child: pw.Text(_currency(s.unitPrice), style: baseTextStyle, textAlign: pw.TextAlign.right)),
+                  pw.Expanded(flex: 3, child: pw.Text(_currency(s.total), style: baseTextStyle, textAlign: pw.TextAlign.right)),
+                ],
+              ),
+            );
+          }).toList(),
+
+          pw.Divider(),
+
+          // ----- BLOC TOTAUX -----
+          pw.Container(
+            alignment: pw.Alignment.centerRight,
+            child: pw.Column(
+              crossAxisAlignment: pw.CrossAxisAlignment.end,
+              children: [
+                // Sous-total pièces (somme des lignes)
+                pw.Row(
+                  mainAxisSize: pw.MainAxisSize.min,
+                  children: [
+                    pw.Text('Sous-total pièces: ', style: baseTextStyle),
+                    pw.SizedBox(width: 8),
+                    pw.Text(_currency(partsHT), style: baseTextStyle),
                   ],
+                ),
+                pw.SizedBox(height: 4),
+
+                // Main d'oeuvre
+                pw.Row(
+                  mainAxisSize: pw.MainAxisSize.min,
+                  children: [
+                    pw.Text('Main d\'œuvre: ', style: baseTextStyle),
+                    pw.SizedBox(width: 8),
+                    pw.Text(_currency(maindoeuvre), style: baseTextStyle),
+                  ],
+                ),
+                pw.SizedBox(height: 6),
+
+                // Total HT
+                pw.Row(
+                  mainAxisSize: pw.MainAxisSize.min,
+                  children: [
+                    pw.Text('Total HT: ', style: tableHeaderStyle),
+                    pw.SizedBox(width: 8),
+                    pw.Text(_currency(totalHT), style: tableHeaderStyle),
+                  ],
+                ),
+                pw.SizedBox(height: 4),
+
+                // TVA
+                pw.Row(
+                  mainAxisSize: pw.MainAxisSize.min,
+                  children: [
+                    pw.Text('TVA (${tvaRate.toStringAsFixed(2)}%): ', style: baseTextStyle),
+                    pw.SizedBox(width: 8),
+                    pw.Text(_currency(totalTVA), style: baseTextStyle),
+                  ],
+                ),
+
+                pw.SizedBox(height: 10),
+
+                // Total TTC
+                pw.Container(
+                  padding: const pw.EdgeInsets.all(8),
+                  decoration: pw.BoxDecoration(border: pw.Border.all(color: PdfColors.grey300)),
+                  child: pw.Row(
+                    mainAxisSize: pw.MainAxisSize.min,
+                    children: [
+                      pw.Text('Total TTC: ', style: pw.TextStyle(font: ttf, fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                      pw.SizedBox(width: 8),
+                      pw.Text(_currency(totalTTC), style: pw.TextStyle(font: ttf, fontSize: 12, fontWeight: pw.FontWeight.bold)),
+                    ],
+                  ),
                 ),
               ],
             ),
-            pw.SizedBox(height: 16),
+          ),
 
-            // TABLE HEADER
-            pw.Container(
-              decoration: pw.BoxDecoration(
-                border: pw.Border(bottom: pw.BorderSide(width: 1, color: PdfColors.grey)),
-              ),
-              padding: const pw.EdgeInsets.only(bottom: 8),
-              child: pw.Row(
-                children: [
-                  pw.Expanded(flex: 6, child: pw.Text('Désignation', style: tableHeaderStyle)),
-                  pw.Expanded(flex: 2, child: pw.Text('Qté', style: tableHeaderStyle, textAlign: pw.TextAlign.right)),
-                  pw.Expanded(flex: 3, child: pw.Text('PU', style: tableHeaderStyle, textAlign: pw.TextAlign.right)),
-                  pw.Expanded(flex: 3, child: pw.Text('Total', style: tableHeaderStyle, textAlign: pw.TextAlign.right)),
-                ],
-              ),
-            ),
-            pw.SizedBox(height: 8),
+          // ----- NOTES -----
+          if (facture.notes != null && facture.notes!.isNotEmpty) ...[
+            pw.SizedBox(height: 18),
+            pw.Text('Notes:', style: headerTextStyle),
+            pw.SizedBox(height: 6),
+            pw.Text(facture.notes!, style: baseTextStyle),
+          ],
 
-            // LIGNES SERVICES
-            ...facture.services.map((s) {
-              return pw.Padding(
-                padding: const pw.EdgeInsets.symmetric(vertical: 6),
-                child: pw.Row(
-                  crossAxisAlignment: pw.CrossAxisAlignment.start,
-                  children: [
-                    pw.Expanded(flex: 6, child: pw.Text(s.piece, style: baseTextStyle)),
-                    pw.Expanded(flex: 2, child: pw.Text('${s.quantity}', style: baseTextStyle, textAlign: pw.TextAlign.right)),
-                    pw.Expanded(flex: 3, child: pw.Text(_currency(s.unitPrice), style: baseTextStyle, textAlign: pw.TextAlign.right)),
-                    pw.Expanded(flex: 3, child: pw.Text(_currency(s.total), style: baseTextStyle, textAlign: pw.TextAlign.right)),
-                  ],
-                ),
-              );
-            }),
-
-            pw.Divider(),
-
-            // TOTALS
-            pw.Container(
-              alignment: pw.Alignment.centerRight,
-              child: pw.Column(
-                crossAxisAlignment: pw.CrossAxisAlignment.end,
-                children: [
-                  pw.Text('Total TTC: ${_currency(facture.totalTTC)}', style: headerTextStyle),
-                ],
-              ),
+          // footerNote optionnel
+          if (footerNote != null && footerNote.isNotEmpty)
+            pw.Padding(
+              padding: const pw.EdgeInsets.only(top: 16),
+              child: pw.Text(footerNote, style: pw.TextStyle(font: ttf, fontSize: 9, color: PdfColors.grey700)),
             ),
 
-            if (facture.notes != null && facture.notes!.isNotEmpty) ...[
-              pw.SizedBox(height: 18),
-              pw.Text('Notes:', style: headerTextStyle),
-              pw.Text(facture.notes!, style: baseTextStyle),
+          pw.Spacer(),
+
+          // ----- FOOTER -----
+          pw.Divider(),
+          pw.Row(
+            mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+            children: [
+              pw.Text('Généré par GarageLink', style: pw.TextStyle(font: ttf, fontSize: 9, color: PdfColors.grey)),
+              pw.Text('Créé: ${_dateFmt.format(DateTime.now())}', style: pw.TextStyle(font: ttf, fontSize: 9, color: PdfColors.grey)),
             ],
+          ),
+        ];
+      },
+    ),
+  );
 
-            if (footerNote != null && footerNote.isNotEmpty)
-              pw.Padding(
-                padding: const pw.EdgeInsets.only(top: 16),
-                child: pw.Text(footerNote, style: pw.TextStyle(font: ttf, fontSize: 9, color: PdfColors.grey700)),
-              ),
-          ];
-        },
-      ),
-    );
+  return pdf.save();
+}
 
-    return pdf.save();
-  }
 }

@@ -1,12 +1,11 @@
 import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:garagelink/MecanicienScreens/Facture/facture_preview_page.dart';
 import 'package:garagelink/MecanicienScreens/devis/devis_preview_page.dart';
 import 'package:garagelink/components/default_app_bar.dart';
 import 'package:garagelink/models/devis.dart';
+import 'package:garagelink/models/facture.dart';
 import 'package:garagelink/providers/auth_provider.dart';
 import 'package:garagelink/providers/devis_provider.dart';
 import 'package:garagelink/providers/factures_provider.dart';
@@ -144,14 +143,14 @@ class _FacturesScreenState extends ConsumerState<FactureScreen>
   }
 
  Widget _buildFactureCard(dynamic facture, int index) {
-  final clientName = (facture.clientInfo?.nom ?? 'Client').toString();
-  final invoiceDate = facture.invoiceDate ?? facture.createdAt ?? DateTime.now();
-  final montant = (facture.totalTTC as double?) ?? (facture.totalTTC ?? 0.0);
-  final displayId = (facture.numeroFacture?.toString().isNotEmpty ?? false)
+  final clientName = (facture is Facture ? (facture.clientInfo.nom) : (facture['clientInfo']?['nom'])) ?? 'Client';
+  final invoiceDate = (facture is Facture ? (facture.invoiceDate) : (facture['invoiceDate'])) ?? DateTime.now();
+  final montant = (facture is Facture ? (facture.totalTTC) : (facture['totalTTC'])) ?? 0.0;
+  final displayId = (facture is Facture && (facture.numeroFacture?.toString().isNotEmpty ?? false))
       ? facture.numeroFacture.toString()
-      : (facture.id?.toString() ?? '');
+      : ((facture is Facture) ? (facture.id?.toString() ?? '') : (facture['_id']?.toString() ?? facture['id']?.toString() ?? ''));
 
-  final String vehicleInfo = (facture.vehicleInfo?.toString() ?? '').trim();
+  final String vehicleInfo = (facture is Facture ? (facture.vehicleInfo ?? '') : (facture['vehicleInfo']?.toString() ?? '')).trim();
 
   return AnimatedContainer(
     duration: Duration(milliseconds: 300 + (index * 30)),
@@ -168,119 +167,289 @@ class _FacturesScreenState extends ConsumerState<FactureScreen>
           debugPrint('--- tap facture ---');
           debugPrint('facture.runtimeType = ${facture.runtimeType}');
           try {
-            debugPrint('facture.toString() = ${facture.toString()}');
-            debugPrint('facture.toJson() = ${(facture as dynamic).toJson()}');
+            if (facture is Facture) {
+              debugPrint('facture.toJson() = ${(facture as dynamic).toJson()}');
+            } else {
+              debugPrint('facture raw = $facture');
+            }
           } catch (_) {}
 
+          // helpers locaux
+          String? _extractId(dynamic raw) {
+            try {
+              if (raw == null) return null;
+              if (raw is String && raw.isNotEmpty) return raw;
+              if (raw is Map) {
+                if (raw.containsKey(r'$oid')) return raw[r'$oid']?.toString();
+                final cand = raw['_id'] ?? raw['id'] ?? raw['devisId'] ?? raw['id_str'] ?? raw['ID'];
+                if (cand != null) return cand.toString();
+              }
+              return raw.toString();
+            } catch (_) {
+              return null;
+            }
+          }
+
+          // ---------------------------
+          // _toMapIfPossible améliorée :
+          // - gère Map, Map<String,dynamic>, String JSON
+          // - gère Devis (appel toJson())
+          // - retourne Map<String,dynamic>? ou null
+          // ---------------------------
+          Map<String, dynamic>? _toMapIfPossible(dynamic d) {
+            try {
+              if (d == null) return null;
+
+              // si déjà Map<String, dynamic>
+              if (d is Map<String, dynamic>) return d;
+
+              // Map générique -> cast safe
+              if (d is Map) return Map<String, dynamic>.from(d);
+
+              // si c'est une instance de Devis -> utiliser toJson()
+              if (d is Devis) {
+                try {
+                  final jsonMap = (d as dynamic).toJson();
+                  if (jsonMap is Map<String, dynamic>) return Map<String, dynamic>.from(jsonMap);
+                  if (jsonMap is Map) return Map<String, dynamic>.from(jsonMap);
+                } catch (_) {
+                  // si toJson n'existe pas ou échoue, continuer
+                }
+              }
+
+              // si c'est une String -> tenter decode JSON
+              if (d is String) {
+                try {
+                  final parsed = json.decode(d);
+                  if (parsed is Map<String, dynamic>) return parsed;
+                  if (parsed is Map) return Map<String, dynamic>.from(parsed);
+                } catch (_) {
+                  // not JSON
+                }
+              }
+
+              return null;
+            } catch (e) {
+              debugPrint('Erreur _toMapIfPossible: $e');
+              return null;
+            }
+          }
+
+          // 1) essayer d'extraire un objet Devis embedded ou un devisId
           Devis? foundDevis;
           String? devisId;
 
-          // --- Extraire l'objet/ID du devis depuis la facture (handles Map ou instance) ---
           try {
-            if (facture is Map) {
-              final Map m = Map<String, dynamic>.from(facture);
-              final dynamic possibleObj = m['devis'] ?? m['devisId'] ?? m['devis_object'] ?? m['devisData'];
-
-              if (possibleObj != null) {
-                if (possibleObj is Devis) {
-                  foundDevis = possibleObj;
-                } else if (possibleObj is Map) {
-                  try {
-                    foundDevis = Devis.fromJson(Map<String, dynamic>.from(possibleObj));
-                  } catch (_) {
-                    // si fromJson échoue, on essaie d'extraire un id
-                  }
-                  devisId = possibleObj['_id']?.toString() ?? possibleObj['id']?.toString();
-                } else if (possibleObj is String) {
-                  try {
-                    final parsed = json.decode(possibleObj);
-                    if (parsed is Map<String, dynamic>) {
-                      foundDevis = Devis.fromJson(parsed);
-                      devisId = parsed['_id']?.toString() ?? parsed['id']?.toString();
-                    }
-                  } catch (_) {}
-                }
-              } else {
-                // pas d'objet imbriqué -> peut être un simple id string
-                devisId = m['devisId']?.toString() ?? m['devis_id']?.toString() ?? m['devisID']?.toString() ?? m['devis']?.toString();
-              }
-            } else {
-              // Facture est une instance de classe Facture
+            if (facture is Facture) {
+              // l'objet Facture (classe)
               final dyn = facture as dynamic;
-
-              // si la facture contient déjà un objet 'devis' (Map ou Devis)
-              final dynamic possible = dyn.devis ?? dyn.devisId ?? dyn.devis_object;
+              final dynamic possible = dyn.devis ?? dyn.devis_object ?? dyn.devisData;
               if (possible != null) {
                 if (possible is Devis) {
                   foundDevis = possible;
-                } else if (possible is Map) {
-                  try {
-                    foundDevis = Devis.fromJson(Map<String, dynamic>.from(possible));
-                  } catch (_) {}
-                  devisId = possible['_id']?.toString() ?? possible['id']?.toString();
-                } else if (possible is String) {
-                  try {
-                    final parsed = json.decode(possible);
-                    if (parsed is Map<String, dynamic>) {
+                  devisId = _extractId(possible.id ?? possible.devisId);
+                } else {
+                  final parsed = _toMapIfPossible(possible);
+                  if (parsed != null) {
+                    try {
                       foundDevis = Devis.fromJson(parsed);
-                      devisId = parsed['_id']?.toString() ?? parsed['id']?.toString();
-                    } else {
-                      // string non json -> peut être id
-                      devisId = possible.toString();
-                    }
-                  } catch (_) {
-                    // string non-json -> essayer comme id
-                    devisId = possible.toString();
+                    } catch (_) {}
+                    devisId = _extractId(parsed);
+                  } else {
+                    devisId = _extractId(possible);
                   }
                 }
               } else {
-                // aucun champ 'devis' -> essayer d'extraire un id direct
-                try {
-                  devisId = (dyn.devisId ?? dyn.devis_id ?? dyn.devisID)?.toString();
-                } catch (_) {
-                  devisId = null;
+                // pas d'objet embed, tenter champs id
+                devisId = _extractId(dyn.devisId ?? dyn.devis_id ?? dyn.devisID ?? dyn.devis);
+              }
+            } else {
+              // facture est Map ou autre dynamique (API raw)
+              final m = _toMapIfPossible(facture) ?? <String, dynamic>{};
+              final possibleObj = m['devis'] ?? m['devisObject'] ?? m['devisId'] ?? m['devis_id'] ?? m['devisData'];
+              if (possibleObj != null) {
+                if (possibleObj is Devis) {
+                  foundDevis = possibleObj;
+                  devisId = _extractId(possibleObj.id ?? possibleObj.devisId);
+                } else {
+                  final parsed = _toMapIfPossible(possibleObj);
+                  if (parsed != null) {
+                    try {
+                      foundDevis = Devis.fromJson(parsed);
+                    } catch (_) {}
+                    devisId = _extractId(parsed);
+                  } else {
+                    devisId = _extractId(possibleObj);
+                  }
                 }
+              } else {
+                // prendre devisId direct depuis la map facture
+                devisId = _extractId(m['devisId'] ?? m['devis'] ?? m['devis_id'] ?? m['_devis'] ?? m['devisID']);
               }
             }
-          } catch (e) {
-            debugPrint('Erreur extraction devisId/from facture: $e');
+          } catch (e, st) {
+            debugPrint('Erreur extraction devisId/from facture: $e\n$st');
             devisId = null;
           }
 
           debugPrint('foundDevis=${foundDevis != null}, resolved devisId: $devisId');
 
-          // Si on a un objet Devis complet (ou partiel) -> ouvrir preview
-          if (foundDevis != null) {
-            if (!mounted) return;
-            Navigator.push(context, MaterialPageRoute(builder: (_) => DevisPreviewPage(devis: foundDevis)));
-            return;
-          }
+          // Si on a déjà un Devis complet -> ouvrir preview Devis
+         if (foundDevis != null) {
+  debugPrint('foundDevis initial services.length = ${foundDevis.services.length}');
+  // Si le devis embarqué a déjà des lignes -> on ouvre directement
+  if (foundDevis.services.isNotEmpty) {
+    if (!mounted) return;
+    Navigator.push(context, MaterialPageRoute(builder: (_) => DevisPreviewPage(devis: foundDevis)));
+    return;
+  }
 
-          // Si pas d'id, fallback sur preview facture
+  // Si le devis embarqué est PARTIEL (services vides) -> tenter de récupérer une version complète
+  // priorité: cache provider -> notifier.loadById -> API direct
+  if (devisId == null || devisId.isEmpty) {
+    // pas d'id disponible : on ouvre quand même le preview avec l'objet partiel
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Devis embarqué partiel : impossible de charger les lignes (id manquant).'), duration: Duration(seconds: 3)),
+    );
+    Navigator.push(context, MaterialPageRoute(builder: (_) => DevisPreviewPage(devis: foundDevis)));
+    return;
+  }
+
+  // show loader modal
+  if (!mounted) return;
+  showDialog(context: context, barrierDismissible: false, builder: (_) => const Center(child: CircularProgressIndicator()));
+
+  try {
+    // 1) tenter cache local via provider.family
+    Devis? fullFromCache;
+    try {
+      fullFromCache = ref.read(devisByIdProvider(devisId));
+    } catch (_) {
+      fullFromCache = null;
+    }
+    if (fullFromCache != null && fullFromCache.services.isNotEmpty) {
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      Navigator.push(context, MaterialPageRoute(builder: (_) => DevisPreviewPage(devis: fullFromCache)));
+      return;
+    }
+
+    // 2) tenter via notifier.loadById (mettra à jour le cache si réussi)
+    Devis? fetched;
+    try {
+      fetched = await ref.read(devisProvider.notifier).loadById(devisId);
+    } catch (e) {
+      debugPrint('loadById threw: $e');
+      fetched = null;
+    }
+
+    if (fetched != null && fetched.services.isNotEmpty) {
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      Navigator.push(context, MaterialPageRoute(builder: (_) => DevisPreviewPage(devis: fetched)));
+      return;
+    }
+
+    // 3) appel API direct (fallback, debug)
+    try {
+      final raw = await DevisApi.getDevisById(ref.read(authTokenProvider)!, devisId);
+      debugPrint('Direct API response runtimeType=${raw.runtimeType}');
+      debugPrint('Direct API response raw: $raw');
+
+      // on utilise ta fonction _toMapIfPossible existante (ou adapte ici) pour convertir raw -> Map
+      final Map<String, dynamic>? maybeMap = _toMapIfPossible(raw);
+      if (maybeMap != null) {
+        try {
+          final Devis dd = Devis.fromJson(maybeMap);
+          if (dd.services.isNotEmpty) {
+            if (!mounted) return;
+            Navigator.of(context).pop();
+            Navigator.push(context, MaterialPageRoute(builder: (_) => DevisPreviewPage(devis: dd)));
+            return;
+          } else {
+            debugPrint('API returned Devis but services still empty');
+          }
+        } catch (e) {
+          debugPrint('Parsing API raw -> Devis failed: $e');
+        }
+      }
+    } catch (apiErr) {
+      debugPrint('Direct API call failed: $apiErr');
+    }
+
+    // Si on arrive ici : récupération impossible / devis sans lignes -> informer et ouvrir preview partiel
+    if (!mounted) return;
+    Navigator.of(context).pop();
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Impossible de charger les lignes du devis — affichage partiel.'), duration: Duration(seconds: 4)),
+    );
+    Navigator.push(context, MaterialPageRoute(builder: (_) => DevisPreviewPage(devis: foundDevis)));
+    return;
+  } catch (e) {
+    try {
+      Navigator.of(context).pop();
+    } catch (_) {}
+    debugPrint('Erreur lors du fetch complet du devis: $e');
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Erreur lors du chargement du devis, ouverture partielle.')));
+    Navigator.push(context, MaterialPageRoute(builder: (_) => DevisPreviewPage(devis: foundDevis)));
+    return;
+  }
+}
+
+          // Si pas d'id, on ouvre la preview Facture directement
           if (devisId == null || devisId.isEmpty) {
             debugPrint('aucun devisId trouvé -> ouverture preview facture');
             if (!mounted) return;
-            Navigator.push(context, MaterialPageRoute(builder: (_) => FacturePreviewPage(facture: facture)));
+
+            // construire un Facture si possible
+            Facture? factToSend;
+            try {
+              if (facture is Facture) {
+                factToSend = facture;
+              } else {
+                final Map<String, dynamic>? m = _toMapIfPossible(facture);
+                if (m != null) factToSend = Facture.fromJson(m);
+              }
+            } catch (e) {
+              debugPrint('Impossible de convertir la facture en objet Facture: $e');
+              factToSend = null;
+            }
+
+            Navigator.push(context, MaterialPageRoute(builder: (_) => DevisPreviewPage(facture: factToSend)));
             return;
           }
 
-          // show loader modal
+          // Sinon on a un devisId -> tentative : cache -> provider -> API direct
           if (!mounted) return;
           showDialog(context: context, barrierDismissible: false, builder: (_) => const Center(child: CircularProgressIndicator()));
 
           try {
-            // 1) essai cache local via provider.family
-            final Devis? mem = ref.read(devisByIdProvider(devisId));
+            // 1) cache local via provider.family
+            Devis? mem;
+            try {
+              mem = ref.read(devisByIdProvider(devisId));
+            } catch (_) {
+              mem = null;
+            }
             if (mem != null) {
-              Navigator.of(context).pop();
               if (!mounted) return;
+              Navigator.of(context).pop(); // fermer loader
               Navigator.push(context, MaterialPageRoute(builder: (_) => DevisPreviewPage(devis: mem)));
               return;
             }
 
-            // 2) sinon fetch via notifier.loadById (met à jour le cache local si réussi)
-            final Devis? fetched = await ref.read(devisProvider.notifier).loadById(devisId);
+            // 2) fetch via notifier (met à jour cache si succeed)
+            Devis? fetched;
+            try {
+              fetched = await ref.read(devisProvider.notifier).loadById(devisId);
+            } catch (e) {
+              debugPrint('loadById threw: $e');
+              fetched = null;
+            }
 
+            if (!mounted) return;
             Navigator.of(context).pop(); // fermer loader
 
             if (fetched != null) {
@@ -289,35 +458,75 @@ class _FacturesScreenState extends ConsumerState<FactureScreen>
               return;
             }
 
-            // 3) tentative directe d'appel API pour debug (affiche raw) si besoin
+            // 3) fallback: call direct API for debugging (no navigation)
             try {
               final raw = await DevisApi.getDevisById(ref.read(authTokenProvider)!, devisId);
               debugPrint('Direct API response runtimeType=${raw.runtimeType}');
               debugPrint('Direct API response raw: $raw');
+
+              // utilise _toMapIfPossible: gère Map OR Devis OR String JSON
+              final Map<String, dynamic>? maybeMap = _toMapIfPossible(raw);
+              if (maybeMap != null) {
+                try {
+                  final Devis dd = Devis.fromJson(maybeMap);
+                  if (!mounted) return;
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => DevisPreviewPage(devis: dd)));
+                  return;
+                } catch (_) {
+                  // ignore parse error
+                }
+              }
             } catch (apiErr) {
               debugPrint('Direct API call failed: $apiErr');
             }
 
-            // informer l'utilisateur
+            // Si on arrive ici -> devis introuvable : informer l'utilisateur et ouvrir preview facture
             if (!mounted) return;
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('Devis lié introuvable. Vérifie le champ devisId dans la facture ou la réponse API.'), duration: Duration(seconds: 4)),
             );
 
-            // fallback: ouvrir preview facture
+            // construire objet Facture et ouvrir preview facture
+            Facture? factToSend;
+            try {
+              if (facture is Facture) {
+                factToSend = facture;
+              } else {
+                final Map<String, dynamic>? m = _toMapIfPossible(facture);
+                if (m != null) factToSend = Facture.fromJson(m);
+              }
+            } catch (e) {
+              debugPrint('Impossible de convertir la facture en objet Facture (fallback): $e');
+              factToSend = null;
+            }
+
             if (!mounted) return;
-            Navigator.push(context, MaterialPageRoute(builder: (_) => FacturePreviewPage(facture: facture)));
+            Navigator.push(context, MaterialPageRoute(builder: (_) => DevisPreviewPage(facture: factToSend)));
           } catch (e) {
-            // assure la fermeture du loader en cas d'erreur
+            // assure fermeture loader
             try {
               Navigator.of(context).pop();
             } catch (_) {}
             debugPrint('Erreur récupération devis: $e');
             if (!mounted) return;
             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Erreur lors de la récupération du devis')));
-            Navigator.push(context, MaterialPageRoute(builder: (_) => FacturePreviewPage(facture: facture)));
+            // fallback : ouvrir preview facture
+            Facture? factToSend;
+            try {
+              if (facture is Facture) {
+                factToSend = facture;
+              } else {
+                final Map<String, dynamic>? m = _toMapIfPossible(facture);
+                if (m != null) factToSend = Facture.fromJson(m);
+              }
+            } catch (_) {
+              factToSend = null;
+            }
+            if (!mounted) return;
+            Navigator.push(context, MaterialPageRoute(builder: (_) => DevisPreviewPage(facture: factToSend)));
           }
         },
+
         child: Padding(
           padding: const EdgeInsets.all(16),
           child: Row(
@@ -345,7 +554,7 @@ class _FacturesScreenState extends ConsumerState<FactureScreen>
                   children: [
                     // Nom client
                     Text(
-                      clientName,
+                      clientName ?? 'Client',
                       style: const TextStyle(
                         fontWeight: FontWeight.w700,
                         fontSize: 16,
@@ -361,7 +570,7 @@ class _FacturesScreenState extends ConsumerState<FactureScreen>
                         Icon(Icons.calendar_today, size: 14, color: Colors.grey[600]),
                         const SizedBox(width: 4),
                         Text(
-                          DateFormat.yMd().format(invoiceDate),
+                          (invoiceDate is DateTime) ? DateFormat.yMd().format(invoiceDate) : invoiceDate.toString(),
                           style: TextStyle(color: Colors.grey[600], fontSize: 12),
                         ),
                       ],
@@ -399,7 +608,7 @@ class _FacturesScreenState extends ConsumerState<FactureScreen>
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
-                      '${montant.toStringAsFixed(2)} DT',
+                      '${(montant is double ? montant : (double.tryParse(montant.toString()) ?? 0.0)).toStringAsFixed(2)} DT',
                       style: const TextStyle(
                         fontWeight: FontWeight.w700,
                         color: successColor,
@@ -409,7 +618,7 @@ class _FacturesScreenState extends ConsumerState<FactureScreen>
                   ),
                   const SizedBox(height: 8),
                   SizedBox(
-                    width: 100, // réduit un peu par rapport à 120
+                    width: 100,
                     child: Text(
                       displayId,
                       textAlign: TextAlign.right,
@@ -428,6 +637,8 @@ class _FacturesScreenState extends ConsumerState<FactureScreen>
     ),
   );
 }
+
+
 
 
 
