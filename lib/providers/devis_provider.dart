@@ -1,3 +1,6 @@
+import 'dart:convert';
+
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:garagelink/models/devis.dart';
 import 'package:garagelink/providers/auth_provider.dart';
@@ -175,6 +178,96 @@ class DevisNotifier extends StateNotifier<DevisFilterState> {
     state = state.copyWith(services: copy);
   }
 
+ Future<Devis?> loadById(String id) async {
+  if (!_hasToken) {
+    setError('Token d\'authentification requis');
+    return null;
+  }
+
+  setLoading(true);
+  try {
+    // Appel API principal (signature token, id)
+    final dynamic resp = await DevisApi.getDevisById(_token!, id);
+
+    debugPrint('>>> DevisApi.getDevisById runtimeType=${resp.runtimeType}');
+    debugPrint('>>> DevisApi.getDevisById raw: $resp');
+
+    if (resp == null) {
+      debugPrint('loadById: réponse nulle');
+      return null;
+    }
+
+    Devis? d;
+
+    if (resp is Devis) {
+      d = resp;
+    } else if (resp is Map<String, dynamic>) {
+      d = Devis.fromJson(resp);
+    } else if (resp is String) {
+      try {
+        final decoded = json.decode(resp);
+        debugPrint('loadById: decoded string -> ${decoded.runtimeType}');
+        if (decoded is Map<String, dynamic>) {
+          d = Devis.fromJson(decoded);
+        } else if (decoded is Map && decoded['data'] is Map) {
+          d = Devis.fromJson(Map<String, dynamic>.from(decoded['data']));
+        }
+      } catch (e) {
+        debugPrint('loadById: erreur decode JSON string: $e');
+      }
+    } else {
+      try {
+        final maybeMap = resp as Map;
+        final extracted = maybeMap['devis'] ?? maybeMap['data'] ?? maybeMap['result'] ?? maybeMap['payload'] ?? maybeMap['item'];
+        if (extracted != null) {
+          if (extracted is Map) d = Devis.fromJson(Map<String, dynamic>.from(extracted));
+        } else {
+          d = Devis.fromJson(Map<String, dynamic>.from(maybeMap));
+        }
+      } catch (e) {
+        debugPrint('loadById: impossible de convertir resp en Map -> $e');
+      }
+    }
+
+    if (d == null && resp is Map) {
+      final Map m = Map<String, dynamic>.from(resp);
+      final dynamic candidate = m['data'] ?? m['devis'] ?? m['result'] ?? m['payload'] ?? m['item'];
+      if (candidate is Map<String, dynamic>) {
+        try {
+          d = Devis.fromJson(candidate);
+        } catch (e) {
+          debugPrint('loadById: échec Devis.fromJson sur candidate: $e');
+        }
+      }
+    }
+
+    if (d != null) {
+      // <-- fix: créer une variable locale non-nullable pour l'analyseur
+      final Devis dd = d;
+
+      // upsert dans le cache local (state.devis)
+      final idx = state.devis.indexWhere((x) => x.devisId == dd.devisId || x.id == dd.id);
+      final List<Devis> copy = [...state.devis];
+      if (idx >= 0) {
+        copy[idx] = dd;
+      } else {
+        copy.insert(0, dd);
+      }
+      state = state.copyWith(devis: copy);
+    } else {
+      debugPrint('loadById: pas de Devis construit à partir de la réponse.');
+    }
+
+    return d;
+  } catch (e, st) {
+    debugPrint('DevisNotifier.loadById error: $e\n$st');
+    setError(e.toString());
+    return null;
+  } finally {
+    setLoading(false);
+  }
+}
+
   void updateServiceAt(int index, Service service) {
     if (index < 0 || index >= state.services.length) return;
     final copy = [...state.services];
@@ -212,6 +305,8 @@ class DevisNotifier extends StateNotifier<DevisFilterState> {
   // Pense juste à utiliser DevisStatus au lieu de String pour status
 }
 
+
+
 final devisProvider = StateNotifierProvider<DevisNotifier, DevisFilterState>(
   (ref) => DevisNotifier(ref),
 );
@@ -224,3 +319,6 @@ final devisByIdProvider = Provider.family<Devis?, String>((ref, id) {
     return null;
   }
 });
+
+
+ 

@@ -25,6 +25,10 @@ class _WorkOrderPageState extends ConsumerState<WorkOrderPage> with TickerProvid
     _animationController = AnimationController(duration: const Duration(milliseconds: 800), vsync: this);
     _fadeAnimation = CurvedAnimation(parent: _animationController, curve: Curves.easeInOut);
     _animationController.forward();
+
+     Future.microtask(() {
+    ref.read(ordresProvider.notifier).loadAll();
+  });
   }
 
   @override
@@ -82,41 +86,53 @@ class _WorkOrderPageState extends ConsumerState<WorkOrderPage> with TickerProvid
     return filtered;
   }    
 
-  @override
-  Widget build(BuildContext context) {
-    final ordresState = ref.watch(ordresProvider);
-    final ordres = ordresState.ordres;
-    final filteredOrdres = _getFilteredOrders(ordres);
-    final screenWidth = MediaQuery.of(context).size.width;
-    final isTablet = screenWidth > 768;
+ @override
+Widget build(BuildContext context) {
+  final ordresState = ref.watch(ordresProvider);
 
+  if (ordresState.loading) {
+    return const Scaffold(
+      body: Center(child: CircularProgressIndicator()),
+    );
+  }
+
+  if (ordresState.error != null) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
-      body: CustomScrollView(
-        slivers: [
-          _buildAppBar(),
-          SliverToBoxAdapter(
-            child: FadeTransition(
-              opacity: _fadeAnimation,
-              child: Padding(
-                padding: EdgeInsets.all(isTablet ? 24 : 16),
-                child: Column(
-                  children: [
-                    _buildStatsCards(ordres),
-                    const SizedBox(height: 20),
-                    _buildSearchAndFilters(),
-                    const SizedBox(height: 20),
-                    _buildOrdersList(filteredOrdres),
-                  ],
-                ),
+      body: Center(child: Text('Erreur : ${ordresState.error}')),
+    );
+  }
+
+  final ordres = ordresState.ordres;
+  final filteredOrdres = _getFilteredOrders(ordres);
+  final screenWidth = MediaQuery.of(context).size.width;
+  final isTablet = screenWidth > 768;
+
+  return Scaffold(
+    backgroundColor: const Color(0xFFF8FAFC),
+    body: CustomScrollView(
+      slivers: [
+        _buildAppBar(),
+        SliverToBoxAdapter(
+          child: FadeTransition(
+            opacity: _fadeAnimation,
+            child: Padding(
+              padding: EdgeInsets.all(isTablet ? 24 : 16),
+              child: Column(
+                children: [
+                  _buildStatsCards(ordres),
+                  const SizedBox(height: 20),
+                  _buildSearchAndFilters(),
+                  const SizedBox(height: 20),
+                  _buildOrdersList(filteredOrdres),
+                ],
               ),
             ),
           ),
-        ],
-      ),
-      // FAB supprimé : création d'ordres uniquement depuis un devis
-    );
-  }
+        ),
+      ],
+    ),
+  );
+}
 
   Widget _buildAppBar() {
     return SliverAppBar(
@@ -214,73 +230,105 @@ class _WorkOrderPageState extends ConsumerState<WorkOrderPage> with TickerProvid
     );
   }
 
-  Widget _buildOrdersList(List<OrdreTravail> ordres) {
-    if (ordres.isEmpty) {
-      return Container(
-        padding: const EdgeInsets.all(40),
-        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
-        child: Column(
-          children: [
-            Icon(Icons.inbox_outlined, size: 64, color: Colors.grey[400]),
-            const SizedBox(height: 16),
-            Text('Aucun ordre trouvé', style: TextStyle(fontSize: 18, color: Colors.grey[600], fontWeight: FontWeight.w500)),
-            const SizedBox(height: 8),
-            Text('Essayez de modifier vos critères de recherche', style: TextStyle(color: Colors.grey[500])),
-          ],
-        ),
-      );
-    }
-
-    return ModernCard(
-      title: 'Liste des ordres (${ordres.length})',
-      icon: Icons.assignment,
-      borderColor: const Color(0xFF357ABD),
+ Widget _buildOrdersList(List<OrdreTravail> ordres) {
+  if (ordres.isEmpty) {
+    return Container(
+      padding: const EdgeInsets.all(40),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
       child: Column(
-        children: ordres.map((ordre) {
-          final statusLabel = _ordreStatusLabel(ordre);
-          final clientName = ordre.clientInfo.nom;
-          final mecanicien = ordre.taches.isNotEmpty ? ordre.taches.first.mecanicienNom : '—';
-          final atelier = ordre.atelierNom;
-          final dateStr = ordre.dateCommence.toLocal().toString().substring(0, 16);
-          return Container(
-            margin: const EdgeInsets.only(bottom: 12),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFE5E7EB)),
-              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 4, offset: const Offset(0, 2))],
-            ),
-            child: ListTile(
-              contentPadding: const EdgeInsets.all(16),
-              title: Row(
-                children: [
-                  Expanded(child: Text('${ordre.numeroOrdre} • $clientName', style: const TextStyle(fontWeight: FontWeight.w600))),
-                  _buildStatusChip(statusLabel),
-                ],
-              ),
-              subtitle: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const SizedBox(height: 8),
-                  Text('🔧 $mecanicien', style: TextStyle(color: Colors.grey[600])),
-                  Text('🏭 $atelier • 📅 $dateStr', style: TextStyle(color: Colors.grey[600])),
-                ],
-              ),
-              trailing: PopupMenuButton<String>(
-                onSelected: (value) => _handleOrderAction(context, ref, ordre, value),
-                itemBuilder: (context) => [
-                  const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit), SizedBox(width: 8), Text('Modifier')])),
-                  const PopupMenuItem(value: 'call', child: Row(children: [Icon(Icons.phone), SizedBox(width: 8), Text('Appeler')])),
-                  const PopupMenuItem(value: 'report', child: Row(children: [Icon(Icons.description), SizedBox(width: 8), Text('Rapport')])),
-                ],
-              ),
-              onTap: () => _editOrderStatus(context, ref, ordre),
-            ),
-          );
-        }).toList(),
+        children: [
+          Icon(Icons.inbox_outlined, size: 64, color: Colors.grey[400]),
+          const SizedBox(height: 16),
+          Text('Aucun ordre trouvé', style: TextStyle(fontSize: 18, color: Colors.grey[600], fontWeight: FontWeight.w500)),
+          const SizedBox(height: 8),
+          Text('Essayez de modifier vos critères de recherche', style: TextStyle(color: Colors.grey[500])),
+        ],
       ),
     );
   }
+
+  return ModernCard(
+    title: 'Liste des ordres (${ordres.length})',
+    icon: Icons.assignment,
+    borderColor: const Color(0xFF357ABD),
+    child: Column(
+      children: ordres.map((ordre) {
+        final statusLabel = _ordreStatusLabel(ordre);
+        final clientName = ordre.clientInfo.nom;
+        final vehicule = ordre.vehiculedetails.nom;
+        final atelier = ordre.atelierNom;
+        final dateStr = ordre.dateCommence.toLocal().toString().substring(0, 10);
+        final progression = ordre.progressionPourcentage;
+        
+        return Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFFE5E7EB)),
+            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 4, offset: const Offset(0, 2))],
+          ),
+          child: ListTile(
+            contentPadding: const EdgeInsets.all(16),
+            title: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '${ordre.numeroOrdre} • $clientName',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                ),
+                _buildStatusChip(statusLabel),
+              ],
+            ),
+          subtitle: Column(
+  crossAxisAlignment: CrossAxisAlignment.start,
+  children: [
+    const SizedBox(height: 6),
+    Text('🚗 $vehicule', style: TextStyle(color: Colors.grey[700])),
+    Text('🏭 $atelier • 📅 $dateStr', style: TextStyle(color: Colors.grey[700])),
+    const SizedBox(height: 6),
+    Row(
+      children: [
+        Expanded(
+          child: LinearProgressIndicator(
+            value: progression / 100,
+            backgroundColor: Colors.grey[200],
+            color: progression >= 100 ? Colors.green : Colors.blue,
+            minHeight: 6,
+            borderRadius: BorderRadius.circular(8),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text('$progression%', style: TextStyle(color: Colors.grey[600])),
+      ],
+    ),
+    const SizedBox(height: 4),
+    if (ordre.enRetard) Row(
+      children: const [
+        Icon(Icons.warning, color: Colors.red, size: 18),
+        SizedBox(width: 4),
+        Text('En retard',
+            style: TextStyle(color: Colors.red, fontWeight: FontWeight.w600)),
+      ],
+    ),
+  ],
+),
+            trailing: PopupMenuButton<String>(
+              onSelected: (value) => _handleOrderAction(context, ref, ordre, value),
+              itemBuilder: (context) => [
+                const PopupMenuItem(value: 'edit', child: Row(children: [Icon(Icons.edit), SizedBox(width: 8), Text('Modifier')])),
+                
+              ],
+            ),
+            onTap: () => _editOrderStatus(context, ref, ordre),
+          ),
+        );
+      }).toList(),
+    ),
+  );
+}
+
 
   Widget _buildStatusChip(String status) {
     final colors = {

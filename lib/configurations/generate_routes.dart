@@ -34,7 +34,7 @@ import 'package:garagelink/MecanicienScreens/stock/stock_dashboard.dart';
 // create_order_screen ne doit plus être instanciée sans argument ici,
 // on l'utilisera via route en lui passant un Devis en argument.
 import 'package:garagelink/MecanicienScreens/ordreTravail/create_ordre_screen.dart';
-import 'package:garagelink/MecanicienScreens/ordreTravail/work_ordre_page.dart';
+import 'package:garagelink/MecanicienScreens/ordreTravail/ordre_dash.dart';
 import 'package:garagelink/models/ficheClient.dart';
 import 'package:garagelink/models/facture.dart';
 import 'package:garagelink/models/devis.dart'; // <-- ajouté

@@ -30,46 +30,55 @@ class OrdreApi {
 
   /// Récupérer tous les ordres (GET /api)
   static Future<Map<String, dynamic>> getAllOrdres({
-    required String token,
-    int page = 1,
-    int limit = 10,
-    String? status,
-    String? atelierId,
-    String? priorite,
-    DateTime? dateDebut,
-    DateTime? dateFin,
-    String sortBy = 'createdAt',
-    String sortOrder = 'desc',
-  }) async {
-    final Map<String, String> queryParams = {
-      'page': page.toString(),
-      'limit': limit.toString(),
-      if (status != null) 'status': status,
-      if (atelierId != null) 'atelier': atelierId,
-      if (priorite != null) 'priorite': priorite,
-      if (dateDebut != null) 'dateDebut': dateDebut.toIso8601String(),
-      if (dateFin != null) 'dateFin': dateFin.toIso8601String(),
-      'sortBy': sortBy,
-      'sortOrder': sortOrder,
+  required String token,
+  int page = 1,
+  int limit = 10,
+  String? status,
+  String? atelierId,
+  String? priorite,
+  DateTime? dateDebut,
+  DateTime? dateFin,
+  String sortBy = 'createdAt',
+  String sortOrder = 'desc',
+}) async {
+  final Map<String, String> queryParams = {
+    'page': page.toString(),
+    'limit': limit.toString(),
+    if (status != null) 'status': status,
+    if (atelierId != null) 'atelier': atelierId,
+    if (priorite != null) 'priorite': priorite,
+    if (dateDebut != null) 'dateDebut': dateDebut.toIso8601String(),
+    if (dateFin != null) 'dateFin': dateFin.toIso8601String(),
+    'sortBy': sortBy,
+    'sortOrder': sortOrder,
+  };
+
+  // ← utiliser baseRoot (ex: http://172.16.58.13:5000/api) pour la route '/'
+  final url = Uri.parse(baseRoot).replace(queryParameters: queryParams);
+
+  print('➡️ GET Ordres URL: $url');
+  print('➡️ Headers: ${_authHeaders(token)}');
+
+  final response = await http.get(url, headers: _authHeaders(token));
+
+  print('⬅️ Response status: ${response.statusCode}');
+  print('⬅️ Response body: ${response.body}');
+
+  _ensureJsonResponse(response);
+
+  final json = jsonDecode(response.body) as Map<String, dynamic>;
+  if (response.statusCode == 200 && (json['success'] == true || json.containsKey('ordres'))) {
+    return {
+      'ordres': (json['ordres'] as List<dynamic>? ?? [])
+          .map((item) => OrdreTravail.fromJson(item as Map<String, dynamic>))
+          .toList(),
+      'pagination': json['pagination'] as Map<String, dynamic>? ?? {},
     };
-
-    final url = Uri.parse(baseRoot).replace(queryParameters: queryParams);
-    final response = await http.get(url, headers: _authHeaders(token));
-    _ensureJsonResponse(response);
-
-    final json = jsonDecode(response.body) as Map<String, dynamic>;
-    if (response.statusCode == 200 && (json['success'] == true || json.containsKey('ordres'))) {
-      return {
-        'ordres': (json['ordres'] as List<dynamic>?)
-                ?.map((item) => OrdreTravail.fromJson(item as Map<String, dynamic>))
-                .toList() ??
-            [],
-        'pagination': json['pagination'] as Map<String, dynamic>? ?? {},
-      };
-    } else {
-      throw Exception(json['error'] ?? json['message'] ?? 'Erreur lors de la récupération des ordres');
-    }
+  } else {
+    throw Exception(json['error'] ?? json['message'] ?? 'Erreur lors de la récupération des ordres');
   }
+}
+
 
   /// Récupérer un ordre par ID (GET /api/getOrdreTravailById/:id)
   static Future<OrdreTravail> getOrdreById(String token, String id) async {

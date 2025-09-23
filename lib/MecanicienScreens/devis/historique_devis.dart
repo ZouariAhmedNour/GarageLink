@@ -1,20 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:garagelink/MecanicienScreens/Facture/facture_detail_page.dart';
 import 'package:garagelink/MecanicienScreens/devis/devis_preview_page.dart';
 import 'package:garagelink/MecanicienScreens/devis/devis_widgets/num_serie_input.dart';
 import 'package:garagelink/MecanicienScreens/ordreTravail/create_ordre_screen.dart';
-import 'package:garagelink/configurations/app_routes.dart';
+import 'package:garagelink/models/facture.dart';
 import 'package:garagelink/models/ficheClient.dart';
 import 'package:garagelink/models/devis.dart';
 import 'package:garagelink/providers/auth_provider.dart';
 import 'package:garagelink/providers/ficheClient_provider.dart';
 import 'package:garagelink/providers/historique_devis_provider.dart';
-import 'package:garagelink/services/pdf_service.dart';
+import 'package:garagelink/services/facture_api.dart';
 import 'package:garagelink/utils/devis_actions.dart';
 import 'package:garagelink/services/devis_api.dart';
 import 'package:get/get.dart';
-import 'package:printing/printing.dart';
 
 enum TypeFiltre { date, numeroSerie, id, client }
 
@@ -42,6 +42,19 @@ class _HistoriqueDevisPageState extends ConsumerState<HistoriqueDevisPage>
   final numLocalCtrl = TextEditingController();
   final rechercheCtrl = TextEditingController();
   String valeurFiltre = "";
+
+  String _devisIdToUse(Devis devis) {
+    // Priorité à l'ID Mongo (_id) si présent (chaîne 24 hex ou simplement non vide côté client)
+    if (devis.id != null && devis.id!.isNotEmpty) {
+      return devis.id!;
+    }
+    // Sinon fallback sur le code personnalisé (DEVxxx)
+    if (devis.devisId.isNotEmpty) {
+      return devis.devisId;
+    }
+    // Aucun ID disponible
+    return '';
+  }
 
   final Map<TypeFiltre, Map<String, dynamic>> filtreConfig = {
     TypeFiltre.date: {
@@ -495,9 +508,8 @@ class _HistoriqueDevisPageState extends ConsumerState<HistoriqueDevisPage>
                     email: '',
                   ),
                 );
-                if (foundLocal.email != null &&
-                    foundLocal.email!.trim().isNotEmpty) {
-                  clientEmail = foundLocal.email!.trim();
+                if (foundLocal.email.trim().isNotEmpty) {
+                  clientEmail = foundLocal.email.trim();
                 } else {
                   // si pas d'email local, appeler l'API pour récupérer la fiche complète
                   try {
@@ -515,9 +527,10 @@ class _HistoriqueDevisPageState extends ConsumerState<HistoriqueDevisPage>
                 }
 
                 // ID custom (DEVxxx) à utiliser pour l'endpoint send-email (ton backend cherche par { id: devisId })
-                final String idToUse = (devis.devisId.isNotEmpty)
-                    ? devis.devisId
-                    : (devis.id ?? '');
+                final String idToUse = _devisIdToUse(devis);
+                print(
+                  '➡️ sendDevis : idToUse=$idToUse (devis.id=${devis.id}, devis.devisId=${devis.devisId})',
+                );
 
                 // essayer envoi via backend si token présent
                 final token = ref.read(authTokenProvider);
@@ -607,70 +620,130 @@ class _HistoriqueDevisPageState extends ConsumerState<HistoriqueDevisPage>
         }
 
         // For accepted: show receipt/download and preview
-       // For accepted: show "facture" + "create order"
-if (devis.status == DevisStatus.accepte) {
-  actionButtons.addAll([
-    IconButton(
-      icon: const Icon(
-        Icons.receipt_long,
-        color: Colors.blue,
-        size: 18,
-      ),
-      tooltip: 'Générer la facture',
-      onPressed: () async {
-        try {
-          final bytes = await PdfService.instance.buildDevisPdfBytes(
-            devis,
-            footerNote: 'Facture liée au devis',
-          );
-          await Printing.sharePdf(
-            bytes: bytes,
-            filename: 'facture_${devis.id ?? devis.devisId}.pdf',
-          );
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Facture générée avec succès'),
-              backgroundColor: Colors.green,
+        // For accepted: show "facture" + "create order"
+        if (devis.status == DevisStatus.accepte) {
+          actionButtons.addAll([
+            IconButton(
+              icon: const Icon(
+                Icons.receipt_long,
+                color: Colors.blue,
+                size: 18,
+              ),
+              tooltip: 'Générer la facture',
+              onPressed: () async {
+                final String idToUse = _devisIdToUse(devis);
+                print(
+                  '➡️ createFacture: will use idToUse=$idToUse (devis.id=${devis.id}, devis.devisId=${devis.devisId})',
+                );
+                final token = ref.read(authTokenProvider);
+                if (token == null || token.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'Vous devez être connecté pour générer une facture',
+                      ),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                  return;
+                }
+                if (idToUse.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('ID du devis manquant'),
+                      backgroundColor: Colors.orange,
+                    ),
+                  );
+                  return;
+                }
+
+                // Affiche un loader modal
+                showDialog(
+                  context: context,
+                  barrierDismissible: false,
+                  builder: (ctx) =>
+                      const Center(child: CircularProgressIndicator()),
+                );
+
+                try {
+                  // Appel API pour créer la facture côté serveur
+                  final Facture created = await FactureApi.createFacture(
+                    token: token,
+                    devisId: idToUse,
+                  );
+
+                  // Optionnel : ajouter dans le provider local si tu veux
+                  try {
+                    // si tu as facturesProvider avec ajouter/ajouterFacture méthode : appelle-la
+                    // ex: ref.read(facturesProvider.notifier).ajouterFactureFromObject(created);
+                    // Ici j'appelle ajouterFacture qui utilise createFacture interne, donc on évite double call.
+                  } catch (_) {}
+
+                  // Ferme le loader modal
+                  Navigator.of(context).pop();
+
+                  // Navigue vers la page détail facture
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => FactureDetailPage(facture: created),
+                    ),
+                  );
+
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Facture créée avec succès'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                } catch (e) {
+                  // Ferme le loader modal en cas d'erreur
+                  Navigator.of(context).pop();
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        'Erreur création facture : ${e.toString()}',
+                      ),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              },
             ),
-          );
-        } catch (e) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Erreur génération facture : $e')),
-          );
-        }
-      },
-    ),
-    IconButton(
-  icon: const Icon(
-    Icons.playlist_add_check_circle,
-    color: Colors.green,
-    size: 20,
-  ),
-  tooltip: 'Créer un ordre',
-  onPressed: () {
-  Get.to(() => CreateOrderScreen(
-  devis: devis,
-  // si tu veux encore utiliser Get.arguments pour vehicleInfo, tu peux aussi ajouter params au constructeur
-), arguments: {
-  'vehiculeId': devis.vehiculeId,
-  'vehicleInfo': devis.vehicleInfo,
-});
-},
-),
-    IconButton(
-      icon: const Icon(Icons.visibility, color: primaryBlue, size: 18),
-      tooltip: 'Voir la facture',
-      onPressed: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => DevisPreviewPage(devis: devis),
-          ),
-        );
-      },
-    ),
-  ]);
-} else {
+            IconButton(
+              icon: const Icon(
+                Icons.playlist_add_check_circle,
+                color: Colors.green,
+                size: 20,
+              ),
+              tooltip: 'Créer un ordre',
+              onPressed: () {
+                Get.to(
+                  () => CreateOrderScreen(
+                    devis: devis,
+                    // si tu veux encore utiliser Get.arguments pour vehicleInfo, tu peux aussi ajouter params au constructeur
+                  ),
+                  arguments: {
+                    'vehiculeId': devis.vehiculeId,
+                    'vehicleInfo': devis.vehicleInfo,
+                  },
+                );
+              },
+            ),
+            IconButton(
+              icon: const Icon(Icons.visibility, color: primaryBlue, size: 18),
+              tooltip: 'Voir la facture',
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => DevisPreviewPage(devis: devis),
+                  ),
+                );
+              },
+            ),
+          ]);
+        } else {
           // For other statuses (brouillon/envoye) also allow preview
           actionButtons.add(
             IconButton(

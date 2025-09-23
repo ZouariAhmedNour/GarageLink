@@ -1,41 +1,108 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:garagelink/models/facture.dart';
-import 'package:garagelink/global.dart'; 
+import 'package:garagelink/global.dart';
 
 class FactureApi {
-  // En-têtes par défaut pour les requêtes JSON
   static const Map<String, String> _headers = {
     'Content-Type': 'application/json',
   };
 
-  // En-têtes avec authentification
   static Map<String, String> _authHeaders(String token) => {
         ..._headers,
         'Authorization': 'Bearer $token',
       };
 
-  /// Créer une nouvelle facture à partir d'un devis
-  static Future<Facture> createFacture({
-    required String token,
-    required String devisId,
-  }) async {
-    final url = Uri.parse('$UrlApi/factures/from-devis/$devisId');
-    final response = await http.post(
-      url,
-      headers: _authHeaders(token),
-    );
+  /// Créer une facture à partir d'un devis
+  /// POST $UrlApi/create/:devisId
+ static Future<Facture> createFacture({
+  required String token,
+  required String devisId,
+}) async {
+  final url = Uri.parse('$UrlApi/create/$devisId');
+  final headers = _authHeaders(token);
 
-    final json = jsonDecode(response.body) as Map<String, dynamic>;
+  print('➡️ createFacture: POST $url');
+  print('➡️ Headers: $headers');
 
-    if (response.statusCode == 201 && json['success'] == true) {
-      return Facture.fromJson(json['facture'] ?? json['data']);
-    } else {
-      throw Exception(json['message'] ?? 'Erreur lors de la création de la facture');
+  final stopwatch = Stopwatch()..start();
+  http.Response resp;
+  try {
+    resp = await http.post(url, headers: headers);
+  } catch (err, st) {
+    stopwatch.stop();
+    print('❌ Erreur réseau lors du POST: $err');
+    print('❌ Stack: $st');
+    throw Exception('Erreur réseau lors de la création de la facture: $err');
+  }
+
+  stopwatch.stop();
+  print('⬅️ Response status: ${resp.statusCode}  (elapsed: ${stopwatch.elapsedMilliseconds}ms)');
+  final contentType = resp.headers['content-type'] ?? '';
+  print('⬅️ Content-Type header: $contentType');
+
+  final body = resp.body ?? '';
+  print('⬅️ Body length: ${body.length} bytes');
+  const int previewMax = 2000;
+  print('⬅️ Body preview: ${body.length > previewMax ? body.substring(0, previewMax) + "...(truncated)" : body}');
+
+  // Tentative d'analyse JSON
+  dynamic parsed;
+  try {
+    parsed = jsonDecode(body);
+    print('🔎 JSON parsed. Type: ${parsed.runtimeType}');
+  } catch (e) {
+    print('⚠️ Impossible de parser la réponse en JSON: $e');
+    parsed = null;
+  }
+
+  // Si succès status, essayer d'extraire la facture
+  if (resp.statusCode == 200 || resp.statusCode == 201) {
+    try {
+      // L'API peut renvoyer { facture: {...} } ou { data: {...} } ou la facture seule
+      final candidate = (parsed is Map && (parsed['facture'] ?? parsed['data'] ?? parsed) != null)
+          ? (parsed['facture'] ?? parsed['data'] ?? parsed)
+          : parsed;
+
+      if (candidate == null) {
+        print('❌ Réponse JSON OK mais aucun objet facture détecté — parsed=$parsed');
+        throw Exception('Réponse serveur invalide (facture manquante)');
+      }
+
+      if (candidate is Map<String, dynamic>) {
+        print('🔍 Facture JSON keys: ${candidate.keys.toList()}');
+      } else {
+        print('⚠️ Candidate facture n\'est pas un Map: ${candidate.runtimeType}');
+      }
+
+      final facture = Facture.fromJson(candidate as Map<String, dynamic>);
+      print('✅ Facture créée: id=${facture.id}, numero=${facture.numeroFacture}');
+      return facture;
+    } catch (e, st) {
+      print('❌ Erreur lors de la conversion JSON -> Facture: $e');
+      print('❌ Stack: $st');
+      throw Exception('Erreur traitement réponse facture: $e');
     }
   }
 
-  /// Récupérer toutes les factures avec pagination et filtres
+  // Si on arrive ici, le status n'est pas 200/201 => essayer d'extraire message d'erreur du JSON
+  try {
+    if (parsed is Map) {
+      final errMsg = parsed['message'] ?? parsed['error'] ?? parsed['detail'] ?? parsed;
+      print('❌ API returned error payload: $errMsg');
+      throw Exception('Erreur création facture (${resp.statusCode}): $errMsg');
+    } else {
+      print('❌ API returned non-JSON error body (${resp.statusCode}): ${body}');
+      throw Exception('Erreur création facture (${resp.statusCode}): ${body}');
+    }
+  } catch (e) {
+    // fallback
+    throw Exception('Erreur création facture (${resp.statusCode}): ${resp.body}');
+  }
+}
+
+
+  /// GET $UrlApi/getFactures?page=..&limit=..&...
   static Future<FacturePagination> getAllFactures({
     required String token,
     String? clientId,
@@ -57,49 +124,58 @@ class FactureApi {
       'sortBy': sortBy,
       'sortOrder': sortOrder,
     };
-    final url = Uri.parse('$UrlApi/factures').replace(queryParameters: queryParams);
-    final response = await http.get(url, headers: _authHeaders(token));
 
-    final json = jsonDecode(response.body) as Map<String, dynamic>;
+    final url = Uri.parse('$UrlApi/getFactures').replace(queryParameters: queryParams);
+    final resp = await http.get(url, headers: _authHeaders(token));
+    final body = resp.body;
 
-    if (response.statusCode == 200 && json['success'] == true) {
-      return FacturePagination.fromJson(json);
-    } else {
-      throw Exception(json['message'] ?? 'Erreur lors de la récupération des factures');
+    if (resp.statusCode == 200) {
+      final json = jsonDecode(body) as Map<String, dynamic>;
+      if (json['success'] == true && (json['data'] != null || json['factures'] != null)) {
+        return FacturePagination.fromJson(json);
+      }
+      // tolérance : si API renvoie directement la liste (rare)
+      if (json['data'] is List || json['factures'] is List) {
+        return FacturePagination.fromJson({
+          'data': json['data'] ?? json['factures'],
+          'pagination': json['pagination'] ?? {'currentPage': page, 'totalPages': 1, 'totalItems': (json['data'] ?? json['factures']).length, 'itemsPerPage': limit}
+        });
+      }
+      throw Exception('Réponse inattendue: ${json}');
     }
+
+    throw Exception('Erreur getAllFactures: ${resp.statusCode} $body');
   }
 
-  /// Récupérer une facture par ID
+  /// GET $UrlApi/getFacture/:id
   static Future<Facture> getFactureById(String token, String id) async {
-    final url = Uri.parse('$UrlApi/factures/$id');
-    final response = await http.get(url, headers: _authHeaders(token));
-
-    final json = jsonDecode(response.body) as Map<String, dynamic>;
-
-    if (response.statusCode == 200 && json['success'] == true) {
-      return Facture.fromJson(json['facture'] ?? json['data']);
-    } else {
-      throw Exception(json['message'] ?? 'Erreur lors de la récupération de la facture');
+    final url = Uri.parse('$UrlApi/getFacture/$id');
+    final resp = await http.get(url, headers: _authHeaders(token));
+    final body = resp.body;
+    if (resp.statusCode == 200) {
+      final json = jsonDecode(body) as Map<String, dynamic>;
+      final payload = json['data'] ?? json['facture'] ?? json;
+      return Facture.fromJson(payload as Map<String, dynamic>);
     }
+    throw Exception('Erreur getFactureById: ${resp.statusCode} $body');
   }
 
-  /// Récupérer une facture par devisId
+  /// GET $UrlApi/factureByDevis/:devisId
   static Future<Facture?> getFactureByDevis(String token, String devisId) async {
-    final url = Uri.parse('$UrlApi/factures/by-devis/$devisId');
-    final response = await http.get(url, headers: _authHeaders(token));
-
-    if (response.statusCode == 200) {
-      final json = jsonDecode(response.body) as Map<String, dynamic>;
-      return Facture.fromJson(json['facture'] ?? json['data']);
-    } else if (response.statusCode == 404) {
+    final url = Uri.parse('$UrlApi/factureByDevis/$devisId');
+    final resp = await http.get(url, headers: _authHeaders(token));
+    if (resp.statusCode == 200) {
+      final json = jsonDecode(resp.body);
+      // backend renvoie souvent l'objet brut
+      final payload = (json is Map && (json['facture'] ?? json['data']) != null) ? (json['facture'] ?? json['data']) : json;
+      return Facture.fromJson(payload as Map<String, dynamic>);
+    } else if (resp.statusCode == 404) {
       return null;
-    } else {
-      final json = jsonDecode(response.body) as Map<String, dynamic>;
-      throw Exception(json['message'] ?? 'Erreur lors de la récupération de la facture par devis');
     }
+    throw Exception('Erreur getFactureByDevis: ${resp.statusCode} ${resp.body}');
   }
 
-  /// Marquer une facture comme payée
+  /// PUT $UrlApi/:id/payment
   static Future<Facture> marquerFacturePayed({
     required String token,
     required String id,
@@ -107,86 +183,69 @@ class FactureApi {
     required PaymentMethod paymentMethod,
     DateTime? paymentDate,
   }) async {
-    final url = Uri.parse('$UrlApi/factures/$id/payment');
+    final url = Uri.parse('$UrlApi/$id/payment');
     final body = jsonEncode({
       'paymentAmount': paymentAmount,
       'paymentMethod': paymentMethod.toString().split('.').last,
       if (paymentDate != null) 'paymentDate': paymentDate.toIso8601String(),
     });
 
-    final response = await http.put(
-      url,
-      headers: _authHeaders(token),
-      body: body,
-    );
-
-    final json = jsonDecode(response.body) as Map<String, dynamic>;
-
-    if (response.statusCode == 200 && json['success'] == true) {
-      return Facture.fromJson(json['facture'] ?? json['data']);
-    } else {
-      throw Exception(json['message'] ?? 'Erreur lors de l\'enregistrement du paiement');
+    final resp = await http.put(url, headers: _authHeaders(token), body: body);
+    final json = jsonDecode(resp.body) as Map<String, dynamic>;
+    if (resp.statusCode == 200 && json['success'] == true) {
+      final payload = json['facture'] ?? json['data'] ?? json;
+      return Facture.fromJson(payload as Map<String, dynamic>);
     }
+    throw Exception('Erreur marquerFacturePayed: ${resp.statusCode} ${resp.body}');
   }
 
-  /// Mettre à jour une facture
+  /// PUT $UrlApi/:id
   static Future<Facture> updateFacture({
     required String token,
     required String id,
     String? notes,
     DateTime? dueDate,
   }) async {
-    final url = Uri.parse('$UrlApi/factures/$id');
+    final url = Uri.parse('$UrlApi/$id');
     final body = jsonEncode({
       if (notes != null) 'notes': notes,
       if (dueDate != null) 'dueDate': dueDate.toIso8601String(),
     });
 
-    final response = await http.put(
-      url,
-      headers: _authHeaders(token),
-      body: body,
-    );
-
-    final json = jsonDecode(response.body) as Map<String, dynamic>;
-
-    if (response.statusCode == 200 && json['success'] == true) {
-      return Facture.fromJson(json['facture'] ?? json['data']);
-    } else {
-      throw Exception(json['message'] ?? 'Erreur lors de la mise à jour de la facture');
+    final resp = await http.put(url, headers: _authHeaders(token), body: body);
+    final json = jsonDecode(resp.body) as Map<String, dynamic>;
+    if (resp.statusCode == 200 && json['success'] == true) {
+      final payload = json['facture'] ?? json['data'] ?? json;
+      return Facture.fromJson(payload as Map<String, dynamic>);
     }
+    throw Exception('Erreur updateFacture: ${resp.statusCode} ${resp.body}');
   }
 
-  /// Supprimer une facture
+  /// DELETE $UrlApi/:id
   static Future<void> deleteFacture(String token, String id) async {
-    final url = Uri.parse('$UrlApi/factures/$id');
-    final response = await http.delete(url, headers: _authHeaders(token));
-
-    final json = jsonDecode(response.body) as Map<String, dynamic>;
-
-    if (response.statusCode == 200 && json['success'] == true) {
+    final url = Uri.parse('$UrlApi/$id');
+    final resp = await http.delete(url, headers: _authHeaders(token));
+    final json = jsonDecode(resp.body) as Map<String, dynamic>;
+    if (resp.statusCode == 200 && json['success'] == true) {
       return;
-    } else {
-      throw Exception(json['message'] ?? 'Erreur lors de la suppression de la facture');
     }
+    throw Exception('Erreur deleteFacture: ${resp.statusCode} ${resp.body}');
   }
 
-  /// Récupérer les statistiques des factures
+  /// GET $UrlApi/stats/summary
   static Future<FactureStats> getFactureStats(String token) async {
-    final url = Uri.parse('$UrlApi/factures/stats/summary');
-    final response = await http.get(url, headers: _authHeaders(token));
-
-    final json = jsonDecode(response.body) as Map<String, dynamic>;
-
-    if (response.statusCode == 200 && json['success'] == true) {
-      return FactureStats.fromJson(json['data'] as Map<String, dynamic>);
-    } else {
-      throw Exception(json['message'] ?? 'Erreur lors de la récupération des statistiques');
+    final url = Uri.parse('$UrlApi/stats/summary');
+    final resp = await http.get(url, headers: _authHeaders(token));
+    final json = jsonDecode(resp.body) as Map<String, dynamic>;
+    if (resp.statusCode == 200 && json['success'] == true) {
+      final payload = (json['data'] ?? json) as Map<String, dynamic>;
+      return FactureStats.fromJson(payload);
     }
+    throw Exception('Erreur getFactureStats: ${resp.statusCode} ${resp.body}');
   }
 }
 
-// --- Pagination ---
+/// Pagination / Stats classes (inchangées)
 class FacturePagination {
   final List<Facture> factures;
   final PaginationInfo pagination;
@@ -229,7 +288,6 @@ class PaginationInfo {
   }
 }
 
-// --- Statistiques ---
 class FactureStats {
   final int totalFactures;
   final double totalTTC;

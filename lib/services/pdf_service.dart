@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/services.dart';
+import 'package:garagelink/models/facture.dart';
 import 'package:intl/intl.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
@@ -278,5 +279,122 @@ Future<pw.Font?> _loadFont() async {
     } else {
       return await getApplicationDocumentsDirectory();
     }
+  }
+}
+
+extension PdfServiceFacture on PdfService {
+  Future<Uint8List> buildFacturePdfBytes(Facture facture, {String? footerNote}) async {
+    final pdf = pw.Document();
+    final ttf = await _loadFont();
+
+    final baseTextStyle = pw.TextStyle(font: ttf, fontSize: 10);
+    final headerTextStyle = pw.TextStyle(font: ttf, fontSize: 14, fontWeight: pw.FontWeight.bold);
+    final tableHeaderStyle = pw.TextStyle(font: ttf, fontSize: 10, fontWeight: pw.FontWeight.bold);
+
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+        build: (context) {
+          return [
+            // HEADER
+            pw.Row(
+              mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: pw.CrossAxisAlignment.start,
+              children: [
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Text(facture.clientInfo.nom ?? 'Client', style: headerTextStyle),
+                    if (facture.clientInfo.email != null)
+                      pw.Text(facture.clientInfo.email!, style: baseTextStyle),
+                    if (facture.clientInfo.telephone != null)
+                      pw.Text('Tel: ${facture.clientInfo.telephone}', style: baseTextStyle),
+                    pw.SizedBox(height: 6),
+                    pw.Text('Facture #: ${facture.numeroFacture}', style: baseTextStyle),
+                  ],
+                ),
+                pw.Column(
+                  crossAxisAlignment: pw.CrossAxisAlignment.end,
+                  children: [
+                    pw.Text('Date: ${_dateFmt.format(facture.invoiceDate)}', style: baseTextStyle),
+                    pw.SizedBox(height: 6),
+                    pw.Container(
+                      padding: const pw.EdgeInsets.all(6),
+                      decoration: pw.BoxDecoration(border: pw.Border.all(color: PdfColors.grey300)),
+                      child: pw.Text(
+                        'Total TTC: ${_currency(facture.totalTTC)}',
+                        style: headerTextStyle,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            pw.SizedBox(height: 16),
+
+            // TABLE HEADER
+            pw.Container(
+              decoration: pw.BoxDecoration(
+                border: pw.Border(bottom: pw.BorderSide(width: 1, color: PdfColors.grey)),
+              ),
+              padding: const pw.EdgeInsets.only(bottom: 8),
+              child: pw.Row(
+                children: [
+                  pw.Expanded(flex: 6, child: pw.Text('Désignation', style: tableHeaderStyle)),
+                  pw.Expanded(flex: 2, child: pw.Text('Qté', style: tableHeaderStyle, textAlign: pw.TextAlign.right)),
+                  pw.Expanded(flex: 3, child: pw.Text('PU', style: tableHeaderStyle, textAlign: pw.TextAlign.right)),
+                  pw.Expanded(flex: 3, child: pw.Text('Total', style: tableHeaderStyle, textAlign: pw.TextAlign.right)),
+                ],
+              ),
+            ),
+            pw.SizedBox(height: 8),
+
+            // LIGNES SERVICES
+            ...facture.services.map((s) {
+              return pw.Padding(
+                padding: const pw.EdgeInsets.symmetric(vertical: 6),
+                child: pw.Row(
+                  crossAxisAlignment: pw.CrossAxisAlignment.start,
+                  children: [
+                    pw.Expanded(flex: 6, child: pw.Text(s.piece, style: baseTextStyle)),
+                    pw.Expanded(flex: 2, child: pw.Text('${s.quantity}', style: baseTextStyle, textAlign: pw.TextAlign.right)),
+                    pw.Expanded(flex: 3, child: pw.Text(_currency(s.unitPrice), style: baseTextStyle, textAlign: pw.TextAlign.right)),
+                    pw.Expanded(flex: 3, child: pw.Text(_currency(s.total), style: baseTextStyle, textAlign: pw.TextAlign.right)),
+                  ],
+                ),
+              );
+            }),
+
+            pw.Divider(),
+
+            // TOTALS
+            pw.Container(
+              alignment: pw.Alignment.centerRight,
+              child: pw.Column(
+                crossAxisAlignment: pw.CrossAxisAlignment.end,
+                children: [
+                  pw.Text('Total TTC: ${_currency(facture.totalTTC)}', style: headerTextStyle),
+                ],
+              ),
+            ),
+
+            if (facture.notes != null && facture.notes!.isNotEmpty) ...[
+              pw.SizedBox(height: 18),
+              pw.Text('Notes:', style: headerTextStyle),
+              pw.Text(facture.notes!, style: baseTextStyle),
+            ],
+
+            if (footerNote != null && footerNote.isNotEmpty)
+              pw.Padding(
+                padding: const pw.EdgeInsets.only(top: 16),
+                child: pw.Text(footerNote, style: pw.TextStyle(font: ttf, fontSize: 9, color: PdfColors.grey700)),
+              ),
+          ];
+        },
+      ),
+    );
+
+    return pdf.save();
   }
 }

@@ -1,11 +1,8 @@
-// lib/providers/factures_provider.dart
+import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:garagelink/models/facture.dart';
 import 'package:garagelink/providers/auth_provider.dart';
 import 'package:garagelink/services/facture_api.dart';
-
-// Assure-toi d'avoir un provider authTokenProvider quelque part dans ton projet
-// import 'package:garagelink/providers/auth_provider.dart';
 
 enum SearchField { client, paymentStatus, periode }
 
@@ -119,7 +116,14 @@ class FactureNotifier extends StateNotifier<FactureFilterState> {
 
   void setSearchField(SearchField field) => state = state.copyWith(searchField: field);
 
+  /// Met à jour la page locale (ne recharge pas automatiquement)
   void setPage(int page) => state = state.copyWith(currentPage: page);
+
+  /// Change la page et recharge automatiquement
+  Future<void> goToPage(int page) async {
+    state = state.copyWith(currentPage: page);
+    await loadAll();
+  }
 
   // Réseau : charger toutes les factures (paginées)
   Future<void> loadAll() async {
@@ -149,8 +153,8 @@ class FactureNotifier extends StateNotifier<FactureFilterState> {
         totalItems: pagination.pagination.totalItems,
         itemsPerPage: pagination.pagination.itemsPerPage,
       );
-        } catch (e) {
-      setError(e.toString());
+    } catch (e) {
+      setError(_extractErrorMessage(e));
     } finally {
       setLoading(false);
     }
@@ -168,7 +172,7 @@ class FactureNotifier extends StateNotifier<FactureFilterState> {
       final facture = await FactureApi.getFactureById(_token!, id);
       return facture;
     } catch (e) {
-      setError(e.toString());
+      setError(_extractErrorMessage(e));
       return null;
     } finally {
       setLoading(false);
@@ -187,7 +191,7 @@ class FactureNotifier extends StateNotifier<FactureFilterState> {
       final facture = await FactureApi.getFactureByDevis(_token!, devisId);
       return facture;
     } catch (e) {
-      setError(e.toString());
+      setError(_extractErrorMessage(e));
       return null;
     } finally {
       setLoading(false);
@@ -205,10 +209,9 @@ class FactureNotifier extends StateNotifier<FactureFilterState> {
     try {
       final facture = await FactureApi.createFacture(token: _token!, devisId: devisId);
 
-      // Remplace si existe (même numeroFacture ou même id), sinon ajoute en tête
+      // Remplace si existe (même id ou même numeroFacture), sinon ajoute en tête
       final existingIdx = state.factures.indexWhere((f) =>
-          (f.id != null && f.id == facture.id) ||
-          f.numeroFacture == facture.numeroFacture);
+          (f.id != null && f.id == facture.id) || f.numeroFacture == facture.numeroFacture);
 
       List<Facture> copy = [...state.factures];
       if (existingIdx != -1) {
@@ -223,7 +226,7 @@ class FactureNotifier extends StateNotifier<FactureFilterState> {
         error: null,
       );
     } catch (e) {
-      setError(e.toString());
+      setError(_extractErrorMessage(e));
     } finally {
       setLoading(false);
     }
@@ -253,7 +256,7 @@ class FactureNotifier extends StateNotifier<FactureFilterState> {
         error: null,
       );
     } catch (e) {
-      setError(e.toString());
+      setError(_extractErrorMessage(e));
     } finally {
       setLoading(false);
     }
@@ -285,7 +288,7 @@ class FactureNotifier extends StateNotifier<FactureFilterState> {
         error: null,
       );
     } catch (e) {
-      setError(e.toString());
+      setError(_extractErrorMessage(e));
     } finally {
       setLoading(false);
     }
@@ -309,7 +312,7 @@ class FactureNotifier extends StateNotifier<FactureFilterState> {
         error: null,
       );
     } catch (e) {
-      setError(e.toString());
+      setError(_extractErrorMessage(e));
     } finally {
       setLoading(false);
     }
@@ -327,7 +330,7 @@ class FactureNotifier extends StateNotifier<FactureFilterState> {
       final stats = await FactureApi.getFactureStats(_token!);
       return stats;
     } catch (e) {
-      setError(e.toString());
+      setError(_extractErrorMessage(e));
       return null;
     } finally {
       setLoading(false);
@@ -338,11 +341,39 @@ class FactureNotifier extends StateNotifier<FactureFilterState> {
   double totalMontant() {
     return state.factures.fold(0.0, (sum, f) => sum + f.totalTTC);
   }
+
+  // Helper pour extraire message d'erreur lisible
+  String _extractErrorMessage(Object e) {
+    try {
+      final s = e.toString();
+      if (s.startsWith('{') || s.startsWith('[')) {
+        final decoded = jsonDecode(s);
+        if (decoded is Map && (decoded['error'] != null || decoded['message'] != null)) {
+          return (decoded['error'] ?? decoded['message']).toString();
+        }
+      }
+      return s;
+    } catch (_) {
+      return e.toString();
+    }
+  }
 }
 
-final facturesProvider = StateNotifierProvider<FactureNotifier, FactureFilterState>(
-  (ref) => FactureNotifier(ref),
-);
+// Provider qui écoute le token et recharge automatiquement
+final facturesProvider = StateNotifierProvider<FactureNotifier, FactureFilterState>((ref) {
+  final notifier = FactureNotifier(ref);
+
+  // Quand le token change (login/logout), recharger ou vider automatiquement
+  ref.listen<String?>(authTokenProvider, (previous, next) {
+    if (next != null && next.isNotEmpty) {
+      notifier.loadAll();
+    } else {
+      notifier.clear();
+    }
+  });
+
+  return notifier;
+});
 
 // Provider sécurisé (safe firstWhere)
 final factureByIdProvider = Provider.family<Facture?, String>((ref, id) {
@@ -350,7 +381,6 @@ final factureByIdProvider = Provider.family<Facture?, String>((ref, id) {
   try {
     return factures.firstWhere((f) => f.id == id);
   } catch (_) {
-    // si non trouvé, retourne null
     return null;
   }
 });
