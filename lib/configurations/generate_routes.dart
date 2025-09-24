@@ -1,5 +1,6 @@
 // import 'package:garagelink/Clients%20Screens/clientHome.dart';
-import 'package:garagelink/Clients%20Screens/clientMapScreen.dart';
+import 'package:garagelink/ClientsScreens/chercherGarage.dart';
+import 'package:garagelink/ClientsScreens/clientMapScreen.dart';
 import 'package:garagelink/MecanicienScreens/atelier/ajouterAtelier.dart';
 import 'package:garagelink/MecanicienScreens/atelier/atelier_dash.dart';
 import 'package:garagelink/MecanicienScreens/atelier/modifierAtelier.dart';
@@ -14,8 +15,9 @@ import 'package:garagelink/configurations/app_routes.dart';
 import 'package:garagelink/MecanicienScreens/Facture/facture_detail_page.dart';
 import 'package:garagelink/MecanicienScreens/Facture/facture_screen.dart';
 import 'package:garagelink/MecanicienScreens/Gestion%20Clients/add_client.dart';
-import 'package:garagelink/MecanicienScreens/R%C3%A9servations/reservation_screen.dart';
+import 'package:garagelink/MecanicienScreens/Reservations/reservation_screen.dart';
 import 'package:garagelink/models/atelier.dart';
+import 'package:garagelink/models/user.dart';
 import 'package:garagelink/vehicules/add_veh.dart';
 import 'package:garagelink/MecanicienScreens/Gestion%20Clients/client_dash.dart';
 import 'package:garagelink/MecanicienScreens/Gestion%20Clients/edit_client.dart';
@@ -41,6 +43,8 @@ import 'package:garagelink/models/devis.dart'; // <-- ajouté
 import 'package:garagelink/splash_screen.dart';
 import 'package:get/get.dart';
 import 'package:flutter/material.dart';
+
+import '../MecanicienScreens/Reservations/creerResa.dart';
 
 class GenerateRoutes {
   static final getPages = [
@@ -134,7 +138,10 @@ class GenerateRoutes {
         return EntretienScreen(vehiculeId: vehiculeId);
       },
     ),
+    //////////////// MODULE RESERVATION  //////////////////////
     GetPage(name: AppRoutes.reservationScreen, page: () => const ReservationScreen()),
+    GetPage(name: AppRoutes.creerResaScreen, page: () => CreerResaScreen(garage: Get.arguments as User)),
+    ////////////////// MODULE VEHICULES //////////////////////
     // GetPage(
     //   name: AppRoutes.clientVehiclesScreen,
     //   page: () => const ClientVehiclesScreen(),
@@ -153,6 +160,7 @@ class GenerateRoutes {
 ),
   GetPage(name: AppRoutes.ajouterAtelier, page: () => const AjouterAtelierScreen()),
 
-    //////////////// FIN MODULE ATELIERS  /////////////////////
+    //////////////// Reservation /////////////////////
+    GetPage(name: AppRoutes.chercherGarage, page: () => const ChercherGarageScreen()),
   ];
 }

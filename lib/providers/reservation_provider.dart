@@ -1,11 +1,8 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:garagelink/models/reservation.dart';
 import 'package:garagelink/services/reservation_api.dart';
+import 'package:garagelink/providers/auth_provider.dart';
 
-// Provider pour le token d'authentification (partagé avec vehicules_provider.dart et service_provider.dart)
-final authTokenProvider = StateProvider<String?>((ref) => null);
-
-// État des réservations
 class ReservationsState {
   final List<Reservation> reservations;
   final bool loading;
@@ -34,31 +31,21 @@ class ReservationsNotifier extends StateNotifier<ReservationsState> {
 
   final Ref ref;
 
-  // Récupérer le token depuis le provider
+  // Récupérer le token depuis le provider central (peut être null)
   String? get _token => ref.read(authTokenProvider);
 
-  // Vérifier si le token est disponible
-  bool get _hasToken => _token != null && _token!.isNotEmpty;
-
-  // État
+  // Helpers d'état
   void setLoading(bool value) => state = state.copyWith(loading: value, error: null);
-
   void setError(String error) => state = state.copyWith(error: error, loading: false);
-
-  void setReservations(List<Reservation> list) => state = state.copyWith(reservations: [...list], error: null);
-
+  void setReservations(List<Reservation> list) =>
+      state = state.copyWith(reservations: [...list], error: null);
   void clear() => state = const ReservationsState();
 
-  // Réseau : charger toutes les réservations
+  /// Charger toutes les réservations (token optionnel)
   Future<void> loadAll() async {
-    if (!_hasToken) {
-      state = state.copyWith(error: 'Token d\'authentification requis');
-      return;
-    }
-
     setLoading(true);
     try {
-      final reservations = await ReservationApi.getAllReservations(_token!);
+      final reservations = await ReservationApi.getAllReservations(token: _token);
       setReservations(reservations);
     } catch (e) {
       setError(e.toString());
@@ -67,7 +54,7 @@ class ReservationsNotifier extends StateNotifier<ReservationsState> {
     }
   }
 
-  // Réseau : créer une réservation
+  /// Créer une réservation (token optionnel)
   Future<void> createReservation({
     required String garageId,
     required String clientName,
@@ -78,15 +65,10 @@ class ReservationsNotifier extends StateNotifier<ReservationsState> {
     required String creneauDemandeHeureDebut,
     required String descriptionDepannage,
   }) async {
-    if (!_hasToken) {
-      state = state.copyWith(error: 'Token d\'authentification requis');
-      return;
-    }
-
     setLoading(true);
     try {
       final reservation = await ReservationApi.createReservation(
-        token: _token!,
+        token: _token,
         garageId: garageId,
         clientName: clientName,
         clientPhone: clientPhone,
@@ -96,7 +78,11 @@ class ReservationsNotifier extends StateNotifier<ReservationsState> {
         creneauDemandeHeureDebut: creneauDemandeHeureDebut,
         descriptionDepannage: descriptionDepannage,
       );
-      state = state.copyWith(reservations: [...state.reservations, reservation], error: null);
+
+      state = state.copyWith(
+        reservations: [...state.reservations, reservation],
+        error: null,
+      );
     } catch (e) {
       setError(e.toString());
     } finally {
@@ -104,7 +90,7 @@ class ReservationsNotifier extends StateNotifier<ReservationsState> {
     }
   }
 
-  // Réseau : mettre à jour une réservation
+  /// Mettre à jour une réservation (token optionnel)
   Future<void> updateReservation({
     required String id,
     required String action,
@@ -112,21 +98,17 @@ class ReservationsNotifier extends StateNotifier<ReservationsState> {
     String? newHeureDebut,
     String? message,
   }) async {
-    if (!_hasToken) {
-      state = state.copyWith(error: 'Token d\'authentification requis');
-      return;
-    }
-
     setLoading(true);
     try {
       final updatedReservation = await ReservationApi.updateReservation(
-        token: _token!,
+        token: _token,
         id: id,
         action: action,
         newDate: newDate,
         newHeureDebut: newHeureDebut,
         message: message,
       );
+
       state = state.copyWith(
         reservations: state.reservations.map((r) => r.id == id ? updatedReservation : r).toList(),
         error: null,
@@ -142,7 +124,7 @@ class ReservationsNotifier extends StateNotifier<ReservationsState> {
   Reservation? getById(String id) {
     try {
       return state.reservations.firstWhere((r) => r.id == id);
-    } catch (e) {
+    } catch (_) {
       return null;
     }
   }

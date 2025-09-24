@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:garagelink/ClientsScreens/chercherGarage.dart';
 import 'package:garagelink/MecanicienScreens/atelier/atelier_dash.dart';
 import 'package:garagelink/MecanicienScreens/devis/creation_devis.dart';
 import 'package:garagelink/MecanicienScreens/edit_localisation.dart';
@@ -11,7 +12,7 @@ import 'package:get/get.dart';
 import 'package:garagelink/components/default_app_bar.dart';
 import 'package:garagelink/MecanicienScreens/Facture/facture_screen.dart';
 import 'package:garagelink/MecanicienScreens/Gestion%20Clients/client_dash.dart';
-import 'package:garagelink/MecanicienScreens/R%C3%A9servations/reservation_screen.dart';
+import 'package:garagelink/MecanicienScreens/Reservations/reservation_screen.dart';
 import 'package:garagelink/MecanicienScreens/dashboard/screens/dash_board_screen.dart';
 import 'package:garagelink/configurations/app_routes.dart';
 import 'package:garagelink/providers/auth_provider.dart';
@@ -404,6 +405,13 @@ class _MecaHomePageState extends ConsumerState<MecaHomePage> {
               description: 'Création et gestion des Ordres',
               color: const Color.fromARGB(255, 11, 131, 187),
               onTap: () => Get.to(() => WorkOrderPage()),
+            ),
+            buildMenuCard(
+              icon: Icons.assignment,
+              title: 'Chercher Garages',
+              description: 'Chercher des garages à proximité',
+              color: const Color.fromARGB(255, 11, 131, 187),
+              onTap: () => Get.to(() => ChercherGarageScreen()),
             ),
 
             // 🚀 FUTURES FONCTIONNALITÉS

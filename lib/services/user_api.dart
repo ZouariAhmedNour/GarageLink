@@ -160,21 +160,26 @@ class UserApi {
   }
 
   /// Récupérer le profil utilisateur
-  static Future<User> getProfile(String token) async {
-    final url = Uri.parse('$UrlApi/get-profile');
-    final response = await http.get(
-      url,
-      headers: _authHeaders(token),
-    );
+ static Future<User> getProfile(String token) async {
+  final url = Uri.parse('$UrlApi/get-profile');
+  final response = await http.get(url, headers: _authHeaders(token));
 
-    if (response.statusCode == 200) {
+  if (response.statusCode == 200) {
+    final json = jsonDecode(response.body);
+    return User.fromJson(json);
+  } else if (response.statusCode == 401) {
+    // tente de parser le corps (backend devrait envoyer { error: 'TokenExpired', message: '...' })
+    try {
       final json = jsonDecode(response.body);
-      return User.fromJson(json);
-    } else {
-      final json = jsonDecode(response.body);
-      throw Exception(json['message'] ?? 'Erreur lors de la récupération du profil');
+      throw Exception(json['message'] ?? json['error'] ?? 'Unauthorized');
+    } catch (_) {
+      throw Exception('Unauthorized');
     }
+  } else {
+    final json = jsonDecode(response.body);
+    throw Exception(json['message'] ?? 'Erreur lors de la récupération du profil');
   }
+}
 
   /// Mettre à jour le profil utilisateur
   static Future<User> completeProfile({

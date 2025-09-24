@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:garagelink/models/user.dart';
 import 'package:garagelink/services/user_api.dart';
+import 'package:garagelink/utils/auth_utils.dart';
 
 // Keys pour le stockage sécurisé
 const _kStorageTokenKey = 'GARAGELINK_TOKEN';
@@ -30,7 +31,7 @@ class AuthState {
 
 // StateNotifier qui gère l'auth
 class AuthNotifier extends StateNotifier<AuthState> {
-  AuthNotifier(): super(AuthState());
+  AuthNotifier() : super(AuthState());
 
   String? get token => state.token;
   User? get user => state.user;
@@ -42,6 +43,21 @@ class AuthNotifier extends StateNotifier<AuthState> {
       state = state.copyWith(loading: true);
       final savedToken = await _secureStorage.read(key: _kStorageTokenKey);
       final savedUserJson = await _secureStorage.read(key: _kStorageUserKey);
+
+      // Si token absent -> ok
+      if (savedToken == null || savedToken.isEmpty) {
+        state = state.copyWith(token: null, user: null, loading: false);
+        return;
+      }
+
+      // Vérifie l'expiration locale du token
+      if (isJwtExpired(savedToken)) {
+        // token expiré -> on le supprime proprement
+        await _secureStorage.delete(key: _kStorageTokenKey);
+        await _secureStorage.delete(key: _kStorageUserKey);
+        state = AuthState(); // état déconnecté
+        return;
+      }
 
       User? u;
       if (savedUserJson != null) {

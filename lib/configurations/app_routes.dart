@@ -31,7 +31,10 @@ class AppRoutes {
   static const String vehiculeInfoScreen = '/vehiculeInfoScreen';
   static const String editClientScreen = '/editClientScreen';
   static const String entretienScreen = '/entretienScreen';
+  ////////////////////////////  MODULE RESERVATION ///////////////////////////
   static const String reservationScreen = '/reservationScreen';
+  static const String creerResaScreen = '/creerResaScreen';
+  ////////////////////////////// MODULE VEHICULES ////////////////////////////
   static const String clientVehiclesScreen = '/clientVehiclesScreen';
   static const String clientMapScreen = '/clientMapScreen';
 
@@ -39,5 +42,8 @@ class AppRoutes {
   static const String atelierDashboard = '/atelier_dashboard';
   static const String modifierAtelier = '/modifier_atelier';
   static const String ajouterAtelier = '/ajouter_atelier';
+
+  ///////////////////////   MODULE RESERVATION   ///////////////////////
+  static const chercherGarage = '/chercher_garage';
 
 }
