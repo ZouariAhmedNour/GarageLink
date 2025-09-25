@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:garagelink/providers/notification_provider.dart';
 import 'package:intl/intl.dart';
 import 'package:garagelink/models/reservation.dart';
 import 'package:garagelink/providers/reservation_provider.dart';
@@ -8,22 +9,30 @@ class ClientReservationsScreen extends ConsumerStatefulWidget {
   const ClientReservationsScreen({Key? key}) : super(key: key);
 
   @override
-  ConsumerState<ClientReservationsScreen> createState() => _ClientReservationsScreenState();
+  ConsumerState<ClientReservationsScreen> createState() =>
+      _ClientReservationsScreenState();
 }
 
-class _ClientReservationsScreenState extends ConsumerState<ClientReservationsScreen> {
+class _ClientReservationsScreenState
+    extends ConsumerState<ClientReservationsScreen> {
   Reservation? selected; // réservation actuellement ouverte (expansée)
   final TextEditingController _messageController = TextEditingController();
   DateTime? _counterDate;
   String? _counterHour;
+  int _lastReservationsCount = 0;
 
   @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(reservationsProvider.notifier).loadAll().catchError((e) => debugPrint('loadAll err: $e'));
-    });
-  }
+void initState() {
+  super.initState();
+  WidgetsBinding.instance.addPostFrameCallback((_) async {
+    try {
+      await ref.read(reservationsProvider.notifier).loadAll();
+      _lastReservationsCount = ref.read(reservationsProvider).reservations.length;
+    } catch (e) {
+      debugPrint('loadAll err: $e');
+    }
+  });
+}
 
   @override
   void dispose() {
@@ -31,70 +40,131 @@ class _ClientReservationsScreenState extends ConsumerState<ClientReservationsScr
     super.dispose();
   }
 
-  Future<void> _submitClientAction(String action) async {
-    if (selected == null) return;
+  /// Construit un message lorsque le client accepte une proposition.
+  /// On essaie d'extraire la date/heure depuis messageGarage ou creneauPropose,
+  /// puis on concatène le texte saisi (si présent).
+  String? _buildClientAcceptMessage() {
+    // extrait date/heure depuis le message du garage ou depuis creneauPropose
+    final proposal =
+        _extractProposalFromText(selected?.messageGarage, fallback: selected?.creneauPropose);
+    final d = proposal['date'];
+    final h = proposal['hour'];
 
-    // si action == client_contre_proposer : date & hour required
-    if (action == 'client_contre_proposer') {
-      if (_counterDate == null || _counterHour == null) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Choisissez date et heure')));
-        return;
-      }
-    }
+    final base = (d != null || h != null)
+        ? 'Proposition acceptée : ${d ?? ''}${(d != null && h != null) ? ' • ' : ' '}${h ?? ''}'.trim()
+        : 'Proposition acceptée';
 
-    try {
-      final notifier = ref.read(reservationsProvider.notifier);
+    final note = _messageController.text.trim();
+    if (note.isNotEmpty) return '$base — $note';
+    return base;
+  }
 
-      await notifier.updateReservation(
-  id: selected!.id!,
-  action: action,
-  newDate: (action == 'client_contre_proposer') ? _counterDate : null,
-  newHeureDebut: (action == 'client_contre_proposer') ? _counterHour : null,
-  message: (action == 'client_contre_proposer')
-      ? _buildClientMessageToSend(_messageController.text, _counterDate, _counterHour)
-      : (_messageController.text.isNotEmpty ? _messageController.text.trim() : null),
-  sender: 'client',
-);
-
-      // recharge pour être sûr que toutes les vues soient à jour (garage + client)
-      await notifier.loadAll();
-
-      // récupère la version mise à jour
-      final updated = ref.read(reservationsProvider).reservations.firstWhere(
-            (r) => r.id == selected!.id,
-            orElse: () => selected!,
-          );
-
-      setState(() {
-        selected = updated;
-        _messageController.clear();
-        _counterDate = null;
-        _counterHour = null;
-      });
-
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Réponse envoyée')));
-    } catch (e) {
-      debugPrint('client action error: $e');
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur: $e')));
+ Future<void> _submitClientAction(String action) async {
+  if (selected == null) return;
+  // si action == contre_proposer : date & hour required
+  if (action == 'contre_proposer') {
+    if (_counterDate == null || _counterHour == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Choisissez date et heure')),
+      );
+      return;
     }
   }
 
+  try {
+    final notifier = ref.read(reservationsProvider.notifier);
 
-  String? _buildClientMessageToSend(String? rawMessage, DateTime? date, String? hour) {
-  final m = rawMessage?.trim();
-  final datePart = date != null ? DateFormat('dd/MM/yyyy').format(date) : '';
-  final hourPart = (hour ?? '').trim();
+    // construire message selon l'action
+    String? messageToSend;
+    if (action == 'contre_proposer') {
+      messageToSend = _buildClientMessageToSend(
+        _messageController.text,
+        _counterDate,
+        _counterHour,
+      );
+    } else if (action == 'accepter') {
+      messageToSend = _buildClientAcceptMessage();
+    } else {
+      messageToSend = _messageController.text.isNotEmpty
+          ? _messageController.text.trim()
+          : null;
+    }
 
-  // Si pas de date/heure, renvoyer le message brut (ou null si vide)
-  if (datePart.isEmpty && hourPart.isEmpty) {
-    return (m != null && m.isNotEmpty) ? m : null;
+    await notifier.updateReservation(
+      id: selected!.id!,
+      action: action,
+      newDate: (action == 'contre_proposer') ? _counterDate : null,
+      newHeureDebut: (action == 'contre_proposer') ? _counterHour : null,
+      message: messageToSend,
+      sender: 'client',
+    );
+
+    // recharge pour être sûr que toutes les vues soient à jour (garage + client)
+    await notifier.loadAll();
+
+    // --- APPEL REQUIS: détecte nouvelles résas et notifie le dashboard ---
+    _maybeNotifyNewReservations();
+
+    // Optionnel : si un message a été envoyé depuis ce screen, incrémente aussi le compteur
+    // (utile pour alerter le tableau de bord du mécanicien).
+    // Retire cette partie si tu ne veux pas notifier pour les envois locaux.
+    if (messageToSend != null && messageToSend.trim().isNotEmpty) {
+      ref.read(newNotificationProvider.notifier).state += 1;
+    }
+    // ------------------------------------------------------------------
+
+    // récupère la version mise à jour
+    final updated = ref
+        .read(reservationsProvider)
+        .reservations
+        .firstWhere((r) => r.id == selected!.id, orElse: () => selected!);
+
+    if (!mounted) return;
+    setState(() {
+      selected = updated;
+      _messageController.clear();
+      _counterDate = null;
+      _counterHour = null;
+    });
+
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Réponse envoyée')));
+  } catch (e) {
+    debugPrint('client action error: $e');
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur: $e')));
   }
-
-  var label = 'Nouvelle proposition : ${datePart}${datePart.isNotEmpty && hourPart.isNotEmpty ? ' • ' : ' '}$hourPart'.trim();
-
-  if (m == null || m.isEmpty) return label;
-  return '$label — $m';
 }
+
+  void _maybeNotifyNewReservations() {
+  final newCount = ref.read(reservationsProvider).reservations.length;
+  if (newCount > _lastReservationsCount) {
+    final diff = newCount - _lastReservationsCount;
+    ref.read(newNotificationProvider.notifier).state += diff;
+  }
+  _lastReservationsCount = newCount;
+}
+
+  String? _buildClientMessageToSend(
+    String? rawMessage,
+    DateTime? date,
+    String? hour,
+  ) {
+    final m = rawMessage?.trim();
+    final datePart = date != null ? DateFormat('dd/MM/yyyy').format(date) : '';
+    final hourPart = (hour ?? '').trim();
+
+    // Si pas de date/heure, renvoyer le message brut (ou null si vide)
+    if (datePart.isEmpty && hourPart.isEmpty) {
+      return (m != null && m.isNotEmpty) ? m : null;
+    }
+
+    var label =
+        'Nouvelle proposition : ${datePart}${datePart.isNotEmpty && hourPart.isNotEmpty ? ' • ' : ' '}$hourPart'
+            .trim();
+
+    if (m == null || m.isEmpty) return label;
+    return '$label — $m';
+  }
 
   Future<void> _pickCounterDate() async {
     final now = DateTime.now();
@@ -147,12 +217,17 @@ class _ClientReservationsScreenState extends ConsumerState<ClientReservationsScr
 
   // ---------- NEW: extract date/hour from a text (or fallback to a Creneau) ----------
   /// Retourne {'date': 'dd/MM/yyyy' | null, 'hour': 'HH:mm' | null}
-  Map<String, String?> _extractProposalFromText(String? text, {Creneau? fallback}) {
+  Map<String, String?> _extractProposalFromText(
+    String? text, {
+    Creneau? fallback,
+  }) {
     final t = (text ?? '').trim();
     if (t.isEmpty) {
       // fallback to creneau if provided
       if (fallback != null) {
-        final dateStr = fallback.date != null ? DateFormat('dd/MM/yyyy').format(fallback.date!) : null;
+        final dateStr = fallback.date != null
+            ? DateFormat('dd/MM/yyyy').format(fallback.date!)
+            : null;
         final hourStr = fallback.heureDebut;
         return {'date': dateStr, 'hour': hourStr};
       }
@@ -164,15 +239,14 @@ class _ClientReservationsScreenState extends ConsumerState<ClientReservationsScr
     final timeMatch = RegExp(r'(\d{2}:\d{2})').firstMatch(t);
 
     if (dateMatch != null || timeMatch != null) {
-      return {
-        'date': dateMatch?.group(1),
-        'hour': timeMatch?.group(1),
-      };
+      return {'date': dateMatch?.group(1), 'hour': timeMatch?.group(1)};
     }
 
     // If no explicit date/time in text, fallback to creneau if available
     if (fallback != null) {
-      final dateStr = fallback.date != null ? DateFormat('dd/MM/yyyy').format(fallback.date!) : null;
+      final dateStr = fallback.date != null
+          ? DateFormat('dd/MM/yyyy').format(fallback.date!)
+          : null;
       final hourStr = fallback.heureDebut;
       return {'date': dateStr, 'hour': hourStr};
     }
@@ -180,10 +254,15 @@ class _ClientReservationsScreenState extends ConsumerState<ClientReservationsScr
     return {'date': null, 'hour': null};
   }
 
- 
-
   // ---------- message card now optionally shows proposed date/hour ----------
-  Widget _messageCard(String title, String text, bool mine, DateTime? ts, {String? proposedDate, String? proposedHour}) {
+  Widget _messageCard(
+    String title,
+    String text,
+    bool mine,
+    DateTime? ts, {
+    String? proposedDate,
+    String? proposedHour,
+  }) {
     return Align(
       alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
@@ -197,15 +276,29 @@ class _ClientReservationsScreenState extends ConsumerState<ClientReservationsScr
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(title, style: TextStyle(fontWeight: FontWeight.bold, color: mine ? Colors.white : Colors.black)),
+            Text(
+              title,
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: mine ? Colors.white : Colors.black,
+              ),
+            ),
             const SizedBox(height: 6),
-            Text(text, style: TextStyle(color: mine ? Colors.white : Colors.black)),
-            if ((proposedDate != null && proposedDate.isNotEmpty) || (proposedHour != null && proposedHour.isNotEmpty))
+            Text(
+              text,
+              style: TextStyle(color: mine ? Colors.white : Colors.black),
+            ),
+            if ((proposedDate != null && proposedDate.isNotEmpty) ||
+                (proposedHour != null && proposedHour.isNotEmpty))
               Padding(
                 padding: const EdgeInsets.only(top: 8.0),
                 child: Row(
                   children: [
-                    Icon(Icons.schedule, size: 16, color: mine ? Colors.white70 : Colors.black54),
+                    Icon(
+                      Icons.schedule,
+                      size: 16,
+                      color: mine ? Colors.white70 : Colors.black54,
+                    ),
                     const SizedBox(width: 6),
                     Text(
                       '${proposedDate ?? ''}${(proposedDate != null && proposedDate.isNotEmpty && proposedHour != null && proposedHour.isNotEmpty) ? ' • ' : ' '}${proposedHour ?? ''}',
@@ -223,7 +316,10 @@ class _ClientReservationsScreenState extends ConsumerState<ClientReservationsScr
                 padding: const EdgeInsets.only(top: 6),
                 child: Text(
                   DateFormat('dd/MM/yyyy HH:mm').format(ts),
-                  style: TextStyle(fontSize: 11, color: mine ? Colors.white70 : Colors.black54),
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: mine ? Colors.white70 : Colors.black54,
+                  ),
                 ),
               ),
           ],
@@ -247,14 +343,22 @@ class _ClientReservationsScreenState extends ConsumerState<ClientReservationsScr
                   itemCount: state.reservations.length,
                   itemBuilder: (context, i) {
                     final r = state.reservations[i];
-                    final serviceLabel = (r.serviceName != null && r.serviceName!.isNotEmpty) ? r.serviceName! : r.serviceId;
-                    final dateStr = r.creneauDemande.date != null ? DateFormat('dd/MM/yyyy').format(r.creneauDemande.date!) : '';
-                    final timeStr = r.creneauDemande.heureDebut ?? r.creneauPropose?.heureDebut ?? '';
+                    final serviceLabel =
+                        (r.serviceName != null && r.serviceName!.isNotEmpty)
+                            ? r.serviceName!
+                            : r.serviceId;
+                    final dateStr = r.creneauDemande.date != null
+                        ? DateFormat('dd/MM/yyyy').format(r.creneauDemande.date!)
+                        : '';
+                    final timeStr =
+                        r.creneauDemande.heureDebut ?? r.creneauPropose?.heureDebut ?? '';
 
                     final isOpen = selected?.id == r.id;
 
                     return Card(
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                       elevation: 3,
                       margin: const EdgeInsets.only(bottom: 12),
                       child: ExpansionTile(
@@ -282,9 +386,21 @@ class _ClientReservationsScreenState extends ConsumerState<ClientReservationsScr
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(serviceLabel, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                  Text(
+                                    serviceLabel,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
                                   const SizedBox(height: 4),
-                                  Text(r.clientName.isNotEmpty ? r.clientName : r.clientPhone, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)),
+                                  Text(
+                                    r.clientName.isNotEmpty ? r.clientName : r.clientPhone,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(fontSize: 13),
+                                  ),
                                 ],
                               ),
                             ),
@@ -292,11 +408,18 @@ class _ClientReservationsScreenState extends ConsumerState<ClientReservationsScr
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
-                                Text(dateStr, style: const TextStyle(fontSize: 12, color: Colors.black54)),
+                                Text(
+                                  dateStr,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.black54,
+                                  ),
+                                ),
                                 const SizedBox(height: 2),
                                 Chip(
                                   backgroundColor: _statusColor(r.status).withOpacity(0.12),
-                                  label: Text(_statusLabel(r.status), style: TextStyle(color: _statusColor(r.status))),
+                                  label: Text(_statusLabel(r.status),
+                                      style: TextStyle(color: _statusColor(r.status))),
                                 ),
                               ],
                             ),
@@ -327,8 +450,6 @@ class _ClientReservationsScreenState extends ConsumerState<ClientReservationsScr
                           ],
 
                           // Messages (history)
-
-                          // 1) initial request (always show date/time of initial creneauDemande)
                           _messageCard(
                             'Ma demande',
                             '${serviceLabel}\n📅 ${dateStr} ${timeStr}\n\n${r.descriptionDepannage}',
@@ -338,7 +459,6 @@ class _ClientReservationsScreenState extends ConsumerState<ClientReservationsScr
                             proposedHour: null,
                           ),
 
-                          // 2) garage message - compute proposed date/hour from the garage message text (fallback to creneauPropose)
                           if (r.messageGarage != null || r.creneauPropose != null)
                             () {
                               final garageProposal = _extractProposalFromText(r.messageGarage, fallback: r.creneauPropose);
@@ -348,7 +468,6 @@ class _ClientReservationsScreenState extends ConsumerState<ClientReservationsScr
                               return _messageCard('Garage', garageText, false, r.updatedAt, proposedDate: gd, proposedHour: gh);
                             }(),
 
-                          // 3) client message - compute proposed date/hour from the client message text (fallback to creneauPropose)
                           if (r.messageClient != null || r.creneauPropose != null)
                             () {
                               final clientProposal = _extractProposalFromText(r.messageClient, fallback: r.creneauPropose);
@@ -393,7 +512,7 @@ class _ClientReservationsScreenState extends ConsumerState<ClientReservationsScr
                               ElevatedButton(
                                 onPressed: () {
                                   if (_counterDate != null && _counterHour != null) {
-                                    _submitClientAction('client_contre_proposer');
+                                    _submitClientAction('contre_proposer');
                                   } else {
                                     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Choisissez date et heure avant de proposer.')));
                                   }
@@ -402,7 +521,7 @@ class _ClientReservationsScreenState extends ConsumerState<ClientReservationsScr
                               ),
                               if (r.status == ReservationStatus.contrePropose)
                                 ElevatedButton(
-                                  onPressed: () => _submitClientAction('accepter_contre_proposition'),
+                                  onPressed: () => _submitClientAction('accepter'),
                                   child: const Text('Accepter'),
                                 ),
                               OutlinedButton(
@@ -418,16 +537,14 @@ class _ClientReservationsScreenState extends ConsumerState<ClientReservationsScr
                           Row(
                             children: [
                               if (_counterDate != null || _counterHour != null)
-                                Expanded(
-                                  child: Text('Proposition: ${_counterDate != null ? DateFormat('dd/MM/yyyy').format(_counterDate!) : ''} ${_counterHour ?? ''}'),
-                                ),
+                                Expanded(child: Text('Proposition: ${_counterDate != null ? DateFormat('dd/MM/yyyy').format(_counterDate!) : ''} ${_counterHour ?? ''}')),
                               ElevatedButton(
                                 onPressed: () {
                                   // Smart send:
                                   if (_counterDate != null && _counterHour != null) {
-                                    _submitClientAction('client_contre_proposer');
+                                    _submitClientAction('contre_proposer');
                                   } else if (r.status == ReservationStatus.contrePropose) {
-                                    _submitClientAction('accepter_contre_proposition');
+                                    _submitClientAction('accepter');
                                   } else {
                                     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Choisissez un créneau ou acceptez la proposition avant d\'envoyer.')));
                                   }

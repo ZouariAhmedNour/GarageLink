@@ -10,6 +10,7 @@ import 'package:garagelink/MecanicienScreens/gestion%20mec/mec_list_screen.dart'
 import 'package:garagelink/MecanicienScreens/meca_services/meca_services.dart';
 import 'package:garagelink/MecanicienScreens/ordreTravail/ordre_dash.dart';
 import 'package:garagelink/MecanicienScreens/stock/stock_dashboard.dart';
+import 'package:garagelink/providers/notification_provider.dart';
 import 'package:get/get.dart';
 import 'package:garagelink/components/default_app_bar.dart';
 import 'package:garagelink/MecanicienScreens/Facture/facture_screen.dart';
@@ -38,68 +39,80 @@ class _MecaHomePageState extends ConsumerState<MecaHomePage> {
 
   // notification state
   bool _hasNotification = false;
+  bool _notificationListenerRegistered = false;
+
   int _pendingCount = 0; // nombre actuel de demandes en attente (pour comparaison)
+
+  // Flag pour enregistrer le listener une seule fois (doit être créé pendant build)
+  bool _reservationsListenerRegistered = false;
 
   @override
   void initState() {
     super.initState();
+
     // démarre la vérification d'auth après la première frame
     WidgetsBinding.instance.addPostFrameCallback((_) => _initAuth());
 
-   
+    // IMPORTANT: ne pas appeler ref.listen ici (Riverpod exige que ref.listen soit appelé
+    // dans build() d'un ConsumerWidget/ConsumerState). Le listener sera enregistré dans build().
   }
 
   Future<void> _initAuth() async {
     try {
-      // Charger depuis secure storage si besoin
+      // On peut déjà vérifier mounted avant tout appel asynchrone
+      if (!mounted) return;
+
+      // charge depuis storage (peut être long)
       await ref.read(authNotifierProvider.notifier).loadFromStorage();
+
+      // Très important : vérifier mounted *après* un await avant d'utiliser ref ou setState
+      if (!mounted) return;
 
       final token = ref.read(authTokenProvider);
       final currentUser = ref.read(currentUserProvider);
 
       if (token == null || token.isEmpty) {
-        // pas de token -> redirection vers login
         if (mounted) Get.offAllNamed(AppRoutes.login);
         return;
       }
 
-      // si l'utilisateur n'est pas dans le provider, tenter de récupérer via API
       if (currentUser == null) {
         try {
           final profile = await UserApi.getProfile(token);
-          // mettre à jour le provider
+          if (!mounted) return; // widget peut avoir été démonté pendant l'appel HTTP
+
+          // mettre à jour le provider (peut aussi déclencher rebuilds)
           await ref.read(authNotifierProvider.notifier).setUser(profile);
+          if (!mounted) return;
+
           setState(() {
             _userName = (profile.username.isNotEmpty) ? profile.username : profile.email;
           });
         } catch (_) {
-          // en cas d'erreur on continue avec valeur par défaut
+          if (!mounted) return;
           setState(() => _userName = 'Utilisateur');
         }
       } else {
+        if (!mounted) return;
         setState(() {
           _userName = (currentUser.username.isNotEmpty) ? currentUser.username : currentUser.email;
         });
       }
 
-      // afficher message si on vient d'un login
+      // affichage du Snack après login : protège aussi
       final args = Get.arguments;
       if (args != null && args is Map && args['justLoggedIn'] == true) {
         final message = (args['message'] as String?) ?? 'Connecté avec succès.';
-        if (mounted) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(message),
-                  behavior: SnackBarBehavior.floating,
-                ),
-              );
-            }
-          });
-        }
+        if (!mounted) return;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
+          );
+        });
       }
     } finally {
+      // Passe _checkingAuth à false seulement si monté
       if (mounted) setState(() => _checkingAuth = false);
     }
   }
@@ -117,12 +130,13 @@ class _MecaHomePageState extends ConsumerState<MecaHomePage> {
   // Appelle quand l'utilisateur clique sur l'icône de notif :
   // navigate to reservations screen and mark notif as seen.
   void _onNotificationTap() {
-    setState(() {
-      _hasNotification = false;
-    });
-    // Navigue vers l'écran des réservations (tu peux remplacer par GarageReservationsScreen si tu préfères)
-    Get.to(() => const ReservationScreen());
-  }
+  setState(() {
+    _hasNotification = false;
+  });
+  // Reset global notifications
+  ref.read(newNotificationProvider.notifier).state = 0;
+  Get.to(() => const ReservationScreen());
+}
 
   // Widgets auxiliaires (repris de ton code)
   Widget buildMenuCard({
@@ -293,26 +307,57 @@ class _MecaHomePageState extends ConsumerState<MecaHomePage> {
   @override
   Widget build(BuildContext context) {
     final token = ref.read(authNotifierProvider).token;
-  // --- ref.listen placé dans build (autorisé) ---
-    ref.listen<ReservationsState>(reservationsProvider, (previous, next) {
-      final int prevPending = previous?.reservations.where((r) => r.status == ReservationStatus.enAttente).length ?? 0;
-      final int nextPending = next.reservations.where((r) => r.status == ReservationStatus.enAttente).length;
 
-      if (nextPending > prevPending) {
+    // Enregistrer le listener une seule fois DANS build (obligatoire pour Riverpod assertions)
+    if (!_reservationsListenerRegistered) {
+      _reservationsListenerRegistered = true;
+
+      ref.listen<ReservationsState>(reservationsProvider, (previous, next) {
         if (!mounted) return;
-        setState(() {
-          _hasNotification = true;
-          _pendingCount = nextPending;
-        });
-        try {
-          SystemSound.play(SystemSoundType.alert);
-          HapticFeedback.mediumImpact();
-        } catch (_) {}
-      } else {
-        if (!mounted) return;
-        setState(() => _pendingCount = nextPending);
-      }
-    });
+
+        final int prevPending = previous?.reservations.where((r) => r.status == ReservationStatus.enAttente).length ?? 0;
+        final int nextPending = next.reservations.where((r) => r.status == ReservationStatus.enAttente).length;
+
+        if (nextPending > prevPending) {
+          setState(() {
+            _hasNotification = true;
+            _pendingCount = nextPending;
+          });
+          try {
+            SystemSound.play(SystemSoundType.alert);
+            HapticFeedback.mediumImpact();
+          } catch (_) {}
+        } else {
+          setState(() => _pendingCount = nextPending);
+        }
+      });
+    }
+
+    // Enregistrer l'écouteur des notifications globales (une seule fois)
+if (!_notificationListenerRegistered) {
+  _notificationListenerRegistered = true;
+
+  ref.listen<int>(newNotificationProvider, (previous, next) {
+    if (!mounted) return;
+    final nextCount = next ?? 0;
+    if (nextCount > 0) {
+      setState(() {
+        _hasNotification = true;
+        _pendingCount = nextCount;
+      });
+      try {
+        SystemSound.play(SystemSoundType.alert);
+        HapticFeedback.mediumImpact();
+      } catch (_) {}
+    } else {
+      setState(() {
+        _hasNotification = false;
+        _pendingCount = 0;
+      });
+    }
+  });
+}
+
     if (_checkingAuth) {
       return const Scaffold(
         body: Center(child: CircularProgressIndicator()),

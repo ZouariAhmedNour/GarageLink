@@ -41,7 +41,7 @@ class _GarageReservationsScreenState extends ConsumerState<GarageReservationsScr
       firstDate: now,
       lastDate: now.add(const Duration(days: 365)),
     );
-    if (date != null) setState(() => _proposedDate = date);
+    if (date != null && mounted) setState(() => _proposedDate = date);
   }
 
   String? _buildGarageMessageToSend(String? rawMessage, DateTime? date, String? hour) {
@@ -60,6 +60,24 @@ class _GarageReservationsScreenState extends ConsumerState<GarageReservationsScr
     return '$label — $m';
   }
 
+  /// Construit un message lorsqu'on accepte la réservation.
+  /// Si un créneau proposé existe on inclut la date/heure, sinon message générique.
+  String? _buildGarageAcceptMessage(Reservation r) {
+    final proposed = r.creneauPropose;
+    String base;
+    if (proposed != null && (proposed.date != null || (proposed.heureDebut ?? '').isNotEmpty)) {
+      final datePart = proposed.date != null ? DateFormat('dd/MM/yyyy').format(proposed.date!) : '';
+      final hourPart = (proposed.heureDebut ?? '').trim();
+      base = 'Créneau confirmé : ${datePart}${datePart.isNotEmpty && hourPart.isNotEmpty ? ' • ' : ' '}$hourPart'.trim();
+    } else {
+      base = 'Réservation acceptée';
+    }
+
+    final note = _messageController.text.trim();
+    if (note.isNotEmpty) return '$base — $note';
+    return base;
+  }
+
   /// Effectue une action sur la réservation sélectionnée et recharge la liste
   /// pour s'assurer que tous les écrans affichent la version mise à jour.
   Future<void> _performAction({required String action}) async {
@@ -69,27 +87,52 @@ class _GarageReservationsScreenState extends ConsumerState<GarageReservationsScr
       // Validation : si action = contre_proposer, newDate + newHeureDebut requis
       if (action == 'contre_proposer') {
         if (_proposedDate == null || _proposedHour == null) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Choisissez une date et une heure pour proposer un créneau')));
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Choisissez une date et une heure pour proposer un créneau'))
+            );
+          }
           return;
         }
       }
 
       final notifier = ref.read(reservationsProvider.notifier);
 
+      // Construire le message à envoyer en fonction de l'action
+      String? messageToSend;
+      String actionToSend = action;
+
+      if (action == 'contre_proposer') {
+        messageToSend = _buildGarageMessageToSend(_messageController.text, _proposedDate, _proposedHour);
+      } else if (action == 'accepter') {
+        // si on accepte, on envoie aussi un message d'acceptation pour l'historique
+        // (backend doit gérer la mise à jour du statut en 'accepte')
+        messageToSend = _buildGarageAcceptMessage(selected!);
+        // Optionnel : si ton backend attend un autre nom d'action pour accepter une contre-proposition,
+        // tu peux mapper ici en fonction du statut actuel :
+        if (selected!.status == ReservationStatus.contrePropose) {
+          // exemple : actionToSend = 'accepter_contre_proposition';
+          // laisse actionToSend = 'accepter' si ton backend supporte 'accepter'.
+        }
+      } else {
+        // pour 'refuser' ou autres actions, on envoie le texte libre si renseigné
+        messageToSend = (_messageController.text.isNotEmpty ? _messageController.text.trim() : null);
+      }
+
       // Appel updateReservation
       await notifier.updateReservation(
         id: selected!.id!,
-        action: action,
+        action: actionToSend,
         newDate: (action == 'contre_proposer') ? _proposedDate : null,
         newHeureDebut: (action == 'contre_proposer') ? _proposedHour : null,
-        message: (action == 'contre_proposer')
-            ? _buildGarageMessageToSend(_messageController.text, _proposedDate, _proposedHour)
-            : (_messageController.text.isNotEmpty ? _messageController.text.trim() : null),
+        message: messageToSend,
         sender: 'garage',
       );
 
-      // --- NOUVEAU : recharger la liste depuis le backend pour assurer cohérence ---
+      // --- recharger la liste depuis le backend pour assurer cohérence ---
       await notifier.loadAll();
+
+      if (!mounted) return;
 
       // récupérer la version mise à jour depuis le provider
       final updated = ref.read(reservationsProvider).reservations.firstWhere(
@@ -104,10 +147,14 @@ class _GarageReservationsScreenState extends ConsumerState<GarageReservationsScr
         _proposedHour = null;
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Action envoyée')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Action envoyée')));
+      }
     } catch (e) {
       debugPrint('action error: $e');
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur: $e')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur: $e')));
+      }
     }
   }
 
@@ -123,8 +170,7 @@ class _GarageReservationsScreenState extends ConsumerState<GarageReservationsScr
       // Construire le message à envoyer (avec date/heure si present)
       final messageToSend = _buildGarageMessageToSend(rawText.isNotEmpty ? rawText : null, _proposedDate, _proposedHour);
 
-      // On envoie l'action 'contre_proposer' si on a des infos de date/heure,
-      // sinon on envoie quand même 'contre_proposer' pour garder la logique existante
+      // Ici on utilise 'contre_proposer' pour conserver la logique d'envoi d'un message et/ou créneau
       await notifier.updateReservation(
         id: selected!.id!,
         action: 'contre_proposer',
@@ -136,6 +182,8 @@ class _GarageReservationsScreenState extends ConsumerState<GarageReservationsScr
 
       // --- recharger la liste pour synchroniser toutes les vues ---
       await notifier.loadAll();
+
+      if (!mounted) return;
 
       final updated = ref.read(reservationsProvider).reservations.firstWhere(
             (r) => r.id == selected!.id,
@@ -149,10 +197,14 @@ class _GarageReservationsScreenState extends ConsumerState<GarageReservationsScr
         selected = updated;
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Message envoyé')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Message envoyé')));
+      }
     } catch (e) {
       debugPrint('send message error: $e');
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur: $e')));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur: $e')));
+      }
     }
   }
 
@@ -218,11 +270,9 @@ class _GarageReservationsScreenState extends ConsumerState<GarageReservationsScr
     // Si le backend a aussi fourni un message texte côté garage, on l'ajoute collé après un séparateur " — "
     final msg = r.messageGarage?.trim();
     if (msg != null && msg.isNotEmpty) {
-      // Évite de répéter le label si le backend contient déjà la même info (optionnel)
       if (!msg.contains(datePart) && !msg.contains(hourPart)) {
         label = '$label — $msg';
       } else {
-        // si le message contient déjà la date/heure, on l'ajoute quand même proprement
         label = '$label — $msg';
       }
     }
@@ -260,8 +310,6 @@ class _GarageReservationsScreenState extends ConsumerState<GarageReservationsScr
       ),
     );
   }
-
-  // NOTE: _contreProposeSheet removed because not referenced (we render bottom sheet inline)
 
   Widget _twoColumnLayout(BuildContext context, List<Reservation> reservations) {
     return Row(
@@ -318,7 +366,6 @@ class _GarageReservationsScreenState extends ConsumerState<GarageReservationsScr
         final dateStr = r.creneauDemande.date != null ? DateFormat('dd/MM/yyyy').format(r.creneauDemande.date!) : '';
         final timeStr = r.creneauDemande.heureDebut ?? r.creneauPropose?.heureDebut ?? '';
 
-        // Calculer la chaîne d'affichage AVANT la liste de widgets
         final garageDisplayText = _garageProposalLabel(r) ?? r.messageGarage;
 
         return Card(
@@ -358,7 +405,6 @@ class _GarageReservationsScreenState extends ConsumerState<GarageReservationsScr
                 reservationForContext: r,
               ),
 
-              // Afficher le message du garage formaté si présent
               if (garageDisplayText != null)
                 _messageBubble(
                   title: 'Garage',
@@ -435,12 +481,7 @@ class _GarageReservationsScreenState extends ConsumerState<GarageReservationsScr
                             return StatefulBuilder(
                               builder: (context, sheetSetState) {
                                 return Padding(
-                                  padding: EdgeInsets.only(
-                                    bottom: MediaQuery.of(context).viewInsets.bottom,
-                                    left: 16,
-                                    right: 16,
-                                    top: 16,
-                                  ),
+                                  padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom, left: 16, right: 16, top: 16),
                                   child: Column(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
@@ -548,7 +589,6 @@ class _GarageReservationsScreenState extends ConsumerState<GarageReservationsScr
     final requestedTimeStr = r.creneauDemande.heureDebut ?? '';
     final proposed = r.creneauPropose;
 
-    // Calculer la chaîne d'affichage AVANT la liste de widgets
     final garageDisplayTextDetail = _garageProposalLabel(r) ?? r.messageGarage;
 
     return Column(
@@ -581,7 +621,6 @@ class _GarageReservationsScreenState extends ConsumerState<GarageReservationsScr
           ),
         ),
 
-        // Si le backend a rempli creneauPropose, on l'affiche clairement
         if (proposed != null)
           Container(
             width: double.infinity,
@@ -612,7 +651,6 @@ class _GarageReservationsScreenState extends ConsumerState<GarageReservationsScr
                 ),
                 const SizedBox(height: 12),
 
-                // Afficher le message du garage formaté si présent
                 if (garageDisplayTextDetail != null)
                   Align(
                     alignment: Alignment.centerLeft,
