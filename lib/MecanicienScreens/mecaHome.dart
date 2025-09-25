@@ -1,5 +1,9 @@
+// lib/MecanicienScreens/meca_home_page.dart
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:get/get.dart';
+
 import 'package:garagelink/ClientsScreens/chercherGarage.dart';
 import 'package:garagelink/MecanicienScreens/Reservations/client_reservations_screen.dart';
 import 'package:garagelink/MecanicienScreens/Reservations/garage_reservations_screen.dart';
@@ -10,8 +14,6 @@ import 'package:garagelink/MecanicienScreens/gestion%20mec/mec_list_screen.dart'
 import 'package:garagelink/MecanicienScreens/meca_services/meca_services.dart';
 import 'package:garagelink/MecanicienScreens/ordreTravail/ordre_dash.dart';
 import 'package:garagelink/MecanicienScreens/stock/stock_dashboard.dart';
-import 'package:garagelink/providers/notification_provider.dart';
-import 'package:get/get.dart';
 import 'package:garagelink/components/default_app_bar.dart';
 import 'package:garagelink/MecanicienScreens/Facture/facture_screen.dart';
 import 'package:garagelink/MecanicienScreens/Gestion%20Clients/client_dash.dart';
@@ -21,8 +23,7 @@ import 'package:garagelink/configurations/app_routes.dart';
 import 'package:garagelink/providers/auth_provider.dart';
 import 'package:garagelink/services/user_api.dart';
 
-// Nouveaux imports nécessaires pour la notif
-import 'package:flutter/services.dart';
+import 'package:garagelink/providers/notification_provider.dart';
 import 'package:garagelink/providers/reservation_provider.dart';
 import 'package:garagelink/models/reservation.dart';
 
@@ -37,88 +38,68 @@ class _MecaHomePageState extends ConsumerState<MecaHomePage> {
   bool _checkingAuth = true;
   String _userName = 'Utilisateur';
 
-  // notification state
-  bool _hasNotification = false;
-  bool _notificationListenerRegistered = false;
+  // compteur local calculé depuis reservationsProvider (utilisé quand globalNotifCount == 0)
+  int _pendingCountFromResa = 0;
 
-  int _pendingCount = 0; // nombre actuel de demandes en attente (pour comparaison)
-
-  // Flag pour enregistrer le listener une seule fois (doit être créé pendant build)
-  bool _reservationsListenerRegistered = false;
+  // évite d'enregistrer plusieurs fois les listeners (on garde dans build mais on protège)
+  bool _listenersRegistered = false;
 
   @override
   void initState() {
     super.initState();
-
-    // démarre la vérification d'auth après la première frame
     WidgetsBinding.instance.addPostFrameCallback((_) => _initAuth());
-
-    // IMPORTANT: ne pas appeler ref.listen ici (Riverpod exige que ref.listen soit appelé
-    // dans build() d'un ConsumerWidget/ConsumerState). Le listener sera enregistré dans build().
   }
 
   Future<void> _initAuth() async {
-    try {
-      // On peut déjà vérifier mounted avant tout appel asynchrone
-      if (!mounted) return;
+    if (!mounted) return;
 
-      // charge depuis storage (peut être long)
-      await ref.read(authNotifierProvider.notifier).loadFromStorage();
+    await ref.read(authNotifierProvider.notifier).loadFromStorage();
+    if (!mounted) return;
 
-      // Très important : vérifier mounted *après* un await avant d'utiliser ref ou setState
-      if (!mounted) return;
+    final token = ref.read(authTokenProvider);
+    final currentUser = ref.read(currentUserProvider);
 
-      final token = ref.read(authTokenProvider);
-      final currentUser = ref.read(currentUserProvider);
+    if (token == null || token.isEmpty) {
+      if (mounted) Get.offAllNamed(AppRoutes.login);
+      return;
+    }
 
-      if (token == null || token.isEmpty) {
-        if (mounted) Get.offAllNamed(AppRoutes.login);
-        return;
-      }
-
-      if (currentUser == null) {
-        try {
-          final profile = await UserApi.getProfile(token);
-          if (!mounted) return; // widget peut avoir été démonté pendant l'appel HTTP
-
-          // mettre à jour le provider (peut aussi déclencher rebuilds)
-          await ref.read(authNotifierProvider.notifier).setUser(profile);
-          if (!mounted) return;
-
-          setState(() {
-            _userName = (profile.username.isNotEmpty) ? profile.username : profile.email;
-          });
-        } catch (_) {
-          if (!mounted) return;
-          setState(() => _userName = 'Utilisateur');
-        }
-      } else {
+    if (currentUser == null) {
+      try {
+        final profile = await UserApi.getProfile(token);
+        if (!mounted) return;
+        await ref.read(authNotifierProvider.notifier).setUser(profile);
         if (!mounted) return;
         setState(() {
-          _userName = (currentUser.username.isNotEmpty) ? currentUser.username : currentUser.email;
+          _userName = (profile.username.isNotEmpty) ? profile.username : profile.email;
         });
-      }
-
-      // affichage du Snack après login : protège aussi
-      final args = Get.arguments;
-      if (args != null && args is Map && args['justLoggedIn'] == true) {
-        final message = (args['message'] as String?) ?? 'Connecté avec succès.';
+      } catch (_) {
         if (!mounted) return;
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
-          );
-        });
+        setState(() => _userName = 'Utilisateur');
       }
-    } finally {
-      // Passe _checkingAuth à false seulement si monté
-      if (mounted) setState(() => _checkingAuth = false);
+    } else {
+      if (!mounted) return;
+      setState(() {
+        _userName = (currentUser.username.isNotEmpty) ? currentUser.username : currentUser.email;
+      });
     }
+
+    final args = Get.arguments;
+    if (args != null && args is Map && args['justLoggedIn'] == true) {
+      final message = (args['message'] as String?) ?? 'Connecté avec succès.';
+      if (!mounted) return;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
+        );
+      });
+    }
+
+    if (mounted) setState(() => _checkingAuth = false);
   }
 
   Future<void> _handleLogout() async {
-    // clear state + secure storage
     await ref.read(authNotifierProvider.notifier).clear();
     if (mounted) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -127,18 +108,13 @@ class _MecaHomePageState extends ConsumerState<MecaHomePage> {
     }
   }
 
-  // Appelle quand l'utilisateur clique sur l'icône de notif :
-  // navigate to reservations screen and mark notif as seen.
   void _onNotificationTap() {
-  setState(() {
-    _hasNotification = false;
-  });
-  // Reset global notifications
-  ref.read(newNotificationProvider.notifier).state = 0;
-  Get.to(() => const ReservationScreen());
-}
+    // reset global notifications (marqué comme vu)
+    ref.read(newNotificationProvider.notifier).state = 0;
+    // navigue vers l'écran des réservations
+    Get.to(() => const ReservationScreen());
+  }
 
-  // Widgets auxiliaires (repris de ton code)
   Widget buildMenuCard({
     required IconData icon,
     required String title,
@@ -253,8 +229,11 @@ class _MecaHomePageState extends ConsumerState<MecaHomePage> {
     );
   }
 
-  // construit le widget icône de notification (avec point rouge si _hasNotification)
-  Widget _buildNotificationIcon() {
+  Widget _buildNotificationIcon(int globalCount, int pendingCount) {
+    // displayCount: priorité au compteur global (si > 0), sinon affiche pendingCount
+    final displayCount = (globalCount > 0) ? globalCount : pendingCount;
+    final showDot = displayCount > 0;
+
     return Padding(
       padding: const EdgeInsets.only(right: 8.0),
       child: InkWell(
@@ -267,7 +246,7 @@ class _MecaHomePageState extends ConsumerState<MecaHomePage> {
               padding: EdgeInsets.all(8.0),
               child: Icon(Icons.notifications, size: 26, color: Colors.white),
             ),
-            if (_hasNotification)
+            if (showDot)
               Positioned(
                 right: 2,
                 top: 2,
@@ -281,8 +260,7 @@ class _MecaHomePageState extends ConsumerState<MecaHomePage> {
                   ),
                 ),
               ),
-            // Optionnel: badge avec nombre
-            if (_hasNotification && _pendingCount > 0)
+            if (showDot && displayCount > 0)
               Positioned(
                 right: -6,
                 top: -6,
@@ -292,7 +270,7 @@ class _MecaHomePageState extends ConsumerState<MecaHomePage> {
                   constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
                   child: Center(
                     child: Text(
-                      _pendingCount > 9 ? '9+' : '$_pendingCount',
+                      displayCount > 9 ? '9+' : '$displayCount',
                       style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
                     ),
                   ),
@@ -304,59 +282,61 @@ class _MecaHomePageState extends ConsumerState<MecaHomePage> {
     );
   }
 
+  String _statusLabel(ReservationStatus s) {
+    switch (s) {
+      case ReservationStatus.enAttente:
+        return 'En attente';
+      case ReservationStatus.accepte:
+        return 'Acceptée';
+      case ReservationStatus.refuse:
+        return 'Refusée';
+      case ReservationStatus.contrePropose:
+        return 'Contre-proposée';
+      case ReservationStatus.annule:
+        return 'Annulée';
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    final token = ref.read(authNotifierProvider).token;
+    // WATCH global notifications for display
+    final int globalNotifCount = ref.watch(newNotificationProvider);
 
-    // Enregistrer le listener une seule fois DANS build (obligatoire pour Riverpod assertions)
-    if (!_reservationsListenerRegistered) {
-      _reservationsListenerRegistered = true;
+    // Enregister listeners *une seule fois*
+    if (!_listenersRegistered) {
+      _listenersRegistered = true;
 
+      // play sound + haptic when global notification counter increases
+      ref.listen<int>(newNotificationProvider, (previous, next) {
+        if (!mounted) return;
+        final prev = previous ?? 0;
+        final nextVal = next ?? 0;
+        if (nextVal > prev) {
+          try {
+            SystemSound.play(SystemSoundType.alert);
+            HapticFeedback.mediumImpact();
+          } catch (_) {}
+        }
+      });
+
+      // listen reservations changes: update _pendingCountFromResa and increment global counter if needed
       ref.listen<ReservationsState>(reservationsProvider, (previous, next) {
         if (!mounted) return;
 
         final int prevPending = previous?.reservations.where((r) => r.status == ReservationStatus.enAttente).length ?? 0;
         final int nextPending = next.reservations.where((r) => r.status == ReservationStatus.enAttente).length;
 
+        // update local pending count for UI (used when global counter is zero)
+        setState(() => _pendingCountFromResa = nextPending);
+
+        // If pending increased, bump the global notification counter.
         if (nextPending > prevPending) {
-          setState(() {
-            _hasNotification = true;
-            _pendingCount = nextPending;
-          });
-          try {
-            SystemSound.play(SystemSoundType.alert);
-            HapticFeedback.mediumImpact();
-          } catch (_) {}
-        } else {
-          setState(() => _pendingCount = nextPending);
+          final diff = nextPending - prevPending;
+          ref.read(newNotificationProvider.notifier).state += diff;
+          // sound will be played by the newNotificationProvider listener above
         }
       });
     }
-
-    // Enregistrer l'écouteur des notifications globales (une seule fois)
-if (!_notificationListenerRegistered) {
-  _notificationListenerRegistered = true;
-
-  ref.listen<int>(newNotificationProvider, (previous, next) {
-    if (!mounted) return;
-    final nextCount = next ?? 0;
-    if (nextCount > 0) {
-      setState(() {
-        _hasNotification = true;
-        _pendingCount = nextCount;
-      });
-      try {
-        SystemSound.play(SystemSoundType.alert);
-        HapticFeedback.mediumImpact();
-      } catch (_) {}
-    } else {
-      setState(() {
-        _hasNotification = false;
-        _pendingCount = 0;
-      });
-    }
-  });
-}
 
     if (_checkingAuth) {
       return const Scaffold(
@@ -370,8 +350,8 @@ if (!_notificationListenerRegistered) {
         title: 'Bienvenue, $_userName',
         backgroundColor: const Color(0xFF357ABD),
         actions: [
-          // NOTIFICATION ICON
-          _buildNotificationIcon(),
+          // notification icon: use watched global count and computed pending count
+          _buildNotificationIcon(globalNotifCount, _pendingCountFromResa),
         ],
       ),
       body: SingleChildScrollView(

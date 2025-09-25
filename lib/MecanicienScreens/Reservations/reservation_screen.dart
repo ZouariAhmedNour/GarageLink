@@ -1,3 +1,4 @@
+// lib/MecanicienScreens/Reservations/reservation_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -5,6 +6,9 @@ import 'package:garagelink/providers/reservation_provider.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
 import 'package:garagelink/models/reservation.dart';
+
+// NOTIF: import du provider global de notifications
+import 'package:garagelink/providers/notification_provider.dart';
 
 class ReservationScreen extends ConsumerStatefulWidget {
   const ReservationScreen({Key? key}) : super(key: key);
@@ -18,12 +22,17 @@ class _ReservationScreenState extends ConsumerState<ReservationScreen> {
   final DateFormat _dateFmt = DateFormat('dd/MM/yyyy');
   final DateFormat _timeFmt = DateFormat.Hm();
 
+  // NOTIF: dernier nombre connu de réservations (pour détecter nouvelles résas)
+  int _lastReservationsCount = 0;
+
   @override
   void initState() {
     super.initState();
     // charge la liste après build
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(reservationsProvider.notifier).loadAll();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await ref.read(reservationsProvider.notifier).loadAll();
+      // initialise le compteur connu
+      _lastReservationsCount = ref.read(reservationsProvider).reservations.length;
     });
   }
 
@@ -56,9 +65,21 @@ class _ReservationScreenState extends ConsumerState<ReservationScreen> {
     }
   }
 
+  // NOTIF: compare la longueur et incrémente le provider global si besoin
+  void _maybeNotifyNewReservations() {
+    final newCount = ref.read(reservationsProvider).reservations.length;
+    if (newCount > _lastReservationsCount) {
+      final diff = newCount - _lastReservationsCount;
+      ref.read(newNotificationProvider.notifier).state += diff;
+    }
+    _lastReservationsCount = newCount;
+  }
+
   Future<void> _refresh() async {
     HapticFeedback.mediumImpact();
     await ref.read(reservationsProvider.notifier).loadAll();
+    // NOTIF: après refresh manuel, vérifier si de nouvelles résas sont arrivées
+    _maybeNotifyNewReservations();
   }
 
   Future<void> _performAction({
@@ -78,6 +99,18 @@ class _ReservationScreenState extends ConsumerState<ReservationScreen> {
         newHeureDebut: newHeureDebut,
         message: message,
       );
+
+      // --- recharger pour synchroniser toutes les vues ---
+      await notifier.loadAll();
+
+      // NOTIF: détecte si backend a ajouté de nouvelles réservations
+      _maybeNotifyNewReservations();
+
+      // NOTIF: si cette action inclut un message, alerter le dashboard (incrémente d'1)
+      if (message != null && message.trim().isNotEmpty) {
+        ref.read(newNotificationProvider.notifier).state += 1;
+      }
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Action effectuée : $action')),

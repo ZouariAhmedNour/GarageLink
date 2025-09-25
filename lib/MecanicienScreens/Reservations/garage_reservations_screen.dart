@@ -1,8 +1,12 @@
+// lib/MecanicienScreens/Reservations/garage_reservations_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:garagelink/models/reservation.dart';
 import 'package:garagelink/providers/reservation_provider.dart';
+
+// NOTIF: import du provider global de notifications
+import 'package:garagelink/providers/notification_provider.dart';
 
 class GarageReservationsScreen extends ConsumerStatefulWidget {
   const GarageReservationsScreen({Key? key}) : super(key: key);
@@ -18,11 +22,20 @@ class _GarageReservationsScreenState extends ConsumerState<GarageReservationsScr
   DateTime? _proposedDate;
   String? _proposedHour; // "HH:mm"
 
+  // NOTIF: conservation du dernier nombre connu de réservations
+  int _lastReservationsCount = 0;
+
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(reservationsProvider.notifier).loadAll().catchError((e) => debugPrint('loadAll err: $e'));
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      try {
+        await ref.read(reservationsProvider.notifier).loadAll();
+        // initialise le compteur connu après le premier chargement
+        _lastReservationsCount = ref.read(reservationsProvider).reservations.length;
+      } catch (e) {
+        debugPrint('loadAll err: $e');
+      }
     });
   }
 
@@ -31,6 +44,16 @@ class _GarageReservationsScreenState extends ConsumerState<GarageReservationsScr
     _messagesController.dispose();
     _messageController.dispose();
     super.dispose();
+  }
+
+  // NOTIF: vérifie s'il y a plus d'éléments et incrémente le provider global si besoin
+  void _maybeNotifyNewReservations() {
+    final newCount = ref.read(reservationsProvider).reservations.length;
+    if (newCount > _lastReservationsCount) {
+      final diff = newCount - _lastReservationsCount;
+      ref.read(newNotificationProvider.notifier).state += diff;
+    }
+    _lastReservationsCount = newCount;
   }
 
   Future<void> _selectDate(BuildContext context) async {
@@ -105,17 +128,11 @@ class _GarageReservationsScreenState extends ConsumerState<GarageReservationsScr
       if (action == 'contre_proposer') {
         messageToSend = _buildGarageMessageToSend(_messageController.text, _proposedDate, _proposedHour);
       } else if (action == 'accepter') {
-        // si on accepte, on envoie aussi un message d'acceptation pour l'historique
-        // (backend doit gérer la mise à jour du statut en 'accepte')
         messageToSend = _buildGarageAcceptMessage(selected!);
-        // Optionnel : si ton backend attend un autre nom d'action pour accepter une contre-proposition,
-        // tu peux mapper ici en fonction du statut actuel :
         if (selected!.status == ReservationStatus.contrePropose) {
-          // exemple : actionToSend = 'accepter_contre_proposition';
-          // laisse actionToSend = 'accepter' si ton backend supporte 'accepter'.
+          // Ajuste actionToSend si nécessaire selon ton backend
         }
       } else {
-        // pour 'refuser' ou autres actions, on envoie le texte libre si renseigné
         messageToSend = (_messageController.text.isNotEmpty ? _messageController.text.trim() : null);
       }
 
@@ -131,6 +148,14 @@ class _GarageReservationsScreenState extends ConsumerState<GarageReservationsScr
 
       // --- recharger la liste depuis le backend pour assurer cohérence ---
       await notifier.loadAll();
+
+      // NOTIF: détecte nouvelles réservations (par ex. si backend a créé une nouvelle res)
+      _maybeNotifyNewReservations();
+
+      // NOTIF: si on a envoyé un message/contre-proposition, prévenir le tableau de bord
+      if (messageToSend != null && messageToSend.trim().isNotEmpty) {
+        ref.read(newNotificationProvider.notifier).state += 1;
+      }
 
       if (!mounted) return;
 
@@ -182,6 +207,14 @@ class _GarageReservationsScreenState extends ConsumerState<GarageReservationsScr
 
       // --- recharger la liste pour synchroniser toutes les vues ---
       await notifier.loadAll();
+
+      // NOTIF: détecte nouvelles réservations (si backend en a créé)
+      _maybeNotifyNewReservations();
+
+      // NOTIF: prévenir le tableau de bord qu'un message a été envoyé
+      if (messageToSend != null && messageToSend.trim().isNotEmpty) {
+        ref.read(newNotificationProvider.notifier).state += 1;
+      }
 
       if (!mounted) return;
 
@@ -326,7 +359,11 @@ class _GarageReservationsScreenState extends ConsumerState<GarageReservationsScr
                     const Spacer(),
                     IconButton(
                       icon: const Icon(Icons.refresh),
-                      onPressed: () => ref.read(reservationsProvider.notifier).loadAll(),
+                      onPressed: () async {
+                        await ref.read(reservationsProvider.notifier).loadAll();
+                        // NOTIF: vérifier si de nouvelles réservations sont arrivées suite au refresh manuel
+                        _maybeNotifyNewReservations();
+                      },
                     ),
                   ],
                 ),
