@@ -313,25 +313,29 @@ class VehiculeApi {
 
   /// Upload d'une image principale (optionnel — backend doit exposer la route)
   static Future<String> uploadVehiculeImage({
-    required String token,
-    required String vehiculeId,
-    required File imageFile,
-  }) async {
-    final url = Uri.parse('$UrlApi/vehicules/$vehiculeId/upload');
-    final request = http.MultipartRequest('POST', url)
-      ..headers['Authorization'] = 'Bearer $token'
-      ..files.add(await http.MultipartFile.fromPath('picKm', imageFile.path));
+  required String token,
+  required String vehiculeId,
+  required File imageFile,
+}) async {
+  // Assure-toi que UrlApi contient la racine /api, par exemple: http://localhost:5000/api
+  final url = Uri.parse('$UrlApi/vehicules/$vehiculeId/upload-image');
 
-    final streamed = await request.send();
-    final response = await http.Response.fromStream(streamed);
+  final request = http.MultipartRequest('POST', url)
+    ..headers['Authorization'] = 'Bearer $token';
 
-    if (response.statusCode == 200 || response.statusCode == 201) {
-      final raw = jsonDecode(response.body);
-      if (raw is Map && raw['picKm'] != null) return raw['picKm'].toString();
-      final normalized = _normalizeVehiculeJson(raw);
-      return normalized['picKm']?.toString() ?? '';
-    } else {
-      throw _handleError(response);
-    }
+  // IMPORTANT: le champ doit s'appeler 'image' (comme dans upload.single('image'))
+  request.files.add(await http.MultipartFile.fromPath('image', imageFile.path));
+
+  final streamed = await request.send();
+  final response = await http.Response.fromStream(streamed);
+
+  if (response.statusCode == 200 || response.statusCode == 201) {
+    final raw = jsonDecode(response.body);
+    if (raw is Map && raw['picKm'] != null) return raw['picKm'].toString();
+    final normalized = _normalizeVehiculeJson(raw);
+    return normalized['picKm']?.toString() ?? '';
+  } else {
+    throw _handleError(response);
   }
+}
 }

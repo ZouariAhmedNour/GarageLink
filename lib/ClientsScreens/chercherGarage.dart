@@ -21,7 +21,6 @@ class _SearchGarageScreenState extends ConsumerState<ChercherGarageScreen> {
   final MapController _mapController = MapController();
   bool _mapCentered = false;
 
-
   @override
   void initState() {
     super.initState();
@@ -81,113 +80,145 @@ class _SearchGarageScreenState extends ConsumerState<ChercherGarageScreen> {
     }
   }
 
- 
-
   List<Marker> _buildMarkers(List<User> garages) {
-  return garages.map((g) {
-    final coords = g.location?.coordinates;
-    if (coords == null || coords.length < 2) return null;
-    final lng = coords[0];
-    final lat = coords[1];
+    return garages.map((g) {
+      final coords = g.location?.coordinates;
+      if (coords == null || coords.length < 2) return null;
+      final lng = coords[0];
+      final lat = coords[1];
 
-    return Marker(
-      width: 40,
-      height: 40,
-      point: LatLng(lat, lng),
-      child: GestureDetector(
-        onTap: () {
-          if (!mounted) return;
-
-          // Décaler le chargement des services après le build
-          Future.microtask(() async {
-            await ref.read(serviceProvider.notifier).loadAll();
-
-            // Puis ouvrir le bottom sheet
+      return Marker(
+        width: 40,
+        height: 40,
+        point: LatLng(lat, lng),
+        child: GestureDetector(
+          onTap: () {
             if (!mounted) return;
-            showModalBottomSheet(
-              context: context,
-              builder: (_) => _garageDetailsSheet(g),
-            );
-          });
-        },
-        child: const Icon(Icons.location_on, size: 36),
-      ),
-    );
-  }).whereType<Marker>().toList();
-}
+
+            // Décaler le chargement des services après le build
+            Future.microtask(() async {
+              await ref.read(serviceProvider.notifier).loadAll();
+
+              // Puis ouvrir le bottom sheet
+              if (!mounted) return;
+              showModalBottomSheet(
+                context: context,
+                builder: (_) => _garageDetailsSheet(g),
+              );
+            });
+          },
+          child: const Icon(Icons.location_on, size: 36, color: Color(0xFF357ABD)),
+        ),
+      );
+    }).whereType<Marker>().toList();
+  }
 
  Widget _garageDetailsSheet(User g) {
   // On lit le provider des services
   final servicesState = ref.watch(serviceProvider);
 
-  return Padding(
+  return Container(
+    // Fond blanc + arrondi en haut (utile si tu rends le sheet transparent depuis showModalBottomSheet)
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+      boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 8, offset: Offset(0, -2))],
+    ),
+    // Si tu veux que le sheet prenne tout l'écran lors du clavier, tu peux wrapper dans SingleChildScrollView / isScrollControlled
     padding: const EdgeInsets.all(16.0),
-    child: Wrap(
-      children: [
-        // Infos garage
-        ListTile(
-          title: Text(g.garagenom ?? g.username),
-          subtitle: Text(g.streetAddress),
-        ),
-        if (g.phone != null) ListTile(leading: const Icon(Icons.phone), title: Text(g.phone!)),
-        if ((g.email).isNotEmpty) ListTile(leading: const Icon(Icons.email), title: Text(g.email)),
-        const SizedBox(height: 8),
-
-        // Services du garage
-        const Divider(),
-        const Text('Services', style: TextStyle(fontWeight: FontWeight.bold)),
-        const SizedBox(height: 8),
-        
-        if (servicesState.loading)
-          const Center(child: CircularProgressIndicator())
-        else if (servicesState.error != null)
-          Text('Erreur: ${servicesState.error}')
-        else
-          Column(
-            children: servicesState.services
-                .map((s) => ListTile(
-                      title: Text(s.name),
-                      subtitle: Text(s.description),
-                      trailing: Chip(
-                        label: Text(
-                          s.statut == ServiceStatut.actif ? 'Actif' : 'Désactivé',
-                          style: const TextStyle(color: Colors.white),
-                        ),
-                        backgroundColor:
-                            s.statut == ServiceStatut.actif ? Colors.green : Colors.red,
-                      ),
-                    ))
-                .toList(),
+    child: SafeArea(
+      top: false,
+      child: Wrap(
+        children: [
+          // Infos garage
+          ListTile(
+            title: Text(g.garagenom ?? g.username, style: const TextStyle(fontWeight: FontWeight.w700)),
+            subtitle: Text(g.streetAddress ?? ''),
           ),
+          if (g.phone != null) ListTile(leading: const Icon(Icons.phone), title: Text(g.phone!)),
+          if ((g.email).isNotEmpty) ListTile(leading: const Icon(Icons.email), title: Text(g.email)),
+          const SizedBox(height: 8),
 
-        const SizedBox(height: 12),
+          // Services du garage
+          const Divider(),
+          const Text('Services', style: TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(height: 8),
 
-        // Bouton Réserver
-        ElevatedButton.icon(
-          onPressed: () {
-            if (!mounted) return;
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (_) => CreerResaScreen(garage: g),
+          if (servicesState.loading)
+            const Center(child: CircularProgressIndicator())
+          else if (servicesState.error != null)
+            Text('Erreur: ${servicesState.error}')
+          else
+            Column(
+              children: servicesState.services
+                  .map((s) => ListTile(
+                        title: Text(s.name),
+                        subtitle: Text(s.description),
+                        trailing: Chip(
+                          label: Text(
+                            s.statut == ServiceStatut.actif ? 'Actif' : 'Désactivé',
+                            style: const TextStyle(color: Colors.white),
+                          ),
+                          backgroundColor: s.statut == ServiceStatut.actif ? Colors.green : Colors.red,
+                        ),
+                      ))
+                  .toList(),
+            ),
+
+          const SizedBox(height: 12),
+
+          // Boutons en bas du sheet (design bleu et boutonnage propre)
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Fermer'),
+                ),
               ),
-            );
-          },
-          icon: const Icon(Icons.add),
-          label: const Text('Réserver'),
-        ),
-      ],
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    if (!mounted) return;
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => CreerResaScreen(garage: g),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.add, color: Colors.white),
+                  label: const Text('Réserver', style: TextStyle(fontWeight: FontWeight.w600, color: Colors.white)),
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF357ABD)),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
     ),
   );
 }
-
 
   @override
   Widget build(BuildContext context) {
     final garagesAsync = ref.watch(garagesProvider);
 
     return Scaffold(
+      backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: const Text('Chercher un garage'),
+        iconTheme: const IconThemeData(color: Colors.white),
+        title: const Text('Chercher un garage', style: TextStyle(fontWeight: FontWeight.w700, color: Colors.white)),
+        elevation: 0,
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [Color(0xFF357ABD), Color(0xFF357ABD)],
+            ),
+          ),
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.my_location),
@@ -195,7 +226,6 @@ class _SearchGarageScreenState extends ConsumerState<ChercherGarageScreen> {
               if (!mounted) return;
               // Récupère la position + lance la recherche autour de moi
               await _determinePositionAndCenter();
-              
             },
             tooltip: 'Rechercher autour de ma position',
           ),
@@ -212,23 +242,36 @@ class _SearchGarageScreenState extends ConsumerState<ChercherGarageScreen> {
       body: Column(
         children: [
           // petite info : nombre de garages (utile pour debug/UX) + contrôle du rayon
-         Padding(
-  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-  child: garagesAsync.when(
-    data: (garages) => Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text('${garages.length} garages trouvés'),
-        if (myLocation != null) const Text('Localisation activée'),
-      ],
-    ),
-    loading: () => const SizedBox.shrink(),
-    error: (e, st) => Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [Text('Erreur: $e'), const SizedBox()],
-    ),
-  ),
-),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+            child: garagesAsync.when(
+              data: (garages) => Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 8, offset: const Offset(0, 4))],
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('${garages.length} garages trouvés', style: const TextStyle(fontWeight: FontWeight.w600)),
+                    if (myLocation != null)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                        decoration: BoxDecoration(color: const Color(0xFFEFF6FF), borderRadius: BorderRadius.circular(8)),
+                        child: const Text('Localisation activée', style: TextStyle(color: Color(0xFF1E40AF))),
+                      ),
+                  ],
+                ),
+              ),
+              loading: () => const SizedBox.shrink(),
+              error: (e, st) => Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [Text('Erreur: $e'), const SizedBox()],
+              ),
+            ),
+          ),
 
           // ----- map -----
           Expanded(
@@ -239,12 +282,13 @@ class _SearchGarageScreenState extends ConsumerState<ChercherGarageScreen> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(Icons.search_off, size: 48),
+                        const Icon(Icons.search_off, size: 48, color: Colors.grey),
                         const SizedBox(height: 8),
                         const Text('Aucun garage trouvé.'),
                         const SizedBox(height: 8),
                         ElevatedButton(
                           onPressed: () => ref.read(garagesProvider.notifier).loadAll(),
+                          style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF357ABD)),
                           child: const Text('Recharger'),
                         ),
                       ],
@@ -281,20 +325,20 @@ class _SearchGarageScreenState extends ConsumerState<ChercherGarageScreen> {
                               width: 36,
                               height: 36,
                               point: myLocation!,
-                              child: const Icon(Icons.person_pin_circle),
+                              child: const Icon(Icons.person_pin_circle, size: 32, color: Color(0xFF357ABD)),
                             ),
                           ...markers,
                         ]),
                       ],
                     ),
 
-                    // attribution
+                    // attribution (petit badge blanc)
                     Positioned(
                       right: 8,
                       bottom: 8,
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        color: Colors.white70,
+                        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 4)]),
                         child: const Text(
                           '© OpenStreetMap contributors',
                           style: TextStyle(fontSize: 11),

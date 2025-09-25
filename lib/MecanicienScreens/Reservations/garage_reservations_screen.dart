@@ -1,5 +1,6 @@
 // lib/MecanicienScreens/Reservations/garage_reservations_screen.dart
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import 'package:garagelink/models/reservation.dart';
@@ -15,7 +16,7 @@ class GarageReservationsScreen extends ConsumerStatefulWidget {
   ConsumerState<GarageReservationsScreen> createState() => _GarageReservationsScreenState();
 }
 
-class _GarageReservationsScreenState extends ConsumerState<GarageReservationsScreen> {
+class _GarageReservationsScreenState extends ConsumerState<GarageReservationsScreen> with TickerProviderStateMixin {
   Reservation? selected;
   final ScrollController _messagesController = ScrollController();
   final TextEditingController _messageController = TextEditingController();
@@ -25,9 +26,23 @@ class _GarageReservationsScreenState extends ConsumerState<GarageReservationsScr
   // NOTIF: conservation du dernier nombre connu de réservations
   int _lastReservationsCount = 0;
 
+  late AnimationController _fadeController;
+  late Animation<double> _fadeAnimation;
+
+  static const Color primaryBlue = Color(0xFF357ABD);
+
   @override
   void initState() {
     super.initState();
+    _fadeController = AnimationController(
+      duration: const Duration(milliseconds: 300),
+      vsync: this,
+    );
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _fadeController, curve: Curves.easeInOut),
+    );
+    _fadeController.forward();
+
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       try {
         await ref.read(reservationsProvider.notifier).loadAll();
@@ -41,6 +56,7 @@ class _GarageReservationsScreenState extends ConsumerState<GarageReservationsScr
 
   @override
   void dispose() {
+    _fadeController.dispose();
     _messagesController.dispose();
     _messageController.dispose();
     super.dispose();
@@ -112,7 +128,11 @@ class _GarageReservationsScreenState extends ConsumerState<GarageReservationsScr
         if (_proposedDate == null || _proposedHour == null) {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Choisissez une date et une heure pour proposer un créneau'))
+              SnackBar(
+                content: const Text('Choisissez une date et une heure pour proposer un créneau'),
+                backgroundColor: Colors.orange,
+                behavior: SnackBarBehavior.floating,
+              ),
             );
           }
           return;
@@ -173,12 +193,24 @@ class _GarageReservationsScreenState extends ConsumerState<GarageReservationsScr
       });
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Action envoyée')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Action envoyée'),
+            backgroundColor: primaryBlue,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
       }
     } catch (e) {
       debugPrint('action error: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erreur lors de l\'action: ${e.toString()}'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
       }
     }
   }
@@ -231,12 +263,24 @@ class _GarageReservationsScreenState extends ConsumerState<GarageReservationsScr
       });
 
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Message envoyé')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Message envoyé'),
+            backgroundColor: primaryBlue,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
       }
     } catch (e) {
       debugPrint('send message error: $e');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Erreur lors de l\'envoi: ${e.toString()}'),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
       }
     }
   }
@@ -262,6 +306,21 @@ class _GarageReservationsScreenState extends ConsumerState<GarageReservationsScr
         return 'Contre-proposée';
       case ReservationStatus.annule:
         return 'Annulée';
+    }
+  }
+
+  Color _statusColor(ReservationStatus s) {
+    switch (s) {
+      case ReservationStatus.enAttente:
+        return Colors.orange;
+      case ReservationStatus.accepte:
+        return Colors.green;
+      case ReservationStatus.refuse:
+        return Colors.red;
+      case ReservationStatus.contrePropose:
+        return primaryBlue;
+      case ReservationStatus.annule:
+        return Colors.grey;
     }
   }
 
@@ -321,23 +380,63 @@ class _GarageReservationsScreenState extends ConsumerState<GarageReservationsScr
     }
 
     return Container(
-      margin: const EdgeInsets.symmetric(vertical: 6),
-      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+      padding: const EdgeInsets.all(16),
       constraints: const BoxConstraints(maxWidth: 520),
       decoration: BoxDecoration(
-        color: isClient ? Colors.blue.shade600 : Colors.grey.shade200,
-        borderRadius: BorderRadius.circular(12),
+        color: isClient ? primaryBlue : Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Text(title, style: TextStyle(fontWeight: FontWeight.bold, color: isClient ? Colors.white : Colors.black)),
-          const SizedBox(height: 6),
-          Text(displayText, style: TextStyle(color: isClient ? Colors.white : Colors.black)),
+          Row(
+            children: [
+              Icon(
+                isClient ? Icons.person : Icons.build,
+                size: 16,
+                color: isClient ? Colors.white : Colors.grey.shade600,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: isClient ? Colors.white : Colors.black87,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            displayText,
+            style: TextStyle(
+              color: isClient ? Colors.white : Colors.black87,
+              fontSize: 14,
+            ),
+          ),
           if (timestamp != null)
             Padding(
-              padding: const EdgeInsets.only(top: 6),
-              child: Text(DateFormat('dd/MM/yyyy HH:mm').format(timestamp), style: TextStyle(fontSize: 11, color: isClient ? Colors.white70 : Colors.black54)),
+              padding: const EdgeInsets.only(top: 8),
+              child: Text(
+                DateFormat('dd/MM/yyyy HH:mm').format(timestamp),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: isClient ? Colors.white70 : Colors.grey.shade500,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
             ),
         ],
       ),
@@ -347,19 +446,29 @@ class _GarageReservationsScreenState extends ConsumerState<GarageReservationsScr
   Widget _twoColumnLayout(BuildContext context, List<Reservation> reservations) {
     return Row(
       children: [
-        SizedBox(
+        Container(
           width: 320,
+          decoration: BoxDecoration(
+            border: Border(right: BorderSide(color: Colors.grey.shade200)),
+            color: Colors.white, // <-- left panel background = white
+          ),
           child: Column(
             children: [
-              Padding(
-                padding: const EdgeInsets.all(12.0),
+              Container(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
                 child: Row(
                   children: [
-                    const Text('Demandes', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                    const Icon(Icons.inbox, color: primaryBlue),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'Demandes',
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                    ),
                     const Spacer(),
                     IconButton(
-                      icon: const Icon(Icons.refresh),
+                      icon: const Icon(Icons.refresh, color: primaryBlue),
                       onPressed: () async {
+                        HapticFeedback.lightImpact();
                         await ref.read(reservationsProvider.notifier).loadAll();
                         // NOTIF: vérifier si de nouvelles réservations sont arrivées suite au refresh manuel
                         _maybeNotifyNewReservations();
@@ -374,12 +483,50 @@ class _GarageReservationsScreenState extends ConsumerState<GarageReservationsScr
                   itemBuilder: (context, i) {
                     final r = reservations[i];
                     final isSel = selected?.id == r.id;
-                    return ListTile(
-                      selected: isSel,
-                      title: Text(r.clientName, maxLines: 1, overflow: TextOverflow.ellipsis),
-                      subtitle: Text(r.serviceName ?? r.serviceId, maxLines: 1, overflow: TextOverflow.ellipsis),
-                      trailing: Text(r.creneauDemande.date != null ? DateFormat('dd/MM').format(r.creneauDemande.date!) : ''),
-                      onTap: () => setState(() => selected = r),
+                    return Card(
+                      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                      elevation: isSel ? 6 : 2,
+                      color: Colors.white, // <-- card background = white
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      child: ListTile(
+                        leading: const Icon(Icons.person_outline, color: primaryBlue),
+                        title: Text(
+                          r.clientName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontWeight: FontWeight.w500,
+                            color: isSel ? primaryBlue : null,
+                          ),
+                        ),
+                        subtitle: Text(
+                          r.serviceName ?? r.serviceId,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 14),
+                        ),
+                        trailing: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            if (r.creneauDemande.date != null)
+                              Text(
+                                DateFormat('dd/MM').format(r.creneauDemande.date!),
+                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
+                              ),
+                            const SizedBox(height: 6),
+                            Chip(
+                              label: Text(_statusLabel(r.status)),
+                              backgroundColor: _statusColor(r.status).withOpacity(0.12),
+                              labelStyle: TextStyle(color: _statusColor(r.status), fontWeight: FontWeight.w600),
+                            ),
+                          ],
+                        ),
+                        onTap: () {
+                          HapticFeedback.lightImpact();
+                          setState(() => selected = r);
+                        },
+                      ),
                     );
                   },
                 ),
@@ -394,9 +541,9 @@ class _GarageReservationsScreenState extends ConsumerState<GarageReservationsScr
 
   Widget _mobileListLayout(BuildContext context, List<Reservation> reservations) {
     return ListView.separated(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(16),
       itemCount: reservations.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 12),
+      separatorBuilder: (_, __) => const SizedBox(height: 16),
       itemBuilder: (context, idx) {
         final r = reservations[idx];
         final serviceLabel = (r.serviceName != null && r.serviceName!.isNotEmpty) ? r.serviceName! : r.serviceId;
@@ -406,33 +553,55 @@ class _GarageReservationsScreenState extends ConsumerState<GarageReservationsScr
         final garageDisplayText = _garageProposalLabel(r) ?? r.messageGarage;
 
         return Card(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          color: Colors.white, // <-- card background white
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           elevation: 2,
+          shadowColor: Colors.black.withOpacity(0.08),
           child: ExpansionTile(
-            title: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+            leading: const Icon(Icons.person, color: primaryBlue),
+            title: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          r.clientName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          serviceLabel,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Text(r.clientName, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontWeight: FontWeight.bold)),
+                      Text(
+                        dateStr,
+                        style: const TextStyle(fontSize: 12, color: Colors.black54),
+                      ),
                       const SizedBox(height: 4),
-                      Text(serviceLabel, maxLines: 1, overflow: TextOverflow.ellipsis),
+                      Chip(
+                        label: Text(_statusLabel(r.status)),
+                        backgroundColor: _statusColor(r.status).withOpacity(0.12),
+                        labelStyle: TextStyle(color: _statusColor(r.status)),
+                      ),
                     ],
                   ),
-                ),
-                const SizedBox(width: 8),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(dateStr, style: const TextStyle(fontSize: 12, color: Colors.black54)),
-                    const SizedBox(height: 4),
-                    Chip(label: Text(_statusLabel(r.status))),
-                  ],
-                ),
-              ],
+                ],
+              ),
             ),
-            childrenPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            childrenPadding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
             children: [
               _messageBubble(
                 title: 'Demande',
@@ -452,83 +621,527 @@ class _GarageReservationsScreenState extends ConsumerState<GarageReservationsScr
                 ),
 
               if (r.messageClient != null)
-                _messageBubble(title: 'Client', text: r.messageClient!, isClient: true, timestamp: r.updatedAt, reservationForContext: r),
+                _messageBubble(
+                  title: 'Client',
+                  text: r.messageClient!,
+                  isClient: true,
+                  timestamp: r.updatedAt,
+                  reservationForContext: r,
+                ),
 
-              const SizedBox(height: 8),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                child: TextField(controller: _messageController, decoration: const InputDecoration(hintText: 'Message au client (optionnel)')),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _messageController,
+                decoration: InputDecoration(
+                  hintText: 'Message au client (optionnel)',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  contentPadding: const EdgeInsets.all(12),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                alignment: WrapAlignment.start,
+                children: [
+                  FilledButton.icon(
+                    onPressed: () async {
+                      HapticFeedback.lightImpact();
+                      final confirmed = await showDialog<bool>(
+                        context: context,
+                        builder: (_) => AlertDialog(
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          title: const Row(
+                            children: [
+                              Icon(Icons.check, color: Colors.green),
+                              SizedBox(width: 8),
+                              Text('Accepter la réservation'),
+                            ],
+                          ),
+                          content: const Text('Confirmer l\'acceptation ?'),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(context, false),
+                              child: const Text('Non'),
+                            ),
+                            FilledButton(
+                              onPressed: () => Navigator.pop(context, true),
+                              style: FilledButton.styleFrom(backgroundColor: Colors.green),
+                              child: const Text('Oui'),
+                            ),
+                          ],
+                        ),
+                      );
+                      if (confirmed == true) {
+                        setState(() => selected = r);
+                        await _performAction(action: 'accepter');
+                      }
+                    },
+                    icon: const Icon(Icons.check),
+                    label: const Text('Accepter'),
+                    style: FilledButton.styleFrom(backgroundColor: primaryBlue),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: () async {
+                      HapticFeedback.lightImpact();
+                      final confirmed = await showDialog<bool>(
+                        context: context,
+                        builder: (_) => AlertDialog(
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                          title: const Row(
+                            children: [
+                              Icon(Icons.close, color: Colors.red),
+                              SizedBox(width: 8),
+                              Text('Refuser la réservation'),
+                            ],
+                          ),
+                          content: const Text('Voulez-vous refuser cette réservation ?'),
+                          actions: [
+                            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Non')),
+                            FilledButton(
+                              onPressed: () => Navigator.pop(context, true),
+                              style: FilledButton.styleFrom(backgroundColor: Colors.red),
+                              child: const Text('Oui'),
+                            ),
+                          ],
+                        ),
+                      );
+                      if (confirmed == true) {
+                        setState(() => selected = r);
+                        await _performAction(action: 'refuser');
+                      }
+                    },
+                    icon: const Icon(Icons.close),
+                    label: const Text('Refuser'),
+                  ),
+                  FilledButton.icon(
+                    onPressed: () {
+                      HapticFeedback.lightImpact();
+                      setState(() => selected = r);
+                      showModalBottomSheet(
+                        context: context,
+                        isScrollControlled: true,
+                        shape: const RoundedRectangleBorder(
+                          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                        ),
+                        builder: (context) {
+                          return StatefulBuilder(
+                            builder: (context, sheetSetState) {
+                              return Padding(
+                                padding: EdgeInsets.only(
+                                  bottom: MediaQuery.of(context).viewInsets.bottom,
+                                  left: 16,
+                                  right: 16,
+                                  top: 16,
+                                ),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Row(
+                                      children: [
+                                        Icon(Icons.schedule, color: primaryBlue),
+                                        SizedBox(width: 8),
+                                        Text(
+                                          'Proposer un nouveau créneau',
+                                          style: TextStyle(fontWeight: FontWeight.w600),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 16),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: OutlinedButton.icon(
+                                            onPressed: () async {
+                                              HapticFeedback.lightImpact();
+                                              final now = DateTime.now();
+                                              final date = await showDatePicker(
+                                                context: context,
+                                                initialDate: _proposedDate ?? now,
+                                                firstDate: now,
+                                                lastDate: now.add(const Duration(days: 365)),
+                                              );
+                                              if (date != null) {
+                                                sheetSetState(() => _proposedDate = date);
+                                                setState(() => _proposedDate = date);
+                                              }
+                                            },
+                                            icon: const Icon(Icons.calendar_today),
+                                            label: Text(
+                                              _proposedDate == null ? 'Choisir date' : DateFormat('dd/MM/yyyy').format(_proposedDate!),
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: DropdownButtonFormField<String>(
+                                            value: _proposedHour,
+                                            hint: const Text('Heure'),
+                                            decoration: InputDecoration(
+                                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                            ),
+                                            items: _generateTimeOptions().map((h) => DropdownMenuItem(value: h, child: Text(h))).toList(),
+                                            onChanged: (v) {
+                                              HapticFeedback.lightImpact();
+                                              sheetSetState(() => _proposedHour = v);
+                                              setState(() => _proposedHour = v);
+                                            },
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 16),
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: OutlinedButton.icon(
+                                            onPressed: () {
+                                              HapticFeedback.lightImpact();
+                                              sheetSetState(() {
+                                                _proposedDate = null;
+                                                _proposedHour = null;
+                                              });
+                                              setState(() {
+                                                _proposedDate = null;
+                                                _proposedHour = null;
+                                              });
+                                            },
+                                            icon: const Icon(Icons.refresh),
+                                            label: const Text('Réinitialiser'),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        FilledButton.icon(
+                                          onPressed: () {
+                                            HapticFeedback.lightImpact();
+                                            Navigator.of(context).pop();
+                                            _performAction(action: 'contre_proposer');
+                                          },
+                                          icon: const Icon(Icons.send),
+                                          label: const Text('Envoyer la proposition'),
+                                          style: FilledButton.styleFrom(backgroundColor: primaryBlue),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 16),
+                                  ],
+                                ),
+                              );
+                            },
+                          );
+                        },
+                      );
+                    },
+                    icon: const Icon(Icons.schedule),
+                    label: const Text('Contre-proposer'),
+                    style: FilledButton.styleFrom(backgroundColor: primaryBlue),
+                  ),
+                  FilledButton.icon(
+                    onPressed: () {
+                      HapticFeedback.lightImpact();
+                      setState(() => selected = r);
+                      _sendMessageAsGarage();
+                    },
+                    icon: const Icon(Icons.send),
+                    label: const Text('Envoyer'),
+                    style: FilledButton.styleFrom(backgroundColor: primaryBlue),
+                  ),
+                ],
               ),
               const SizedBox(height: 8),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
-                child: Wrap(
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _conversationPanel(BuildContext context) {
+    if (selected == null) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.inbox_outlined, size: 64, color: Colors.grey),
+            SizedBox(height: 16),
+            Text('Sélectionnez une réservation à gauche', style: TextStyle(fontSize: 16, color: Colors.grey)),
+          ],
+        ),
+      );
+    }
+
+    final r = selected!;
+    final requestedDateStr = r.creneauDemande.date != null ? DateFormat('dd/MM/yyyy').format(r.creneauDemande.date!) : '';
+    final requestedTimeStr = r.creneauDemande.heureDebut ?? '';
+    final proposed = r.creneauPropose;
+
+    final garageDisplayTextDetail = _garageProposalLabel(r) ?? r.messageGarage;
+
+    return FadeTransition(
+      opacity: _fadeAnimation,
+      child: Column(
+        children: [
+          Container(
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: Colors.white, // <-- header background white
+              border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+            ),
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Icon(Icons.person, color: primaryBlue),
+                          const SizedBox(width: 8),
+                          Text(
+                            r.clientName,
+                            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        r.clientPhone,
+                        style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
+                      ),
+                    ],
+                  ),
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      '$requestedDateStr ${requestedTimeStr.isNotEmpty ? '• $requestedTimeStr' : ''}',
+                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                    ),
+                    const SizedBox(height: 8),
+                    Chip(
+                      label: Text(_statusLabel(r.status)),
+                      backgroundColor: _statusColor(r.status).withOpacity(0.12),
+                      labelStyle: TextStyle(color: _statusColor(r.status)),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          if (proposed != null)
+            Container(
+              width: double.infinity,
+              decoration: BoxDecoration(
+                color: Colors.white, // <-- proposed bar white
+                border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+              ),
+              padding: const EdgeInsets.all(12),
+              child: Row(
+                children: [
+                  const Icon(Icons.schedule, color: primaryBlue, size: 16),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Créneau proposé: ${proposed.date != null ? DateFormat('dd/MM/yyyy').format(proposed.date!) : ''} ${proposed.heureDebut ?? ''}',
+                      style: TextStyle(color: primaryBlue, fontSize: 14),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+          Expanded(
+            child: SingleChildScrollView(
+              controller: _messagesController,
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: _messageBubble(
+                      title: 'Demande',
+                      text: '${r.serviceName ?? r.serviceId}\n📅 ${requestedDateStr} ${requestedTimeStr}\n\n${r.descriptionDepannage}',
+                      isClient: true,
+                      timestamp: r.createdAt,
+                      reservationForContext: r,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+
+                  if (garageDisplayTextDetail != null)
+                    Align(
+                      alignment: Alignment.centerLeft,
+                      child: _messageBubble(
+                        title: 'Garage',
+                        text: garageDisplayTextDetail,
+                        isClient: false,
+                        timestamp: r.updatedAt,
+                        reservationForContext: r,
+                      ),
+                    ),
+
+                  if (r.messageClient != null)
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: _messageBubble(
+                        title: 'Client',
+                        text: r.messageClient!,
+                        isClient: true,
+                        timestamp: r.updatedAt,
+                        reservationForContext: r,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white, // <-- input area white
+              border: Border(top: BorderSide(color: Colors.grey.shade200)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 8,
+                  offset: const Offset(0, -2),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _messageController,
+                        decoration: InputDecoration(
+                          hintText: 'Message au client (optionnel)',
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                          contentPadding: const EdgeInsets.all(12),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    FilledButton.icon(
+                      onPressed: () {
+                        HapticFeedback.lightImpact();
+                        _sendMessageAsGarage();
+                      },
+                      icon: const Icon(Icons.send),
+                      label: const Text('Envoyer'),
+                      style: FilledButton.styleFrom(backgroundColor: primaryBlue),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Wrap(
                   spacing: 8,
                   runSpacing: 8,
+                  alignment: WrapAlignment.start,
                   children: [
-                    ElevatedButton.icon(
+                    FilledButton.icon(
                       onPressed: () async {
+                        HapticFeedback.lightImpact();
                         final confirmed = await showDialog<bool>(
                           context: context,
                           builder: (_) => AlertDialog(
-                            title: const Text('Accepter la réservation'),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                            title: const Row(
+                              children: [
+                                Icon(Icons.check, color: Colors.green),
+                                SizedBox(width: 8),
+                                Text('Accepter la réservation'),
+                              ],
+                            ),
                             content: const Text('Confirmer l\'acceptation ?'),
                             actions: [
                               TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Non')),
-                              ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('Oui')),
+                              FilledButton(onPressed: () => Navigator.pop(context, true), style: FilledButton.styleFrom(backgroundColor: Colors.green), child: const Text('Oui')),
                             ],
                           ),
                         );
                         if (confirmed == true) {
-                          setState(() => selected = r);
                           await _performAction(action: 'accepter');
                         }
                       },
                       icon: const Icon(Icons.check),
                       label: const Text('Accepter'),
+                      style: FilledButton.styleFrom(backgroundColor: primaryBlue),
                     ),
                     OutlinedButton.icon(
                       onPressed: () async {
+                        HapticFeedback.lightImpact();
                         final confirmed = await showDialog<bool>(
                           context: context,
                           builder: (_) => AlertDialog(
-                            title: const Text('Refuser la réservation'),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                            title: const Row(
+                              children: [
+                                Icon(Icons.close, color: Colors.red),
+                                SizedBox(width: 8),
+                                Text('Refuser la réservation'),
+                              ],
+                            ),
                             content: const Text('Voulez-vous refuser cette réservation ?'),
                             actions: [
                               TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Non')),
-                              ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('Oui')),
+                              FilledButton(onPressed: () => Navigator.pop(context, true), style: FilledButton.styleFrom(backgroundColor: Colors.red), child: const Text('Oui')),
                             ],
                           ),
                         );
                         if (confirmed == true) {
-                          setState(() => selected = r);
                           await _performAction(action: 'refuser');
                         }
                       },
                       icon: const Icon(Icons.close),
                       label: const Text('Refuser'),
                     ),
-                    ElevatedButton.icon(
+                    FilledButton.icon(
                       onPressed: () {
-                        setState(() => selected = r);
+                        HapticFeedback.lightImpact();
                         showModalBottomSheet(
                           context: context,
                           isScrollControlled: true,
+                          shape: const RoundedRectangleBorder(
+                            borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+                          ),
                           builder: (context) {
                             return StatefulBuilder(
                               builder: (context, sheetSetState) {
                                 return Padding(
-                                  padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom, left: 16, right: 16, top: 16),
+                                  padding: EdgeInsets.only(
+                                    bottom: MediaQuery.of(context).viewInsets.bottom,
+                                    left: 16,
+                                    right: 16,
+                                    top: 16,
+                                  ),
                                   child: Column(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      const Text('Proposer un nouveau créneau', style: TextStyle(fontWeight: FontWeight.bold)),
-                                      const SizedBox(height: 8),
+                                      const Row(
+                                        children: [
+                                          Icon(Icons.schedule, color: primaryBlue),
+                                          SizedBox(width: 8),
+                                          Text(
+                                            'Proposer un nouveau créneau',
+                                            style: TextStyle(fontWeight: FontWeight.w600),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 16),
                                       Row(
                                         children: [
                                           Expanded(
-                                            child: OutlinedButton(
+                                            child: OutlinedButton.icon(
                                               onPressed: () async {
+                                                HapticFeedback.lightImpact();
                                                 final now = DateTime.now();
                                                 final date = await showDatePicker(
                                                   context: context,
@@ -541,7 +1154,10 @@ class _GarageReservationsScreenState extends ConsumerState<GarageReservationsScr
                                                   setState(() => _proposedDate = date);
                                                 }
                                               },
-                                              child: Text(_proposedDate == null ? 'Choisir date' : DateFormat('dd/MM/yyyy').format(_proposedDate!)),
+                                              icon: const Icon(Icons.calendar_today),
+                                              label: Text(
+                                                _proposedDate == null ? 'Choisir date' : DateFormat('dd/MM/yyyy').format(_proposedDate!),
+                                              ),
                                             ),
                                           ),
                                           const SizedBox(width: 8),
@@ -549,8 +1165,12 @@ class _GarageReservationsScreenState extends ConsumerState<GarageReservationsScr
                                             child: DropdownButtonFormField<String>(
                                               value: _proposedHour,
                                               hint: const Text('Heure'),
+                                              decoration: InputDecoration(
+                                                border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                                              ),
                                               items: _generateTimeOptions().map((h) => DropdownMenuItem(value: h, child: Text(h))).toList(),
                                               onChanged: (v) {
+                                                HapticFeedback.lightImpact();
                                                 sheetSetState(() => _proposedHour = v);
                                                 setState(() => _proposedHour = v);
                                               },
@@ -558,12 +1178,13 @@ class _GarageReservationsScreenState extends ConsumerState<GarageReservationsScr
                                           ),
                                         ],
                                       ),
-                                      const SizedBox(height: 12),
+                                      const SizedBox(height: 16),
                                       Row(
                                         children: [
                                           Expanded(
-                                            child: OutlinedButton(
+                                            child: OutlinedButton.icon(
                                               onPressed: () {
+                                                HapticFeedback.lightImpact();
                                                 sheetSetState(() {
                                                   _proposedDate = null;
                                                   _proposedHour = null;
@@ -573,20 +1194,24 @@ class _GarageReservationsScreenState extends ConsumerState<GarageReservationsScr
                                                   _proposedHour = null;
                                                 });
                                               },
-                                              child: const Text('Réinitialiser'),
+                                              icon: const Icon(Icons.refresh),
+                                              label: const Text('Réinitialiser'),
                                             ),
                                           ),
                                           const SizedBox(width: 8),
-                                          ElevatedButton(
+                                          FilledButton.icon(
                                             onPressed: () {
+                                              HapticFeedback.lightImpact();
                                               Navigator.of(context).pop();
                                               _performAction(action: 'contre_proposer');
                                             },
-                                            child: const Text('Envoyer la proposition'),
+                                            icon: const Icon(Icons.send),
+                                            label: const Text('Envoyer la proposition'),
+                                            style: FilledButton.styleFrom(backgroundColor: primaryBlue),
                                           ),
                                         ],
                                       ),
-                                      const SizedBox(height: 8),
+                                      const SizedBox(height: 16),
                                     ],
                                   ),
                                 );
@@ -597,276 +1222,15 @@ class _GarageReservationsScreenState extends ConsumerState<GarageReservationsScr
                       },
                       icon: const Icon(Icons.schedule),
                       label: const Text('Contre-proposer'),
-                    ),
-                    ElevatedButton(
-                      onPressed: () {
-                        setState(() => selected = r);
-                        _sendMessageAsGarage();
-                      },
-                      child: const Text('Envoyer'),
+                      style: FilledButton.styleFrom(backgroundColor: primaryBlue),
                     ),
                   ],
                 ),
-              ),
-              const SizedBox(height: 8),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _conversationPanel(BuildContext context) {
-    if (selected == null) {
-      return const Center(child: Text('Sélectionnez une réservation à gauche'));
-    }
-
-    final r = selected!;
-    final requestedDateStr = r.creneauDemande.date != null ? DateFormat('dd/MM/yyyy').format(r.creneauDemande.date!) : '';
-    final requestedTimeStr = r.creneauDemande.heureDebut ?? '';
-    final proposed = r.creneauPropose;
-
-    final garageDisplayTextDetail = _garageProposalLabel(r) ?? r.messageGarage;
-
-    return Column(
-      children: [
-        Container(
-          width: double.infinity,
-          color: Colors.grey.shade100,
-          padding: const EdgeInsets.all(12),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Text(r.clientName, style: const TextStyle(fontWeight: FontWeight.bold)),
-                  const SizedBox(height: 4),
-                  Text(r.clientPhone, style: const TextStyle(color: Colors.black54)),
-                ]),
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    '$requestedDateStr ${requestedTimeStr.isNotEmpty ? '• $requestedTimeStr' : ''}',
-                    style: const TextStyle(fontSize: 12, color: Colors.black54),
-                  ),
-                  const SizedBox(height: 6),
-                  Chip(label: Text(_statusLabel(r.status))),
-                ],
-              ),
-            ],
-          ),
-        ),
-
-        if (proposed != null)
-          Container(
-            width: double.infinity,
-            color: Colors.blueGrey.withOpacity(0.03),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            child: Text(
-              'Créneau proposé: ${proposed.date != null ? DateFormat('dd/MM/yyyy').format(proposed.date!) : ''} ${proposed.heureDebut ?? ''}',
-              style: const TextStyle(color: Colors.blueGrey),
-            ),
-          ),
-
-        Expanded(
-          child: SingleChildScrollView(
-            controller: _messagesController,
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: _messageBubble(
-                    title: 'Demande',
-                    text: '${r.serviceName ?? r.serviceId}\n📅 ${requestedDateStr} ${requestedTimeStr}\n\n${r.descriptionDepannage}',
-                    isClient: true,
-                    timestamp: r.createdAt,
-                    reservationForContext: r,
-                  ),
-                ),
-                const SizedBox(height: 12),
-
-                if (garageDisplayTextDetail != null)
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: _messageBubble(
-                      title: 'Garage',
-                      text: garageDisplayTextDetail,
-                      isClient: false,
-                      timestamp: r.updatedAt,
-                      reservationForContext: r,
-                    ),
-                  ),
-
-                if (r.messageClient != null)
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: _messageBubble(
-                      title: 'Client',
-                      text: r.messageClient!,
-                      isClient: true,
-                      timestamp: r.updatedAt,
-                      reservationForContext: r,
-                    ),
-                  ),
               ],
             ),
           ),
-        ),
-
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(color: Colors.white, border: Border(top: BorderSide(color: Colors.grey.shade200))),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  Expanded(child: TextField(controller: _messageController, decoration: const InputDecoration(hintText: 'Message au client (optionnel)'))),
-                  const SizedBox(width: 8),
-                  ElevatedButton(onPressed: _sendMessageAsGarage, child: const Text('Envoyer')),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  ElevatedButton.icon(
-                    onPressed: () async {
-                      final confirmed = await showDialog<bool>(
-                        context: context,
-                        builder: (_) => AlertDialog(
-                          title: const Text('Accepter la réservation'),
-                          content: const Text('Confirmer l\'acceptation ?'),
-                          actions: [
-                            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Non')),
-                            ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('Oui')),
-                          ],
-                        ),
-                      );
-                      if (confirmed == true) {
-                        await _performAction(action: 'accepter');
-                      }
-                    },
-                    icon: const Icon(Icons.check),
-                    label: const Text('Accepter'),
-                  ),
-                  OutlinedButton.icon(
-                    onPressed: () async {
-                      final confirmed = await showDialog<bool>(
-                        context: context,
-                        builder: (_) => AlertDialog(
-                          title: const Text('Refuser la réservation'),
-                          content: const Text('Voulez-vous refuser cette réservation ?'),
-                          actions: [
-                            TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Non')),
-                            ElevatedButton(onPressed: () => Navigator.pop(context, true), child: const Text('Oui')),
-                          ],
-                        ),
-                      );
-                      if (confirmed == true) {
-                        await _performAction(action: 'refuser');
-                      }
-                    },
-                    icon: const Icon(Icons.close),
-                    label: const Text('Refuser'),
-                  ),
-                  ElevatedButton.icon(
-                    onPressed: () => showModalBottomSheet(
-                      context: context,
-                      isScrollControlled: true,
-                      builder: (context) {
-                        return StatefulBuilder(
-                          builder: (context, sheetSetState) {
-                            return Padding(
-                              padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom, left: 16, right: 16, top: 16),
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Text('Proposer un nouveau créneau', style: TextStyle(fontWeight: FontWeight.bold)),
-                                  const SizedBox(height: 8),
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: OutlinedButton(
-                                          onPressed: () async {
-                                            final now = DateTime.now();
-                                            final date = await showDatePicker(
-                                              context: context,
-                                              initialDate: _proposedDate ?? now,
-                                              firstDate: now,
-                                              lastDate: now.add(const Duration(days: 365)),
-                                            );
-                                            if (date != null) {
-                                              sheetSetState(() => _proposedDate = date);
-                                              setState(() => _proposedDate = date);
-                                            }
-                                          },
-                                          child: Text(_proposedDate == null ? 'Choisir date' : DateFormat('dd/MM/yyyy').format(_proposedDate!)),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Expanded(
-                                        child: DropdownButtonFormField<String>(
-                                          value: _proposedHour,
-                                          hint: const Text('Heure'),
-                                          items: _generateTimeOptions().map((h) => DropdownMenuItem(value: h, child: Text(h))).toList(),
-                                          onChanged: (v) {
-                                            sheetSetState(() => _proposedHour = v);
-                                            setState(() => _proposedHour = v);
-                                          },
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 12),
-                                  Row(
-                                    children: [
-                                      Expanded(
-                                        child: OutlinedButton(
-                                          onPressed: () {
-                                            sheetSetState(() {
-                                              _proposedDate = null;
-                                              _proposedHour = null;
-                                            });
-                                            setState(() {
-                                              _proposedDate = null;
-                                              _proposedHour = null;
-                                            });
-                                          },
-                                          child: const Text('Réinitialiser'),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      ElevatedButton(
-                                        onPressed: () {
-                                          Navigator.of(context).pop();
-                                          _performAction(action: 'contre_proposer');
-                                        },
-                                        child: const Text('Envoyer la proposition'),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 8),
-                                ],
-                              ),
-                            );
-                          },
-                        );
-                      },
-                    ),
-                    icon: const Icon(Icons.schedule),
-                    label: const Text('Contre-proposer'),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
@@ -876,18 +1240,57 @@ class _GarageReservationsScreenState extends ConsumerState<GarageReservationsScr
     final reservations = state.reservations;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Messages - Garagiste')),
+      backgroundColor: Colors.white, // <-- entire page background = white
+      appBar: AppBar(
+        iconTheme: const IconThemeData(color: Colors.white),
+        title: const Text(
+          'Messages - Garagiste',
+          style: TextStyle( color: Colors.white),
+        ),
+        backgroundColor: primaryBlue,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.notifications),
+            onPressed: () {
+              HapticFeedback.lightImpact();
+              // TODO: Naviguer vers notifications si implémenté
+            },
+          ),
+        ],
+      ),
       body: state.loading
-          ? const Center(child: CircularProgressIndicator())
+          ? Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: const [
+                  CircularProgressIndicator(color: primaryBlue),
+                  SizedBox(height: 16),
+                  Text('Chargement des réservations...', style: TextStyle(color: Colors.grey)),
+                ],
+              ),
+            )
           : reservations.isEmpty
-              ? const Center(child: Text('Aucune réservation'))
-              : LayoutBuilder(builder: (context, constraints) {
-                  if (constraints.maxWidth < 720) {
-                    return _mobileListLayout(context, reservations);
-                  } else {
-                    return _twoColumnLayout(context, reservations);
-                  }
-                }),
+              ? const Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.inbox_outlined, size: 64, color: Colors.grey),
+                      SizedBox(height: 16),
+                      Text('Aucune réservation', style: TextStyle(fontSize: 16, color: Colors.grey)),
+                    ],
+                  ),
+                )
+              : LayoutBuilder(
+                  builder: (context, constraints) {
+                    if (constraints.maxWidth < 720) {
+                      return _mobileListLayout(context, reservations);
+                    } else {
+                      return _twoColumnLayout(context, reservations);
+                    }
+                  },
+                ),
     );
   }
 }

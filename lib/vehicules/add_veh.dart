@@ -256,103 +256,87 @@ class _AddVehScreenState extends ConsumerState<AddVehScreen>
   }
 
   Future<void> _handleSubmit() async {
-    HapticFeedback.mediumImpact();
+  HapticFeedback.mediumImpact();
 
-    if (!(_formKey.currentState?.validate() ?? false)) {
-      _showErrorSnackBar('Veuillez corriger les erreurs du formulaire');
-      return;
-    }
-
-    if (!_validateImmatriculation()) {
-      _showErrorSnackBar('Veuillez saisir le numéro local ou le VIN');
-      return;
-    }
-
-    final token = ref.read(authTokenProvider);
-    debugPrint('DEBUG: token lu dans AddVehScreen -> $token');
-    if (token == null || (token.isEmpty)) {
-      _showErrorSnackBar('Utilisateur non authentifié');
-      return;
-    }
-
-    setState(() => _isLoading = true);
-
-    final immat = _numLocalCtrl.text.trim().isNotEmpty
-        ? _numLocalCtrl.text.trim()
-        : _vinCtrl.text.trim();
-
-    try {
-      // Appel API : création véhicule
-      final created = await VehiculeApi.createVehicule(
-        token: token,
-        proprietaireId: widget.clientId,
-        marque: _marque.text.trim(),
-        modele: _modele.text.trim(),
-        immatriculation: immat,
-        annee: _annee.text.trim().isEmpty ? null : int.tryParse(_annee.text.trim()),
-        couleur: null,
-        typeCarburant: _selectedFuelType,
-        kilometrage: _km.text.trim().isEmpty ? null : int.tryParse(_km.text.trim()),
-        picKm: null,
-        images: [],
-      );
-
-      Vehicule finalVeh = created;
-
-      // Si photo locale présente -> upload puis update du véhicule créé (si id dispo)
-      if (_picKmPath != null && _picKmPath!.isNotEmpty && created.id != null && created.id!.isNotEmpty) {
-        try {
-          final uploadedUrl = await VehiculeApi.uploadVehiculeImage(
-            token: token,
-            vehiculeId: created.id!,
-            imageFile: File(_picKmPath!),
-          );
-          // mettre à jour le véhicule côté serveur avec l'URL retournée
-          final updated = await VehiculeApi.updateVehicule(
-            token: token,
-            id: created.id!,
-            picKm: uploadedUrl,
-            images: [uploadedUrl],
-          );
-          finalVeh = updated;
-        } catch (e) {
-          // on continue mais on avertit l'utilisateur
-          _showErrorSnackBar('Upload image échoué: ${e.toString()}');
-        }
-      }
-
-      // Mettre à jour le cache local via le provider (tentatives robustes)
-      final dynamic notifier = ref.read(vehiculesProvider.notifier);
-      try {
-        // try common API: addVehicule
-        if (notifier != null) {
-          try {
-            await notifier.addVehicule(finalVeh);
-          } catch (_) {
-            // fallback: try set state if possible
-            try {
-              final dynamic state = ref.read(vehiculesProvider);
-              if (state is List) {
-                notifier.state = [...state, finalVeh];
-              }
-            } catch (_) {
-              // last fallback: ignore (UI pourra rafraîchir en revenant)
-            }
-          }
-        }
-      } catch (_) {
-        // ignore any provider update error
-      }
-
-      _showSuccessSnackBar('Véhicule enregistré sur le serveur');
-      await Future.delayed(const Duration(milliseconds: 400));
-      if (mounted) Get.back(result: finalVeh);
-    } catch (e) {
-      _showErrorSnackBar('Erreur lors de l\'ajout: ${e.toString()}');
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
+  if (!(_formKey.currentState?.validate() ?? false)) {
+    _showErrorSnackBar('Veuillez corriger les erreurs du formulaire');
+    return;
   }
+
+  if (!_validateImmatriculation()) {
+    _showErrorSnackBar('Veuillez saisir le numéro local ou le VIN');
+    return;
+  }
+
+  final token = ref.read(authTokenProvider);
+  if (token == null || token.isEmpty) {
+    _showErrorSnackBar('Utilisateur non authentifié');
+    return;
+  }
+
+  setState(() => _isLoading = true);
+
+  final immat = _numLocalCtrl.text.trim().isNotEmpty
+      ? _numLocalCtrl.text.trim()
+      : _vinCtrl.text.trim();
+
+  try {
+    // Utiliser le provider pour créer le véhicule (gère le cache automatiquement)
+    await ref.read(vehiculesProvider.notifier).createVehicule(
+      proprietaireId: widget.clientId,
+      marque: _marque.text.trim(),
+      modele: _modele.text.trim(),
+      immatriculation: immat,
+      annee: _annee.text.trim().isEmpty ? null : int.tryParse(_annee.text.trim()),
+      couleur: null,  // À implémenter si besoin
+      typeCarburant: _selectedFuelType,
+      kilometrage: _km.text.trim().isEmpty ? null : int.tryParse(_km.text.trim()),
+    );
+
+    // Récupérer le véhicule créé depuis le cache (dernière entrée, ou via ID si connu)
+    // Note: Si le provider ne retourne pas l'ID, rechargez la liste pour cohérence
+    await ref.read(vehiculesProvider.notifier).loadAll();  // Refresh pour cohérence
+
+    Vehicule? createdVeh = ref.read(vehiculesProvider).vehicules
+        .where((v) => v.immatriculation == immat)
+        .lastOrNull;  // Assumer que l'immatriculation est unique pour identifier
+
+    if (createdVeh == null) {
+      throw Exception('Véhicule créé mais non trouvé dans le cache');
+    }
+
+    // Si photo locale présente -> upload puis update via provider
+    if (_picKmPath != null && _picKmPath!.isNotEmpty) {
+      try {
+        final uploadedUrl = await VehiculeApi.uploadVehiculeImage(
+          token: token,
+          vehiculeId: createdVeh.id!,
+          imageFile: File(_picKmPath!),
+        );
+        // Mettre à jour via provider (gère le cache)
+        await ref.read(vehiculesProvider.notifier).updateVehicule(
+          id: createdVeh.id!,
+          picKm: uploadedUrl,
+          images: [uploadedUrl],
+        );
+        _showSuccessSnackBar('Photo du compteur ajoutée');
+      } catch (e) {
+        // Continuer sans photo, mais avertir
+        _showErrorSnackBar('Véhicule ajouté, mais upload photo échoué: ${e.toString()}');
+      }
+    } else {
+      _showSuccessSnackBar('Véhicule ajouté avec succès');
+    }
+
+    // Délai pour feedback UX avant navigation
+    await Future.delayed(const Duration(milliseconds: 400));
+    if (mounted) Get.back(result: createdVeh);
+  } catch (e) {
+    _showErrorSnackBar('Erreur lors de l\'ajout du véhicule: ${e.toString()}');
+  } finally {
+    if (mounted) setState(() => _isLoading = false);
+  }
+}
 
   Widget _buildCustomTextField({
     required TextEditingController controller,

@@ -347,13 +347,13 @@ class _MecaHomePageState extends ConsumerState<MecaHomePage> {
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
       appBar: CustomAppBar(
-        title: 'Bienvenue, $_userName',
-        backgroundColor: const Color(0xFF357ABD),
-        actions: [
-          // notification icon: use watched global count and computed pending count
-          _buildNotificationIcon(globalNotifCount, _pendingCountFromResa),
-        ],
-      ),
+  title: 'Bienvenue, $_userName',
+  backgroundColor: const Color(0xFF357ABD),
+  showBack: false, // 🔥 masque la flèche retour UNIQUEMENT ici
+  actions: [
+    _buildNotificationIcon(globalNotifCount, _pendingCountFromResa),
+  ],
+),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
         child: Column(
