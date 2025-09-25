@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:garagelink/ClientsScreens/chercherGarage.dart';
+import 'package:garagelink/MecanicienScreens/Reservations/client_reservations_screen.dart';
+import 'package:garagelink/MecanicienScreens/Reservations/garage_reservations_screen.dart';
 import 'package:garagelink/MecanicienScreens/atelier/atelier_dash.dart';
 import 'package:garagelink/MecanicienScreens/devis/creation_devis.dart';
 import 'package:garagelink/MecanicienScreens/edit_localisation.dart';
@@ -18,6 +20,11 @@ import 'package:garagelink/configurations/app_routes.dart';
 import 'package:garagelink/providers/auth_provider.dart';
 import 'package:garagelink/services/user_api.dart';
 
+// Nouveaux imports nécessaires pour la notif
+import 'package:flutter/services.dart';
+import 'package:garagelink/providers/reservation_provider.dart';
+import 'package:garagelink/models/reservation.dart';
+
 class MecaHomePage extends ConsumerStatefulWidget {
   const MecaHomePage({super.key});
 
@@ -29,11 +36,17 @@ class _MecaHomePageState extends ConsumerState<MecaHomePage> {
   bool _checkingAuth = true;
   String _userName = 'Utilisateur';
 
+  // notification state
+  bool _hasNotification = false;
+  int _pendingCount = 0; // nombre actuel de demandes en attente (pour comparaison)
+
   @override
   void initState() {
     super.initState();
     // démarre la vérification d'auth après la première frame
     WidgetsBinding.instance.addPostFrameCallback((_) => _initAuth());
+
+   
   }
 
   Future<void> _initAuth() async {
@@ -59,7 +72,7 @@ class _MecaHomePageState extends ConsumerState<MecaHomePage> {
           setState(() {
             _userName = (profile.username.isNotEmpty) ? profile.username : profile.email;
           });
-                } catch (_) {
+        } catch (_) {
           // en cas d'erreur on continue avec valeur par défaut
           setState(() => _userName = 'Utilisateur');
         }
@@ -99,6 +112,16 @@ class _MecaHomePageState extends ConsumerState<MecaHomePage> {
         if (mounted) Get.offAllNamed(AppRoutes.login);
       });
     }
+  }
+
+  // Appelle quand l'utilisateur clique sur l'icône de notif :
+  // navigate to reservations screen and mark notif as seen.
+  void _onNotificationTap() {
+    setState(() {
+      _hasNotification = false;
+    });
+    // Navigue vers l'écran des réservations (tu peux remplacer par GarageReservationsScreen si tu préfères)
+    Get.to(() => const ReservationScreen());
   }
 
   // Widgets auxiliaires (repris de ton code)
@@ -216,11 +239,80 @@ class _MecaHomePageState extends ConsumerState<MecaHomePage> {
     );
   }
 
+  // construit le widget icône de notification (avec point rouge si _hasNotification)
+  Widget _buildNotificationIcon() {
+    return Padding(
+      padding: const EdgeInsets.only(right: 8.0),
+      child: InkWell(
+        onTap: _onNotificationTap,
+        borderRadius: BorderRadius.circular(24),
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            const Padding(
+              padding: EdgeInsets.all(8.0),
+              child: Icon(Icons.notifications, size: 26, color: Colors.white),
+            ),
+            if (_hasNotification)
+              Positioned(
+                right: 2,
+                top: 2,
+                child: Container(
+                  width: 10,
+                  height: 10,
+                  decoration: BoxDecoration(
+                    color: Colors.redAccent,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 1.5),
+                  ),
+                ),
+              ),
+            // Optionnel: badge avec nombre
+            if (_hasNotification && _pendingCount > 0)
+              Positioned(
+                right: -6,
+                top: -6,
+                child: Container(
+                  padding: const EdgeInsets.all(2),
+                  decoration: BoxDecoration(color: Colors.redAccent, shape: BoxShape.circle),
+                  constraints: const BoxConstraints(minWidth: 18, minHeight: 18),
+                  child: Center(
+                    child: Text(
+                      _pendingCount > 9 ? '9+' : '$_pendingCount',
+                      style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-     final token = ref.read(authNotifierProvider).token;
-  print('Token actuel: $token'); // pour debug
-    // tant que l'auth est vérifiée, affiche loader
+    final token = ref.read(authNotifierProvider).token;
+  // --- ref.listen placé dans build (autorisé) ---
+    ref.listen<ReservationsState>(reservationsProvider, (previous, next) {
+      final int prevPending = previous?.reservations.where((r) => r.status == ReservationStatus.enAttente).length ?? 0;
+      final int nextPending = next.reservations.where((r) => r.status == ReservationStatus.enAttente).length;
+
+      if (nextPending > prevPending) {
+        if (!mounted) return;
+        setState(() {
+          _hasNotification = true;
+          _pendingCount = nextPending;
+        });
+        try {
+          SystemSound.play(SystemSoundType.alert);
+          HapticFeedback.mediumImpact();
+        } catch (_) {}
+      } else {
+        if (!mounted) return;
+        setState(() => _pendingCount = nextPending);
+      }
+    });
     if (_checkingAuth) {
       return const Scaffold(
         body: Center(child: CircularProgressIndicator()),
@@ -232,6 +324,10 @@ class _MecaHomePageState extends ConsumerState<MecaHomePage> {
       appBar: CustomAppBar(
         title: 'Bienvenue, $_userName',
         backgroundColor: const Color(0xFF357ABD),
+        actions: [
+          // NOTIFICATION ICON
+          _buildNotificationIcon(),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
@@ -412,6 +508,20 @@ class _MecaHomePageState extends ConsumerState<MecaHomePage> {
               description: 'Chercher des garages à proximité',
               color: const Color.fromARGB(255, 11, 131, 187),
               onTap: () => Get.to(() => ChercherGarageScreen()),
+            ),
+            buildMenuCard(
+              icon: Icons.chat,
+              title: 'Conversation  Clients',
+              description: '',
+              color: const Color.fromARGB(255, 11, 131, 187),
+              onTap: () => Get.to(() => ClientReservationsScreen()),
+            ),
+            buildMenuCard(
+              icon: Icons.chat,
+              title: 'Conversation  Garages',
+              description: '',
+              color: const Color.fromARGB(255, 11, 131, 187),
+              onTap: () => Get.to(() => GarageReservationsScreen()),
             ),
 
             // 🚀 FUTURES FONCTIONNALITÉS

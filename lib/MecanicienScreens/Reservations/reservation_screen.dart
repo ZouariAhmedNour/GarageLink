@@ -1,11 +1,9 @@
-// lib/screens/reservation_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:garagelink/providers/reservation_provider.dart';
 import 'package:get/get.dart';
 import 'package:intl/intl.dart';
-import 'package:garagelink/configurations/app_routes.dart';
 import 'package:garagelink/models/reservation.dart';
 
 class ReservationScreen extends ConsumerStatefulWidget {
@@ -16,7 +14,8 @@ class ReservationScreen extends ConsumerStatefulWidget {
 }
 
 class _ReservationScreenState extends ConsumerState<ReservationScreen> {
-  final DateFormat _dateFmt = DateFormat.yMd();
+  // Affichage agréable : dd/MM/yyyy et HH:mm
+  final DateFormat _dateFmt = DateFormat('dd/MM/yyyy');
   final DateFormat _timeFmt = DateFormat.Hm();
 
   @override
@@ -101,7 +100,7 @@ class _ReservationScreenState extends ConsumerState<ReservationScreen> {
 
     final date = await showDatePicker(
       context: context,
-      initialDate: pickedDate ?? DateTime.now(),
+      initialDate: pickedDate,
       firstDate: DateTime.now(),
       lastDate: DateTime.now().add(const Duration(days: 365)),
     );
@@ -151,12 +150,12 @@ class _ReservationScreenState extends ConsumerState<ReservationScreen> {
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(reservationsProvider);
-    final notifier = ref.read(reservationsProvider.notifier);
     final reservations = state.reservations;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Réservations'),
+        iconTheme: const IconThemeData(color: Colors.white),
+        title: const Text('Réservations', style: TextStyle(color: Colors.white)),
         backgroundColor: const Color(0xFF357ABD),
         actions: [
           IconButton(
@@ -209,8 +208,17 @@ class _ReservationScreenState extends ConsumerState<ReservationScreen> {
             separatorBuilder: (_, __) => const SizedBox(height: 12),
             itemBuilder: (context, idx) {
               final r = reservations[idx];
-              final dateStr = r.creneauDemande.date != null ? _dateFmt.format(r.creneauDemande.date!.toLocal()) : 'Date non définie';
-              final timeStr = r.creneauDemande.heureDebut ?? (r.creneauPropose?.heureDebut ?? 'Heure non définie');
+
+              // date/time demandé
+              final requestedDate = r.creneauDemande.date;
+              final requestedDateStr = requestedDate != null ? _dateFmt.format(requestedDate.toLocal()) : 'Date non définie';
+              final requestedTimeStr = r.creneauDemande.heureDebut ?? 'Heure non définie';
+
+              // si un créneau proposé par le garage existe, on l'affiche aussi
+              final proposed = r.creneauPropose;
+              final proposedDateStr = proposed?.date != null ? _dateFmt.format(proposed!.date!.toLocal()) : null;
+              final proposedTimeStr = proposed?.heureDebut;
+
               final serviceLabel = (r.serviceName != null && r.serviceName!.isNotEmpty) ? r.serviceName! : r.serviceId;
               final client = r.clientName.isNotEmpty ? r.clientName : r.clientPhone;
 
@@ -222,7 +230,7 @@ class _ReservationScreenState extends ConsumerState<ReservationScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // header row
+                      // header row with client, service and requested date/time
                       Row(
                         children: [
                           Container(
@@ -239,12 +247,51 @@ class _ReservationScreenState extends ConsumerState<ReservationScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(client, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                                const SizedBox(height: 4),
-                                Text('$serviceLabel • $dateStr • $timeStr', style: const TextStyle(color: Colors.black54)),
+                                // client / titre
+                                Text(client,
+                                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis),
+                                const SizedBox(height: 6),
+                                // ligne dédiée pour date + heure + service (évite overflow)
+                                Row(
+                                  children: [
+                                    // service label (ellipsis)
+                                    Expanded(
+                                      child: Text(
+                                        serviceLabel,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(color: Colors.black54),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    // date
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(Icons.calendar_today, size: 14, color: Colors.black45),
+                                        const SizedBox(width: 4),
+                                        Text(requestedDateStr, style: const TextStyle(color: Colors.black54, fontSize: 13)),
+                                      ],
+                                    ),
+                                    const SizedBox(width: 12),
+                                    // heure
+                                    Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(Icons.access_time, size: 14, color: Colors.black45),
+                                        const SizedBox(width: 4),
+                                        Text(requestedTimeStr, style: const TextStyle(color: Colors.black54, fontSize: 13)),
+                                      ],
+                                    ),
+                                  ],
+                                ),
                               ],
                             ),
                           ),
+                          const SizedBox(width: 8),
+                          // statut
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.end,
                             children: [
@@ -254,31 +301,64 @@ class _ReservationScreenState extends ConsumerState<ReservationScreen> {
                                   color: _statusColor(r.status).withOpacity(0.12),
                                   borderRadius: BorderRadius.circular(8),
                                 ),
-                                child: Text(_statusLabel(r.status), style: TextStyle(color: _statusColor(r.status), fontWeight: FontWeight.w600)),
+                                child: Text(_statusLabel(r.status),
+                                    style: TextStyle(color: _statusColor(r.status), fontWeight: FontWeight.w600)),
                               ),
-                              const SizedBox(height: 6),
-                              Text(r.id ?? '', style: const TextStyle(fontSize: 12, color: Colors.grey)),
                             ],
                           ),
                         ],
                       ),
+
                       const SizedBox(height: 8),
-                      if (r.descriptionDepannage.isNotEmpty)
-                        Text(r.descriptionDepannage, style: const TextStyle(color: Colors.black87)),
-                      const SizedBox(height: 12),
-                      // actions
-                      Row(
-                        children: [
-                          ElevatedButton.icon(
-                            icon: const Icon(Icons.request_quote),
-                            label: const Text('Devis'),
-                            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF357ABD)),
-                            onPressed: () {
-                              // transformer en devis : navigation vers créationDevis avec l'objet réservation
-                              Get.toNamed(AppRoutes.creationDevis, arguments: r);
-                            },
+
+                      // affiche le créneau proposé (si présent) sous la header card
+                      if (proposed != null && (proposedDateStr != null || proposedTimeStr != null))
+                        Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: Colors.blueGrey.withOpacity(0.04),
+                            borderRadius: BorderRadius.circular(8),
                           ),
-                          const SizedBox(width: 8),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.swap_horiz, size: 16, color: Colors.blueGrey),
+                              const SizedBox(width: 8),
+                              Flexible(
+                                child: Text(
+                                  'Proposé: ${proposedDateStr ?? ''} ${proposedTimeStr ?? ''}',
+                                  style: const TextStyle(color: Colors.blueGrey, fontWeight: FontWeight.w600),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                      // description: label first, then content
+                      if (r.descriptionDepannage.isNotEmpty)
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Description :',
+                              style: TextStyle(color: Colors.black54, fontStyle: FontStyle.italic),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              r.descriptionDepannage,
+                              style: const TextStyle(color: Colors.black87),
+                            ),
+                          ],
+                        ),
+
+                      const SizedBox(height: 12),
+
+                      // actions: Wrap pour éviter overflow, Annuler aligné à droite
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
                           if (r.status == ReservationStatus.enAttente || r.status == ReservationStatus.contrePropose) ...[
                             OutlinedButton(
                               onPressed: () async {
@@ -298,7 +378,6 @@ class _ReservationScreenState extends ConsumerState<ReservationScreen> {
                               },
                               child: const Text('Accepter'),
                             ),
-                            const SizedBox(width: 8),
                             OutlinedButton(
                               onPressed: () async {
                                 final confirm = await Get.dialog<bool>(
@@ -318,32 +397,34 @@ class _ReservationScreenState extends ConsumerState<ReservationScreen> {
                               style: OutlinedButton.styleFrom(foregroundColor: Colors.red),
                               child: const Text('Refuser'),
                             ),
-                            const SizedBox(width: 8),
                             OutlinedButton(
                               onPressed: () => _showProposeDialog(r),
                               child: const Text('Contre-proposer'),
                             ),
                           ],
-                          const Spacer(),
-                          TextButton(
-                            onPressed: () async {
-                              final confirm = await Get.dialog<bool>(
-                                AlertDialog(
-                                  title: const Text('Annuler la réservation'),
-                                  content: const Text('Confirmer l\'annulation ?'),
-                                  actions: [
-                                    TextButton(onPressed: () => Get.back(result: false), child: const Text('Non')),
-                                    ElevatedButton(onPressed: () => Get.back(result: true), child: const Text('Oui')),
-                                  ],
-                                ),
-                              );
-                              if (confirm == true) {
-                                await _performAction(reservation: r, action: 'annule');
-                              }
-                            },
-                            child: const Text('Annuler', style: TextStyle(color: Colors.redAccent)),
-                          ),
                         ],
+                      ),
+                      const SizedBox(height: 8),
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton(
+                          onPressed: () async {
+                            final confirm = await Get.dialog<bool>(
+                              AlertDialog(
+                                title: const Text('Annuler la réservation'),
+                                content: const Text('Confirmer l\'annulation ?'),
+                                actions: [
+                                  TextButton(onPressed: () => Get.back(result: false), child: const Text('Non')),
+                                  ElevatedButton(onPressed: () => Get.back(result: true), child: const Text('Oui')),
+                                ],
+                              ),
+                            );
+                            if (confirm == true) {
+                              await _performAction(reservation: r, action: 'annule');
+                            }
+                          },
+                          child: const Text('Annuler', style: TextStyle(color: Colors.redAccent)),
+                        ),
                       ),
                     ],
                   ),

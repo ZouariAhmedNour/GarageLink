@@ -1,5 +1,8 @@
+// lib/services/reservation_api.dart
+
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:intl/intl.dart';
 import 'package:garagelink/models/reservation.dart';
 import 'package:garagelink/global.dart';
 
@@ -19,7 +22,6 @@ class ReservationApi {
   }
 
   /// Récupérer toutes les réservations
-  /// GET $UrlApi/reservations
   static Future<List<Reservation>> getAllReservations({String? token}) async {
     final url = Uri.parse('$UrlApi/reservations');
     final response = await http.get(
@@ -31,7 +33,6 @@ class ReservationApi {
       final List<dynamic> jsonList = jsonDecode(response.body);
       return jsonList.map((json) => Reservation.fromJson(json)).toList();
     } else {
-      // Tenter d'extraire message d'erreur du body
       try {
         final json = jsonDecode(response.body);
         throw Exception(json['error'] ?? json['message'] ?? 'Erreur lors de la récupération des réservations');
@@ -43,7 +44,6 @@ class ReservationApi {
 
   /// Créer une nouvelle réservation
   /// POST $UrlApi/create-reservation
-  /// Le backend renvoie: { success: true, message: "...", data: savedReservation }
   static Future<Reservation> createReservation({
     String? token,
     required String garageId,
@@ -56,6 +56,10 @@ class ReservationApi {
     required String descriptionDepannage,
   }) async {
     final url = Uri.parse('$UrlApi/create-reservation');
+
+    // envoyer la date en format yyyy-MM-dd (date-only) pour éviter TZ shifts
+    final dateOnly = DateFormat('yyyy-MM-dd').format(creneauDemandeDate);
+
     final body = jsonEncode({
       'garageId': garageId,
       'clientName': clientName.trim(),
@@ -63,7 +67,7 @@ class ReservationApi {
       'clientEmail': clientEmail?.trim(),
       'serviceId': serviceId,
       'creneauDemande': {
-        'date': creneauDemandeDate.toIso8601String(),
+        'date': dateOnly,
         'heureDebut': creneauDemandeHeureDebut,
       },
       'descriptionDepannage': descriptionDepannage.trim(),
@@ -77,12 +81,11 @@ class ReservationApi {
 
     if (response.statusCode == 201) {
       final json = jsonDecode(response.body);
-      // On attendé 'data' contenant la réservation créée
+      // backend retourne { success: true, message: "...", data: savedReservation }
       return Reservation.fromJson(json['data']);
     } else {
       try {
         final json = jsonDecode(response.body);
-        // Le controller renvoie souvent { success: false, message: "...", ... }
         throw Exception(json['message'] ?? json['error'] ?? 'Erreur lors de la création de la réservation');
       } catch (_) {
         throw Exception('Erreur HTTP ${response.statusCode} lors de la création de la réservation');
@@ -92,32 +95,41 @@ class ReservationApi {
 
   /// Mettre à jour une réservation
   /// PUT $UrlApi/update/reservations/:id
-  /// Body attendu: { action, newDate?, newHeureDebut?, message? }
-  /// Le backend renvoie: { success: true, reservation: updatedReservation, message: "..." }
+  /// Body attendu: { action, sender?, creneauPropose?, message? }
   static Future<Reservation> updateReservation({
     String? token,
     required String id,
     required String action,
-    DateTime? newDate,
+    String? newDateStr, // yyyy-MM-dd
     String? newHeureDebut,
     String? message,
+    String? sender, // 'client' or 'garage'
   }) async {
     final url = Uri.parse('$UrlApi/update/reservations/$id');
-    final body = jsonEncode({
+
+    final bodyMap = <String, dynamic>{
       'action': action,
-      'newDate': newDate?.toIso8601String(),
-      'newHeureDebut': newHeureDebut,
-      'message': message,
-    }..removeWhere((key, value) => value == null));
+    };
+
+    if (sender != null) bodyMap['sender'] = sender;
+    if (message != null) bodyMap['message'] = message;
+
+    // only include creneauPropose if at least one of date/hour is present
+    if (newDateStr != null || newHeureDebut != null) {
+      bodyMap['creneauPropose'] = <String, dynamic>{};
+      if (newDateStr != null) bodyMap['creneauPropose']['date'] = newDateStr;
+      if (newHeureDebut != null) bodyMap['creneauPropose']['heureDebut'] = newHeureDebut;
+    }
 
     final response = await http.put(
       url,
       headers: _authHeaders(token),
-      body: body,
+      body: jsonEncode(bodyMap..removeWhere((k, v) => v == null)),
     );
 
     if (response.statusCode == 200) {
       final json = jsonDecode(response.body);
+      // backend: { success: true, reservation: updatedReservation, message: "..."}
       return Reservation.fromJson(json['reservation']);
     } else {
       try {

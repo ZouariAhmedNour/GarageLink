@@ -34,6 +34,8 @@ class AppRoutes {
   ////////////////////////////  MODULE RESERVATION ///////////////////////////
   static const String reservationScreen = '/reservationScreen';
   static const String creerResaScreen = '/creerResaScreen';
+  static const String garageReservationScreen = '/garageReservationScreen';
+  static const String clientReservationScreen = '/clientReservationScreen';
   ////////////////////////////// MODULE VEHICULES ////////////////////////////
   static const String clientVehiclesScreen = '/clientVehiclesScreen';
   static const String clientMapScreen = '/clientMapScreen';

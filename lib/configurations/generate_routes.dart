@@ -1,6 +1,8 @@
 // import 'package:garagelink/Clients%20Screens/clientHome.dart';
 import 'package:garagelink/ClientsScreens/chercherGarage.dart';
 import 'package:garagelink/ClientsScreens/clientMapScreen.dart';
+import 'package:garagelink/MecanicienScreens/Reservations/client_reservations_screen.dart';
+import 'package:garagelink/MecanicienScreens/Reservations/garage_reservations_screen.dart';
 import 'package:garagelink/MecanicienScreens/atelier/ajouterAtelier.dart';
 import 'package:garagelink/MecanicienScreens/atelier/atelier_dash.dart';
 import 'package:garagelink/MecanicienScreens/atelier/modifierAtelier.dart';
@@ -141,6 +143,8 @@ class GenerateRoutes {
     //////////////// MODULE RESERVATION  //////////////////////
     GetPage(name: AppRoutes.reservationScreen, page: () => const ReservationScreen()),
     GetPage(name: AppRoutes.creerResaScreen, page: () => CreerResaScreen(garage: Get.arguments as User)),
+    GetPage(name: AppRoutes.garageReservationScreen, page: () => const GarageReservationsScreen()),
+    GetPage(name: AppRoutes.clientReservationScreen, page: () => const ClientReservationsScreen()),
     ////////////////// MODULE VEHICULES //////////////////////
     // GetPage(
     //   name: AppRoutes.clientVehiclesScreen,

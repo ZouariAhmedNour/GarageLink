@@ -1,4 +1,7 @@
+// lib/providers/reservation_provider.dart
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:intl/intl.dart';
 import 'package:garagelink/models/reservation.dart';
 import 'package:garagelink/services/reservation_api.dart';
 import 'package:garagelink/providers/auth_provider.dart';
@@ -91,22 +94,30 @@ class ReservationsNotifier extends StateNotifier<ReservationsState> {
   }
 
   /// Mettre à jour une réservation (token optionnel)
+  /// Ajout du param `sender` ('client' | 'garage') et conversion de la date en yyyy-MM-dd
   Future<void> updateReservation({
     required String id,
     required String action,
     DateTime? newDate,
     String? newHeureDebut,
     String? message,
+    String? sender,
   }) async {
     setLoading(true);
     try {
+      String? newDateStr;
+      if (newDate != null) {
+        newDateStr = DateFormat('yyyy-MM-dd').format(newDate);
+      }
+
       final updatedReservation = await ReservationApi.updateReservation(
         token: _token,
         id: id,
         action: action,
-        newDate: newDate,
+        newDateStr: newDateStr,
         newHeureDebut: newHeureDebut,
         message: message,
+        sender: sender,
       );
 
       state = state.copyWith(

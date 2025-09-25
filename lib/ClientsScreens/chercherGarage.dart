@@ -21,8 +21,6 @@ class _SearchGarageScreenState extends ConsumerState<ChercherGarageScreen> {
   final MapController _mapController = MapController();
   bool _mapCentered = false;
 
-  // rayon par défaut en km (utilisé pour la recherche autour de la position)
-  double radiusKm = 5.0;
 
   @override
   void initState() {
@@ -83,51 +81,7 @@ class _SearchGarageScreenState extends ConsumerState<ChercherGarageScreen> {
     }
   }
 
-  /// Lance une recherche serveur autour de la position actuelle avec le rayon `radiusKm`.
-   Future<void> _searchAroundMyLocation() async {
-    if (!mounted) return;
-    if (myLocation == null) {
-      // si on n'a pas encore la position, tenter de la récupérer
-      await _determinePositionAndCenter();
-      if (myLocation == null) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Impossible de récupérer la position.')),
-        );
-        return;
-      }
-    }
-
-    // appelle le provider pour lancer la recherche côté serveur via applyFilters
-    try {
-      // show temporary UI feedback
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Recherche des garages dans ${radiusKm.round()} km...')),
-      );
-
-      // Utilise applyFilters (existant) — s'il a été modifié pour appeler le serveur,
-      // cela déclenchera la recherche réseau. Sinon il appliquera un filtrage local.
-      ref.read(garagesProvider.notifier).applyFilters(
-        governorateId: null,
-        cityId: null,
-        centerLat: myLocation!.latitude,
-        centerLng: myLocation!.longitude,
-        radiusKm: radiusKm,
-      );
-
-      // optionally, recenter map on myLocation (already centered in _determinePositionAndCenter)
-      try {
-        _mapController.move(myLocation!, 13);
-      } catch (_) {}
-    } catch (e) {
-      debugPrint('searchAround error: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Erreur lors de la recherche: $e')),
-        );
-      }
-    }
-  }
+ 
 
   List<Marker> _buildMarkers(List<User> garages) {
   return garages.map((g) {
@@ -241,7 +195,7 @@ class _SearchGarageScreenState extends ConsumerState<ChercherGarageScreen> {
               if (!mounted) return;
               // Récupère la position + lance la recherche autour de moi
               await _determinePositionAndCenter();
-              await _searchAroundMyLocation();
+              
             },
             tooltip: 'Rechercher autour de ma position',
           ),
@@ -258,53 +212,23 @@ class _SearchGarageScreenState extends ConsumerState<ChercherGarageScreen> {
       body: Column(
         children: [
           // petite info : nombre de garages (utile pour debug/UX) + contrôle du rayon
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            child: garagesAsync.when(
-              data: (garages) => Column(
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('${garages.length} garages trouvés'),
-                      if (myLocation != null) const Text('Localisation activée'),
-                    ],
-                  ),
-                  // Afficher et permettre de modifier le rayon (optionnel mais utile)
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      const Text('Rayon:'),
-                      Expanded(
-                        child: Slider(
-                          min: 1,
-                          max: 50,
-                          divisions: 49,
-                          value: radiusKm,
-                          label: '${radiusKm.round()} km',
-                          onChanged: (v) => setState(() => radiusKm = v),
-                        ),
-                      ),
-                      Text('${radiusKm.round()} km'),
-                      const SizedBox(width: 8),
-                      ElevatedButton(
-                        onPressed: () async {
-                          // lance une recherche autour de la position actuelle avec le rayon choisi
-                          await _searchAroundMyLocation();
-                        },
-                        child: const Text('Rechercher'),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              loading: () => const SizedBox.shrink(),
-              error: (e, st) => Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [Text('Erreur: $e'), const SizedBox()],
-              ),
-            ),
-          ),
+         Padding(
+  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+  child: garagesAsync.when(
+    data: (garages) => Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text('${garages.length} garages trouvés'),
+        if (myLocation != null) const Text('Localisation activée'),
+      ],
+    ),
+    loading: () => const SizedBox.shrink(),
+    error: (e, st) => Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [Text('Erreur: $e'), const SizedBox()],
+    ),
+  ),
+),
 
           // ----- map -----
           Expanded(
