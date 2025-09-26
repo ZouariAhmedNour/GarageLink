@@ -6,73 +6,89 @@ import 'package:garagelink/models/vehicule.dart';
 import 'package:garagelink/global.dart';
 
 class CarnetEntretienApi {
-  /// Retrieves the maintenance history for a vehicle
-  static Future<Map<String, dynamic>> getCarnetByVehiculeId(String token, String vehiculeId) async {
-    final url = Uri.parse('$UrlApi/carnet-entretien/vehicule/$vehiculeId');
-    final response = await http.get(
-      url,
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-    );
+  static const _jsonHeader = {
+    'Content-Type': 'application/json',
+    'Accept': 'application/json',
+  };
 
+  // Helper pour parser la réponse et détecter HTML / JSON invalide
+  static dynamic _safeDecodeResponse(http.Response response) {
+    final ct = response.headers['content-type'] ?? '';
+    final body = response.body ?? '';
+
+    // debug minimal
+    print('API RESPONSE status=${response.statusCode} content-type=$ct');
+    if (body.length > 200) {
+      print('API RESPONSE body (head): ${body.substring(0, 200)}...');
+    } else {
+      print('API RESPONSE body: $body');
+    }
+
+    // heuristique: si content-type dit HTML ou body commence par <!DOCTYPE ou <html
+    final trimmed = body.trimLeft();
+    if (ct.toLowerCase().contains('text/html') ||
+        trimmed.startsWith('<!DOCTYPE') ||
+        trimmed.startsWith('<html')) {
+      throw Exception(
+        'Serveur a renvoyé du HTML au lieu de JSON (status ${response.statusCode}). '
+        'Réponse (début): ${trimmed.substring(0, trimmed.length > 200 ? 200 : trimmed.length)}',
+      );
+    }
+
+    // tenter jsonDecode et attraper FormatException
     try {
-      final body = jsonDecode(response.body);
-
-      if (response.statusCode == 200 && body is Map<String, dynamic>) {
-        final vehJson = body['vehicule'] as Map<String, dynamic>? ?? <String, dynamic>{};
-        final rawHist = body['historique'] as List<dynamic>? ?? [];
-
-        final historique = rawHist.map<CarnetEntretien>((item) {
-          if (item is Map<String, dynamic>) {
-            // si l'item provient directement d'un carnet (source indiqué ou shape de carnet)
-            if (item['source'] == 'carnet' ||
-                // heuristique: contient des clés typiques d'un carnet
-                (item.containsKey('dateCommencement') && item.containsKey('totalTTC'))) {
-              return CarnetEntretien.fromJson(item);
-            } else {
-              // sinon on tente la conversion depuis un ordre de travail
-              return _ordreToCarnetEntretien(item);
-            }
-          } else {
-            // fallback vide si format inattendu
-            return CarnetEntretien(
-              id: null,
-              vehiculeId: vehiculeId,
-              dateCommencement: DateTime.now(),
-              totalTTC: 0.0,
-              services: [],
-              pieces: [],
-            );
-          }
-        }).toList();
-
-        return {
-          'vehicule': Vehicule.fromJson(vehJson),
-          'historique': historique,
-        };
-      } else {
-        // try to extract error message
-        String errorMsg = 'Erreur lors de la récupération du carnet';
-        if (body is Map && body['error'] != null) {
-          errorMsg = body['error'].toString();
-        } else if (body is Map && body['message'] != null) {
-          errorMsg = body['message'].toString();
-        } else if (response.reasonPhrase != null) {
-          errorMsg = response.reasonPhrase!;
-        }
-        throw Exception(errorMsg);
-      }
-    } catch (e) {
-      // Rejette avec message lisible
-      throw Exception('Erreur parsing carnet: ${e.toString()}');
+      return jsonDecode(body);
+    } on FormatException catch (e) {
+      throw Exception(
+        'JSON invalide du serveur: ${e.message}. Réponse (début): ${trimmed.substring(0, trimmed.length > 200 ? 200 : trimmed.length)}',
+      );
     }
   }
 
-  /// Converts an OrdreTravail JSON to a CarnetEntretien-like structure
+  static Future<Map<String, dynamic>> getCarnetByVehiculeId(String token, String vehiculeId) async {
+    final url = Uri.parse('$UrlApi/carnet-entretien/vehicule/$vehiculeId');
+    final response = await http.get(url, headers: {..._jsonHeader, 'Authorization': 'Bearer $token'});
+
+    final body = _safeDecodeResponse(response);
+
+    if (response.statusCode == 200 && body is Map<String, dynamic>) {
+      final vehJson = body['vehicule'] as Map<String, dynamic>? ?? <String, dynamic>{};
+      final rawHist = body['historique'] as List<dynamic>? ?? [];
+
+      final historique = rawHist.map<CarnetEntretien>((item) {
+        if (item is Map<String, dynamic>) {
+          if (item['source'] == 'carnet' ||
+              (item.containsKey('dateCommencement') && item.containsKey('totalTTC'))) {
+            return CarnetEntretien.fromJson(item);
+          } else {
+            return _ordreToCarnetEntretien(item);
+          }
+        } else {
+          return CarnetEntretien(
+            id: null,
+            vehiculeId: vehiculeId,
+            dateCommencement: DateTime.now(),
+            totalTTC: 0.0,
+            services: [],
+            pieces: [],
+          );
+        }
+      }).toList();
+
+      return {
+        'vehicule': Vehicule.fromJson(vehJson),
+        'historique': historique,
+      };
+    } else {
+      String errorMsg = 'Erreur lors de la récupération du carnet (code ${response.statusCode})';
+      if (body is Map && (body['error'] ?? body['message']) != null) {
+        errorMsg = (body['error'] ?? body['message']).toString();
+      }
+      throw Exception(errorMsg);
+    }
+  }
+
   static CarnetEntretien _ordreToCarnetEntretien(Map<String, dynamic> json) {
-    // quelques gardes pour éviter exceptions si structure différente
     List<dynamic>? tachesRaw = json['taches'] as List<dynamic>?;
     final services = (tachesRaw ?? []).map<ServiceEntretien>((tache) {
       if (tache is Map<String, dynamic>) {
@@ -100,54 +116,48 @@ class CarnetEntretienApi {
       kilometrageEntretien: json['kilometrageEntretien'] is int ? json['kilometrageEntretien'] as int : (json['kilometrage'] as int?),
       notes: json['notes']?.toString() ?? (json['description']?.toString()),
       services: services,
-      pieces: [], // OrdreTravail doesn't provide pieces in this mapping
+      pieces: [],
       technicien: json['technicien']?.toString(),
       createdAt: json['createdAt'] != null ? DateTime.tryParse(json['createdAt'].toString()) : null,
       updatedAt: json['updatedAt'] != null ? DateTime.tryParse(json['updatedAt'].toString()) : null,
     );
   }
 
-  /// Retrieves maintenance statistics for a vehicle
-  static Future<Map<String, dynamic>> getStatistiques(String token, String vehiculeId) async {
-    final url = Uri.parse('$UrlApi/carnet/$vehiculeId/stats');
-    final response = await http.get(
-      url,
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-    );
+  // static Future<Map<String, dynamic>> getStatistiques(String token, String vehiculeId) async {
+  //   final url = Uri.parse('$UrlApi/carnet/$vehiculeId/stats');
+  //   final response = await http.get(url, headers: {..._jsonHeader, 'Authorization': 'Bearer $token'});
 
-    final body = jsonDecode(response.body);
-    if (response.statusCode == 200 && body is Map<String, dynamic>) {
-      final stats = (body['stats'] as Map<String, dynamic>?) ?? <String, dynamic>{};
-      final evo = (stats['evolutionDepenses'] as List<dynamic>?) ?? [];
-      return {
-        'totalEntretiens': stats['totalEntretiens'] ?? 0,
-        'totalDepense': (stats['totalDepense'] as num?)?.toDouble() ?? 0.0,
-        'moyenneParEntretien': (stats['moyenneParEntretien'] as num?)?.toDouble() ?? 0.0,
-        'dernierEntretien': stats['dernierEntretien'] != null ? DateTime.tryParse(stats['dernierEntretien'].toString()) : null,
-        'prochainEntretien': stats['prochainEntretien'] != null ? DateTime.tryParse(stats['prochainEntretien'].toString()) : null,
-        'repartitionParType': stats['repartitionParType'] ?? {},
-        'evolutionDepenses': evo.map((e) {
-          try {
-            return {
-              'date': DateTime.parse(e['date'].toString()),
-              'montant': (e['montant'] as num?)?.toDouble() ?? 0.0,
-            };
-          } catch (_) {
-            return {'date': null, 'montant': 0.0};
-          }
-        }).toList(),
-      };
-    } else {
-      String errorMsg = 'Erreur lors du calcul des statistiques';
-      if (body is Map && (body['error'] ?? body['message']) != null) {
-        errorMsg = (body['error'] ?? body['message']).toString();
-      }
-      throw Exception(errorMsg);
-    }
-  }
+  //   final body = _safeDecodeResponse(response);
+
+  //   if (response.statusCode == 200 && body is Map<String, dynamic>) {
+  //     final stats = (body['stats'] as Map<String, dynamic>?) ?? <String, dynamic>{};
+  //     final evo = (stats['evolutionDepenses'] as List<dynamic>?) ?? [];
+  //     return {
+  //       'totalEntretiens': stats['totalEntretiens'] ?? 0,
+  //       'totalDepense': (stats['totalDepense'] as num?)?.toDouble() ?? 0.0,
+  //       'moyenneParEntretien': (stats['moyenneParEntretien'] as num?)?.toDouble() ?? 0.0,
+  //       'dernierEntretien': stats['dernierEntretien'] != null ? DateTime.tryParse(stats['dernierEntretien'].toString()) : null,
+  //       'prochainEntretien': stats['prochainEntretien'] != null ? DateTime.tryParse(stats['prochainEntretien'].toString()) : null,
+  //       'repartitionParType': stats['repartitionParType'] ?? {},
+  //       'evolutionDepenses': evo.map((e) {
+  //         try {
+  //           return {
+  //             'date': DateTime.parse(e['date'].toString()),
+  //             'montant': (e['montant'] as num?)?.toDouble() ?? 0.0,
+  //           };
+  //         } catch (_) {
+  //           return {'date': null, 'montant': 0.0};
+  //         }
+  //       }).toList(),
+  //     };
+  //   } else {
+  //     String errorMsg = 'Erreur lors du calcul des statistiques (code ${response.statusCode})';
+  //     if (body is Map && (body['error'] ?? body['message']) != null) {
+  //       errorMsg = (body['error'] ?? body['message']).toString();
+  //     }
+  //     throw Exception(errorMsg);
+  //   }
+  // }
 
   static Future<CarnetEntretien> updateCarnet({
     required String token,
@@ -155,41 +165,27 @@ class CarnetEntretienApi {
     required Map<String, dynamic> updates,
   }) async {
     final url = Uri.parse('$UrlApi/carnet/$carnetId');
-    // debug
-    print('=== [DEBUG updateCarnet] ===');
-    print('➡️ URL: $url');
-    print('➡️ Headers: {Content-Type: application/json, Authorization: Bearer $token}');
-    print('➡️ Body envoyé: ${jsonEncode(updates)}');
-
+    print('=== [DEBUG updateCarnet] URL: $url');
     final response = await http.put(
       url,
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
+      headers: {..._jsonHeader, 'Authorization': 'Bearer $token'},
       body: jsonEncode(updates),
     );
 
-    print("⬅️ Status Code: ${response.statusCode}");
-    print("⬅️ Response Body: ${response.body}");
+    final body = _safeDecodeResponse(response);
 
-    final body = jsonDecode(response.body);
     if ((response.statusCode == 200 || response.statusCode == 201) && body is Map<String, dynamic>) {
       final carnetJson = body['carnet'] as Map<String, dynamic>? ?? body;
-      print("✅ updateCarnet JSON: $carnetJson");
       return CarnetEntretien.fromJson(carnetJson);
     } else {
-      String errorMsg = 'Erreur lors de la mise à jour du carnet';
+      String errorMsg = 'Erreur lors de la mise à jour du carnet (code ${response.statusCode})';
       if (body is Map && (body['error'] ?? body['message']) != null) {
         errorMsg = (body['error'] ?? body['message']).toString();
       }
-      print("❌ Erreur API updateCarnet: $errorMsg");
       throw Exception(errorMsg);
     }
   }
 
-  /// Creates a manual CarnetEntretien entry
-   /// Creates a manual CarnetEntretien entry
   static Future<CarnetEntretien> creerCarnetManuel({
     required String token,
     required String vehiculeId,
@@ -198,7 +194,7 @@ class CarnetEntretienApi {
     required double cout,
     String? notes,
   }) async {
-    final url = Uri.parse('$UrlApi/creer-manuel'); 
+    final url = Uri.parse('$UrlApi/creer-manuel');
 
     final requestBody = {
       'vehiculeId': vehiculeId,
@@ -208,65 +204,39 @@ class CarnetEntretienApi {
       'notes': notes,
     }..removeWhere((k, v) => v == null);
 
-    // Debug - Infos avant envoi
-    print("=== [DEBUG creerCarnetManuel] ===");
-    print("➡️ URL: $url");
-    print("➡️ Headers: {Content-Type: application/json, Authorization: Bearer $token}");
-    print("➡️ Body envoyé: ${jsonEncode(requestBody)}");
+    print('=== [DEBUG creerCarnetManuel] URL: $url Body: ${jsonEncode(requestBody)}');
 
     final response = await http.post(
       url,
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
+      headers: {..._jsonHeader, 'Authorization': 'Bearer $token'},
       body: jsonEncode(requestBody),
     );
 
-    // Debug - Réponse brute
-    print("⬅️ Status Code: ${response.statusCode}");
-    print("⬅️ Response Body: ${response.body}");
-
-    final body = jsonDecode(response.body);
+    final body = _safeDecodeResponse(response);
 
     if (response.statusCode == 201 && body is Map<String, dynamic>) {
       final carnetJson = body['carnet'] as Map<String, dynamic>? ?? body;
-
-      // Debug - JSON carnet
-      print("✅ CarnetEntretien JSON: $carnetJson");
-
       return CarnetEntretien.fromJson(carnetJson);
     } else {
-      String errorMsg = 'Erreur lors de la création du carnet';
+      String errorMsg = 'Erreur lors de la création du carnet (code ${response.statusCode})';
       if (body is Map && (body['error'] ?? body['message']) != null) {
         errorMsg = (body['error'] ?? body['message']).toString();
       }
-
-      // Debug - Erreur
-      print("❌ Erreur API: $errorMsg");
-
       throw Exception(errorMsg);
     }
   }
 
-
-  /// Creates a CarnetEntretien from a Devis
   static Future<CarnetEntretien> creerDepuisDevis(String token, String devisId) async {
     final url = Uri.parse('$UrlApi/carnet/devis/$devisId');
-    final response = await http.post(
-      url,
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-    );
+    final response = await http.post(url, headers: {..._jsonHeader, 'Authorization': 'Bearer $token'});
 
-    final body = jsonDecode(response.body);
+    final body = _safeDecodeResponse(response);
+
     if (response.statusCode == 201 && body is Map<String, dynamic>) {
       final carnetJson = body['carnet'] as Map<String, dynamic>? ?? body;
       return CarnetEntretien.fromJson(carnetJson);
     } else {
-      String errorMsg = 'Erreur lors de la création du carnet depuis devis';
+      String errorMsg = 'Erreur lors de la création du carnet depuis devis (code ${response.statusCode})';
       if (body is Map && (body['error'] ?? body['message']) != null) {
         errorMsg = (body['error'] ?? body['message']).toString();
       }
@@ -274,7 +244,6 @@ class CarnetEntretienApi {
     }
   }
 
-  /// Marks a CarnetEntretien as completed
   static Future<CarnetEntretien> marquerTermine({
     required String token,
     required String carnetId,
@@ -285,10 +254,7 @@ class CarnetEntretienApi {
     final url = Uri.parse('$UrlApi/carnet/$carnetId/complete');
     final response = await http.put(
       url,
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
+      headers: {..._jsonHeader, 'Authorization': 'Bearer $token'},
       body: jsonEncode({
         'dateFinCompletion': dateFinCompletion?.toIso8601String(),
         'kilometrageEntretien': kilometrageEntretien,
@@ -296,12 +262,12 @@ class CarnetEntretienApi {
       }..removeWhere((k, v) => v == null)),
     );
 
-    final body = jsonDecode(response.body);
+    final body = _safeDecodeResponse(response);
     if (response.statusCode == 200 && body is Map<String, dynamic>) {
       final carnetJson = body['carnet'] as Map<String, dynamic>? ?? body;
       return CarnetEntretien.fromJson(carnetJson);
     } else {
-      String errorMsg = 'Erreur lors de la mise à jour du carnet';
+      String errorMsg = 'Erreur lors de la mise à jour du carnet (code ${response.statusCode})';
       if (body is Map && (body['error'] ?? body['message']) != null) {
         errorMsg = (body['error'] ?? body['message']).toString();
       }
@@ -309,28 +275,22 @@ class CarnetEntretienApi {
     }
   }
 
-   static Future<void> deleteCarnet(String token, String carnetId) async {
+  static Future<void> deleteCarnet(String token, String carnetId) async {
     final url = Uri.parse('$UrlApi/carnet/$carnetId');
-    final response = await http.delete(
-      url,
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-    );
+    final response = await http.delete(url, headers: {..._jsonHeader, 'Authorization': 'Bearer $token'});
 
     if (response.statusCode == 200 || response.statusCode == 204) {
       return;
     }
 
-    // tenter d'extraire message d'erreur
+    // try decode for message
     try {
-      final body = jsonDecode(response.body);
+      final body = _safeDecodeResponse(response);
       if (body is Map && (body['error'] ?? body['message']) != null) {
         throw Exception((body['error'] ?? body['message']).toString());
       }
     } catch (_) {
-      // ignore parse error
+      // si decode a échoué, tombera plus bas avec code d'erreur
     }
 
     throw Exception('Erreur lors de la suppression du carnet (code ${response.statusCode})');

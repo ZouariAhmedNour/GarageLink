@@ -125,26 +125,37 @@ class CarnetEntretienNotifier extends StateNotifier<CarnetEntretienState> {
     }
   }
 
-  Future<void> loadStats(String vehiculeId) async {
-    _ensureToken();
+ Future<void> loadStats(String vehiculeId) async {
+  _ensureToken();
+  setLoading(true);
+  try {
+    // 🚫 Pas d'appel API car endpoint inexistant
+    // 👉 On insère des valeurs par défaut
+    final newStats = Map<String, CarnetStats>.from(state.stats);
+    newStats[vehiculeId] = CarnetStats(
+      totalEntretiens: state.historique[vehiculeId]?.length ?? 0,
+      totalDepense: 0,
+      moyenneParEntretien: 0,
+      dernierEntretien: null,
+      prochainEntretien: null,
+      repartitionParType: {},
+      evolutionDepenses: [],
+    );
 
-    setLoading(true);
-    try {
-      final statsJson = await CarnetEntretienApi.getStatistiques(_token!, vehiculeId);
-      final newStats = Map<String, CarnetStats>.from(state.stats);
-      newStats[vehiculeId] = CarnetStats.fromJson(statsJson);
-
-      state = state.copyWith(
-        stats: newStats,
-        error: null,
-      );
-    } catch (e) {
-      setError(e.toString());
-      rethrow;
-    } finally {
-      setLoading(false);
-    }
+    state = state.copyWith(
+      stats: newStats,
+      error: null,
+    );
+  } catch (e, st) {
+    final message = e is Exception ? e.toString() : 'Erreur inconnue: $e';
+    print('Erreur dans loadStats: $message');
+    print(st);
+    setError(message);
+    // ⚠️ pas besoin de rethrow → on garde l’erreur localement
+  } finally {
+    setLoading(false);
   }
+}
 
   Future<CarnetEntretien> ajouterEntree({
     required String vehiculeId,

@@ -1,4 +1,3 @@
-// lib/MecanicienScreens/Gestion Clients/client_dash.dart
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -325,15 +324,14 @@ class _ClientDashState extends ConsumerState<ClientDash>
         title: 'Clients',
         backgroundColor: primaryColor,
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        backgroundColor: primaryColor,
-        onPressed: () {
-          HapticFeedback.lightImpact();
-          Get.to(() => const AddClientScreen());
-        },
-        icon: const Icon(Icons.person_add, color: Colors.white),
-        label: const Text('Ajouter', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-      ),
+      floatingActionButton: FloatingActionButton(
+  backgroundColor: primaryColor,
+  onPressed: () {
+    HapticFeedback.lightImpact();
+    Get.to(() => const AddClientScreen());
+  },
+  child: const Icon(Icons.person_add, color: Colors.white),
+),
       body: _fadeAnimation == null || _slideAnimation == null
           ? const SizedBox.shrink()
           : FadeTransition(

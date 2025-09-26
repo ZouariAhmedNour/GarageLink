@@ -3,7 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:garagelink/MecanicienScreens/Reservations/creerResa.dart';
 import 'package:garagelink/models/service.dart';
-import 'package:garagelink/providers/chercher_garage_providers';
+import 'package:garagelink/providers/chercherGarage_providers.dart';
 import 'package:garagelink/providers/service_provider.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:geolocator/geolocator.dart';
