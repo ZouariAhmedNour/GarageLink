@@ -26,6 +26,9 @@ class _LoginPageState extends ConsumerState<LoginPage> with TickerProviderStateM
   late final TextEditingController emailController;
   late final TextEditingController passwordController;
 
+  // toggle visibilité mot de passe
+  bool _obscurePassword = true;
+
   @override
   void initState() {
     super.initState();
@@ -77,14 +80,17 @@ class _LoginPageState extends ConsumerState<LoginPage> with TickerProviderStateM
     }
   }
 
-  // ---------------------- _handleEmailLogin (utilise UserApi + AuthNotifier) ----------------------
   Future<void> _handleEmailLogin() async {
   final email = emailController.text.trim();
   final password = passwordController.text;
 
   if (email.isEmpty || password.isEmpty) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _handleApiResult({'success': false, 'message': 'Veuillez remplir tous les champs', 'devMessage': 'Missing email or password in login form'});
+      _handleApiResult({
+        'success': false,
+        'message': 'Veuillez remplir tous les champs',
+        'devMessage': 'Missing email or password in login form'
+      });
     });
     return;
   }
@@ -94,6 +100,14 @@ class _LoginPageState extends ConsumerState<LoginPage> with TickerProviderStateM
   try {
     // login via backend
     final token = await UserApi.login(email: email, password: password);
+
+    // si l'API renvoie null/empty -> considérer comme credentials invalides
+    if (((token).trim().isEmpty)) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _handleApiResult({'success': false, 'message': 'Email ou mot de passe incorrects.'});
+      });
+      return;
+    }
 
     // fetch profile
     final profile = await UserApi.getProfile(token);
@@ -110,28 +124,51 @@ class _LoginPageState extends ConsumerState<LoginPage> with TickerProviderStateM
     if (mounted) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (needsLocation) {
-          // On passe d'abord par la page EditLocalisation : on lui fournit token + user
           Get.offAllNamed(
             AppRoutes.editLocalisation,
             arguments: {'token': token, 'user': profile},
           );
         } else {
-          // profil OK -> home directement
-          Get.offAllNamed(AppRoutes.mecaHome, arguments: {'justLoggedIn': true, 'message': 'Connecté avec succès.'});
+          Get.offAllNamed(AppRoutes.mecaHome,
+              arguments: {'justLoggedIn': true, 'message': 'Connecté avec succès.'});
         }
       });
     }
+  } on Exception catch (e) {
+    final msg = _loginErrorMessageFromException(e);
+    if (mounted) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _handleApiResult({'success': false, 'message': msg});
+      });
+    }
   } catch (e) {
-    if (kDebugMode) debugPrint('[LOGIN DEBUG] error: $e');
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _handleApiResult({'success': false, 'message': e.toString()});
-    });
+    if (mounted) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _handleApiResult({'success': false, 'message': 'Une erreur est survenue : ${e.toString()}'
+        });
+      });
+    }
   } finally {
     if (mounted) WidgetsBinding.instance.addPostFrameCallback((_) => setState(() => _isLoading = false));
   }
 }
 
-  // ---------------------- FIN _handleEmailLogin ----------------------
+// petit helper pour détecter un échec d'authentification à partir de l'exception
+String _loginErrorMessageFromException(Object e) {
+  final s = e.toString().toLowerCase();
+  if (s.contains('401') ||
+      s.contains('unauthor') ||
+      s.contains('invalid') ||
+      s.contains('credentials') ||
+      s.contains('mot de passe') ||
+      s.contains('email') ||
+      s.contains('identifiant')) {
+    return 'Email ou mot de passe incorrects.';
+  }
+  // sinon renvoyer message complet (ou tu peux renvoyer un message plus générique)
+  return 'Une erreur est survenue : ${e.toString()}';
+}
+
 
   @override
   Widget build(BuildContext context) {
@@ -157,7 +194,6 @@ class _LoginPageState extends ConsumerState<LoginPage> with TickerProviderStateM
               const SizedBox(height: 10),
               Text('Gestion intelligente de votre garage', style: TextStyle(fontSize: 16, color: Colors.grey[600], fontWeight: FontWeight.w400)),
               const SizedBox(height: 50),
-              // Simple header: on conserve l'espace mais plus de toggle email/phone
               const SizedBox(height: 10),
               const SizedBox(height: 20),
               // Email form
@@ -168,7 +204,35 @@ class _LoginPageState extends ConsumerState<LoginPage> with TickerProviderStateM
                     const SizedBox(height: 10),
                     CustomTextForm(hinttext: 'Adresse email', mycontroller: emailController),
                     const SizedBox(height: 20),
-                    CustomTextForm(hinttext: 'Mot de passe', mycontroller: passwordController),
+
+                    // === Champ mot de passe avec icône "oeil" ===
+                    TextFormField(
+                      controller: passwordController,
+                      obscureText: _obscurePassword,
+                      decoration: InputDecoration(
+                        hintText: 'Mot de passe',
+                        contentPadding: const EdgeInsets.symmetric(vertical: 18.0, horizontal: 12.0),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8.0)),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8.0),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8.0),
+                          borderSide: const BorderSide(color: Color(0xFF4A90E2)),
+                        ),
+                        suffixIcon: IconButton(
+                          tooltip: _obscurePassword ? 'Afficher le mot de passe' : 'Masquer le mot de passe',
+                          icon: Icon(_obscurePassword ? Icons.visibility_off : Icons.visibility),
+                          onPressed: () {
+                            setState(() => _obscurePassword = !_obscurePassword);
+                          },
+                        ),
+                      ),
+                      textInputAction: TextInputAction.done,
+                      onFieldSubmitted: (_) => _handleEmailLogin(),
+                    ),
+
                     const SizedBox(height: 15),
                     Align(
                       alignment: Alignment.centerRight,

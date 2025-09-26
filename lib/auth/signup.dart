@@ -1,7 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-
 import 'package:garagelink/auth/login.dart';
 import 'package:garagelink/components/custom_button.dart';
 import 'package:garagelink/components/custom_text_form.dart';
@@ -14,29 +13,77 @@ class SignUpPage extends ConsumerStatefulWidget {
 
   @override
   ConsumerState<SignUpPage> createState() => _SignUpPageState();
-  
 }
-
 
 class _SignUpPageState extends ConsumerState<SignUpPage> {
   bool _isLoading = false;
 
+  // états de validation du mot de passe
+  bool _hasMinLength = false;
+  bool _hasUppercase = false;
+  bool _hasLowercase = false;
+  bool _hasDigit = false;
 
-  
-@override
-void initState() {
-  super.initState();
+  // référence locale au controller (nullable pour éviter LateError)
+  TextEditingController? _pwCtrl;
 
-  // Réinitialiser tous les champs
-  ref.read(firstNameControllerProvider).clear();
-  ref.read(lastNameControllerProvider).clear();
-  ref.read(garageNameControllerProvider).clear();
-  ref.read(matriculeFiscalControllerProvider).clear();
-  ref.read(emailControllerProvider).clear();
-  ref.read(phoneControllerProvider).clear();
-  ref.read(passwordControllerProvider).clear();
-  ref.read(confirmPasswordControllerProvider).clear();
-}
+  // helper: met à jour les bools depuis le texte
+  void _validatePassword() {
+    // si non initialisé, on ignore (sécurité)
+    final controller = _pwCtrl;
+    if (controller == null) return;
+
+    final pw = controller.text;
+
+    final newHasMinLength = pw.length >= 8;
+    final newHasUppercase = RegExp(r'[A-Z]').hasMatch(pw);
+    final newHasLowercase = RegExp(r'[a-z]').hasMatch(pw);
+    final newHasDigit = RegExp(r'\d').hasMatch(pw);
+
+    // ne rebuild que si quelque chose change
+    if (newHasMinLength != _hasMinLength ||
+        newHasUppercase != _hasUppercase ||
+        newHasLowercase != _hasLowercase ||
+        newHasDigit != _hasDigit) {
+      setState(() {
+        _hasMinLength = newHasMinLength;
+        _hasUppercase = newHasUppercase;
+        _hasLowercase = newHasLowercase;
+        _hasDigit = newHasDigit;
+      });
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+
+    // Réinitialiser tous les champs (ok d'utiliser ref ici)
+    ref.read(firstNameControllerProvider).clear();
+    ref.read(lastNameControllerProvider).clear();
+    ref.read(garageNameControllerProvider).clear();
+    ref.read(matriculeFiscalControllerProvider).clear();
+    ref.read(emailControllerProvider).clear();
+    ref.read(phoneControllerProvider).clear();
+
+    // lire ET garder le controller dans un champ (on n'utilisera plus ref en dispose)
+    _pwCtrl = ref.read(passwordControllerProvider);
+    _pwCtrl?.clear();
+    _pwCtrl?.addListener(_validatePassword);
+
+    // clear confirm password aussi si tu veux
+    ref.read(confirmPasswordControllerProvider).clear();
+  }
+
+  @override
+  void dispose() {
+    // retirer le listener via la référence locale si existante
+    _pwCtrl?.removeListener(_validatePassword);
+
+    // Ne pas appeler ref.read(...) ici, car ref peut être déjà disposé
+    super.dispose();
+  }
+
   void _showSnackBar(String message, {bool isError = true}) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -46,6 +93,37 @@ void initState() {
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
+    );
+  }
+
+  Widget _buildConstraintLine(bool valid, String text) {
+    // petite animation visuelle (change d'icône + couleur)
+    final color = valid ? Colors.green : Colors.grey[500];
+    final icon = valid ? Icons.check_circle : Icons.radio_button_unchecked;
+    return Row(
+      children: [
+        Icon(icon, size: 18, color: color),
+        const SizedBox(width: 8),
+        Text(
+          text,
+          style: TextStyle(color: color),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPasswordConstraints() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _buildConstraintLine(_hasMinLength, 'Au moins 8 caractères'),
+        const SizedBox(height: 6),
+        _buildConstraintLine(_hasUppercase, 'Au moins 1 lettre majuscule (A-Z)'),
+        const SizedBox(height: 6),
+        _buildConstraintLine(_hasLowercase, 'Au moins 1 lettre minuscule (a-z)'),
+        const SizedBox(height: 6),
+        _buildConstraintLine(_hasDigit, 'Au moins 1 chiffre (0-9)'),
+      ],
     );
   }
 
@@ -125,22 +203,51 @@ void initState() {
               value == null || value.isEmpty ? 'Veuillez entrer votre email' : null,
         ),
         const SizedBox(height: 20),
+        // === MOT DE PASSE avec validation live ===
         CustomTextForm(
           hinttext: 'Mot de passe',
           mycontroller: passwordCtrl,
           obscureText: true,
-          validator: (value) => value == null || value.isEmpty
-              ? 'Veuillez entrer un mot de passe'
-              : null,
+          validator: (value) {
+            if (value == null || value.isEmpty) {
+              return 'Veuillez entrer un mot de passe';
+            }
+            if (value.length < 8) {
+              return 'Le mot de passe doit contenir au moins 8 caractères';
+            }
+            if (!RegExp(r'[A-Z]').hasMatch(value)) {
+              return 'Ajoutez au moins une majuscule';
+            }
+            if (!RegExp(r'[a-z]').hasMatch(value)) {
+              return 'Ajoutez au moins une minuscule';
+            }
+            if (!RegExp(r'\d').hasMatch(value)) {
+              return 'Ajoutez au moins un chiffre';
+            }
+            return null;
+          },
+        ),
+        const SizedBox(height: 10),
+        // affichage des contraintes sous le champ
+        AnimatedOpacity(
+          opacity: 1,
+          duration: const Duration(milliseconds: 200),
+          child: _buildPasswordConstraints(),
         ),
         const SizedBox(height: 20),
         CustomTextForm(
           hinttext: 'Confirmer le mot de passe',
           mycontroller: confirmPasswordCtrl,
           obscureText: true,
-          validator: (value) => value == null || value.isEmpty
-              ? 'Veuillez confirmer le mot de passe'
-              : null,
+          validator: (value) {
+            if (value == null || value.isEmpty) {
+              return 'Veuillez confirmer le mot de passe';
+            }
+            if (value != passwordCtrl.text) {
+              return 'Les mots de passe ne correspondent pas';
+            }
+            return null;
+          },
         ),
         const SizedBox(height: 30),
         CustomButton(
@@ -171,6 +278,17 @@ void initState() {
         passwordCtrl.text.trim().isEmpty ||
         confirmPasswordCtrl.text.trim().isEmpty) {
       _showSnackBar('Veuillez remplir tous les champs');
+      return;
+    }
+
+    // Vérifier règles de mot de passe côté front (déjà signalé en live)
+    final pw = passwordCtrl.text.trim();
+    if (!(pw.length >= 8 &&
+        RegExp(r'[A-Z]').hasMatch(pw) &&
+        RegExp(r'[a-z]').hasMatch(pw) &&
+        RegExp(r'\d').hasMatch(pw))) {
+      _showSnackBar(
+          'Le mot de passe doit contenir au moins 8 caractères, une majuscule, une minuscule et un chiffre.');
       return;
     }
 
