@@ -133,7 +133,7 @@ class _SearchGarageScreenState extends ConsumerState<ChercherGarageScreen> {
           // Infos garage
           ListTile(
             title: Text(g.garagenom ?? g.username, style: const TextStyle(fontWeight: FontWeight.w700)),
-            subtitle: Text(g.streetAddress ?? ''),
+            subtitle: Text(g.streetAddress),
           ),
           if (g.phone != null) ListTile(leading: const Icon(Icons.phone), title: Text(g.phone!)),
           if ((g.email).isNotEmpty) ListTile(leading: const Icon(Icons.email), title: Text(g.email)),

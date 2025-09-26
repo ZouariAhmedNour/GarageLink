@@ -24,11 +24,6 @@ class TvaAndTotals extends ConsumerWidget {
     return double.tryParse(raw) ?? 0.0;
   }
 
-  double _parseDouble(String v) {
-    final raw = v.replaceAll(',', '.').trim();
-    if (raw.isEmpty) return 0.0;
-    return double.tryParse(raw) ?? 0.0;
-  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -60,21 +55,19 @@ class TvaAndTotals extends ConsumerWidget {
       children: [
         // Remise est optionnelle : si tu veux activer la remise côté provider,
         // il faudra ajouter setRemise(...) au provider. Ici on propose simplement le champ.
-        if (remiseLocal != null) ...[
-          ModernTextField(
-            controller: remiseLocal,
-            label: 'Remise %',
-            icon: Icons.discount,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            onChanged: (v) {
-              // par défaut on ne met pas à jour le provider pour la remise
-              // Si tu ajoutes setRemise(double) dans le provider, appelle-le ici :
-              // final r = _parsePercent(v);
-              // notifier.setRemise(r);
-            },
-          ),
-          const SizedBox(height: 12),
-        ],
+       if (remiseLocal != null) ...[
+  ModernTextField(
+    controller: remiseLocal,
+    label: 'Remise %',
+    icon: Icons.discount,
+    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+    onChanged: (v) {
+      final r = _parsePercent(v);
+      notifier.setRemise(r); // <-- met à jour le provider
+    },
+  ),
+  const SizedBox(height: 12),
+],
         // TotalsCard (séparé) lira déjà l'état du provider pour afficher les montants
       ],
     );

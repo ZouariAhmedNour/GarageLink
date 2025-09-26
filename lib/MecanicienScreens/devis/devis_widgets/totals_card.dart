@@ -13,7 +13,10 @@ class TotalsCard extends ConsumerWidget {
 
     final sousTotalPieces = state.sousTotalPieces;
     final mainOeuvre = state.maindoeuvre; // ✅ récupère la MO depuis provider
-    final totalHt = state.totalHT;        // inclut déjà MO
+    final totalHTAvantRemise = state.totalHTAvantRemise;
+    final remisePercent = state.remisePercent;
+    final montantRemise = state.montantRemise;
+    final totalHtNet = state.totalHT;        // inclut déjà MO
     final montantTva = state.montantTva;
     final totalTtc = state.totalTTC;
     final tvaRate = state.tvaRate;
@@ -35,7 +38,11 @@ class TotalsCard extends ConsumerWidget {
             const SizedBox(height: 6),
             _row('Main d\'œuvre (HT)', Fmt.money(mainOeuvre)), // ✅ ajout
             const Divider(height: 20),
-            _row('Total HT', Fmt.money(totalHt), isBold: true),
+            _row('Total HT (avant remise)', Fmt.money(totalHTAvantRemise)),
+            const SizedBox(height: 6),
+            _row('Remise (${remisePercent.toStringAsFixed(2)}%)', '- ${Fmt.money(montantRemise)}'),
+            const Divider(height: 20),
+            _row('Total HT', Fmt.money(totalHtNet), isBold: true),
             const SizedBox(height: 6),
             _row('TVA (${tvaRate.toStringAsFixed(0)}%)', Fmt.money(montantTva)),
             const Divider(height: 20),

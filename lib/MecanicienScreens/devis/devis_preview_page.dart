@@ -90,7 +90,7 @@ class _DevisPreviewPageState extends ConsumerState<DevisPreviewPage>
       if (maybeAsync is AsyncValue) {
         return maybeAsync.asData?.value;
       } else if (maybeAsync is User) {
-        return maybeAsync as User;
+        return maybeAsync;
       } else {
         return null;
       }
@@ -349,7 +349,6 @@ class _DevisPreviewPageState extends ConsumerState<DevisPreviewPage>
     final Devis previewDevis = previewDevisFromParam ?? previewDevisFromProvider;
 
     final bool isFacture = haveFacture;
-    final Object docToUse = isFacture ? previewFacture : previewDevis;
 
     // watch currentUserProvider (could be AsyncValue<User?> or User?)
     final dynamic userWatch = ref.watch(currentUserProvider);

@@ -22,6 +22,7 @@ class DevisFilterState {
   final double maindoeuvre;
   final EstimatedTime estimatedTime;
   final double tvaRate;
+  final double remisePercent;
   final List<Devis> devis;
   final DevisFilterField filterField;
   final bool loading;
@@ -41,6 +42,7 @@ class DevisFilterState {
     this.maindoeuvre = 0.0,
     EstimatedTime? estimatedTime,
     this.tvaRate = 20.0,
+    this.remisePercent = 0.0,
     List<Devis>? devis,
     this.filterField = DevisFilterField.clientName,
     this.loading = false,
@@ -52,7 +54,9 @@ class DevisFilterState {
 
   // Calculs
   double get sousTotalPieces => services.fold(0.0, (sum, srv) => sum + srv.total);
-  double get totalHT => sousTotalPieces + maindoeuvre;
+  double get totalHTAvantRemise => sousTotalPieces + maindoeuvre;
+  double get montantRemise => totalHTAvantRemise * (remisePercent / 100.0);
+  double get totalHT => totalHTAvantRemise - montantRemise;
   double get montantTva => totalHT * (tvaRate / 100);
   double get totalTTC => totalHT + montantTva;
 
@@ -90,6 +94,7 @@ class DevisFilterState {
     double? maindoeuvre,
     EstimatedTime? estimatedTime,
     double? tvaRate,
+    double? remisePercent,
     List<Devis>? devis,
     DevisFilterField? filterField,
     bool? loading,
@@ -109,6 +114,7 @@ class DevisFilterState {
       maindoeuvre: maindoeuvre ?? this.maindoeuvre,
       estimatedTime: estimatedTime ?? this.estimatedTime,
       tvaRate: tvaRate ?? this.tvaRate,
+      remisePercent: remisePercent ?? this.remisePercent,
       devis: devis ?? this.devis,
       filterField: filterField ?? this.filterField,
       loading: loading ?? this.loading,
@@ -157,6 +163,9 @@ class DevisNotifier extends StateNotifier<DevisFilterState> {
 
   void setTvaRate(double rate) =>
       state = state.copyWith(tvaRate: rate);
+
+  void setRemise(double percent) =>
+      state = state.copyWith(remisePercent: percent);    
 
   void setFilterField(DevisFilterField field) =>
       state = state.copyWith(filterField: field);
