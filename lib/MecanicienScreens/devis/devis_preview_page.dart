@@ -1,13 +1,15 @@
 import 'dart:io';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
-import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:garagelink/models/devis.dart';
 import 'package:garagelink/models/facture.dart';
+import 'package:garagelink/models/user.dart';
+import 'package:garagelink/providers/auth_provider.dart';
 import 'package:garagelink/providers/devis_provider.dart';
 import 'package:garagelink/services/pdf_service.dart';
 import 'package:garagelink/utils/devis_actions.dart';
@@ -24,9 +26,6 @@ class PreviewColors {
 }
 
 /// Page polymorphe capable d'afficher un Devis OU une Facture.
-/// - Si `facture` non-null -> affiche facture.
-/// - Sinon si `devis` non-null -> affiche devis.
-/// - Sinon -> prend le Devis courant depuis le provider.
 class DevisPreviewPage extends ConsumerStatefulWidget {
   final Devis? devis;
   final Facture? facture;
@@ -85,9 +84,22 @@ class _DevisPreviewPageState extends ConsumerState<DevisPreviewPage>
     }
   }
 
+  /// Helper pour extraire un User? d'un watch/read dynamique (gère AsyncValue ou User direct).
+  User? _extractUserFrom(dynamic maybeAsync) {
+    try {
+      if (maybeAsync is AsyncValue) {
+        return maybeAsync.asData?.value;
+      } else if (maybeAsync is User) {
+        return maybeAsync as User;
+      } else {
+        return null;
+      }
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Unified action handler that supports Devis OR Facture.
-  /// - action: 'send' | 'download' | 'print'
-  /// - doc: Devis or Facture
   Future<void> _handleAction(String action, {required Object doc}) async {
     setState(() {
       _isProcessing = true;
@@ -102,11 +114,11 @@ class _DevisPreviewPageState extends ConsumerState<DevisPreviewPage>
     try {
       switch (action) {
         case 'send':
-          // Prefer to capture a PNG preview for email if possible
           final png = await _capturePreviewPng();
 
           if (isDevis) {
-            final Devis devis = doc as Devis;
+            final Devis devis = doc;
+
             try {
               if (png != null) {
                 await generateAndSendDevis(
@@ -122,8 +134,17 @@ class _DevisPreviewPageState extends ConsumerState<DevisPreviewPage>
               break;
             } catch (e) {
               debugPrint('Envoi Devis avec preview échoué: $e — fallback share PDF');
-              // fallback to share PDF
-              final bytes = await PdfService.instance.buildDevisPdfBytes(devis, footerNote: 'Généré par GarageLink');
+
+              // try to get user (read provider)
+              final dynUser = ref.read(currentUserProvider);
+              final User? user = _extractUserFrom(dynUser);
+
+              if (user == null) {
+                _showErrorMessage('Impossible de récupérer les infos du garage pour générer le PDF.');
+                break;
+              }
+
+              final bytes = await PdfService.instance.buildDevisPdfBytes(devis, user, footerNote: 'Généré par GarageLink');
               await Printing.sharePdf(bytes: bytes, filename: 'devis_${devis.id ?? 'doc'}.pdf');
               _showSuccessMessage('Devis partagé localement (fallback)');
               break;
@@ -131,10 +152,9 @@ class _DevisPreviewPageState extends ConsumerState<DevisPreviewPage>
           }
 
           if (isFacture) {
-            final Facture facture = doc as Facture;
-            // Build and share the facture PDF (no special server send util here)
+            final Facture facture = doc;
             final bytes = await PdfService.instance.buildFacturePdfBytes(facture, footerNote: 'Généré par GarageLink');
-            await Printing.sharePdf(bytes: bytes, filename: 'facture_${facture.numeroFacture ?? facture.id ?? 'doc'}.pdf');
+            await Printing.sharePdf(bytes: bytes, filename: 'facture_${facture.numeroFacture}.pdf');
             _showSuccessMessage('Facture partagée (PDF)');
             break;
           }
@@ -144,8 +164,18 @@ class _DevisPreviewPageState extends ConsumerState<DevisPreviewPage>
 
         case 'download':
           if (isDevis) {
-            final Devis devis = doc as Devis;
-            final bytes = await PdfService.instance.buildDevisPdfBytes(devis, footerNote: 'Généré par GarageLink');
+            final Devis devis = doc;
+
+            // get user to build PDF
+            final dynUser = ref.read(currentUserProvider);
+            final User? user = _extractUserFrom(dynUser);
+
+            if (user == null) {
+              _showErrorMessage('Impossible de récupérer les infos du garage pour générer le PDF.');
+              break;
+            }
+
+            final bytes = await PdfService.instance.buildDevisPdfBytes(devis, user, footerNote: 'Généré par GarageLink');
 
             if (kIsWeb) {
               await Printing.sharePdf(bytes: bytes, filename: 'devis_${(devis.clientName).replaceAll(RegExp(r"[^A-Za-z0-9_]"), "_")}.pdf');
@@ -179,7 +209,7 @@ class _DevisPreviewPageState extends ConsumerState<DevisPreviewPage>
           }
 
           if (isFacture) {
-            final Facture facture = doc as Facture;
+            final Facture facture = doc;
             final bytes = await PdfService.instance.buildFacturePdfBytes(facture, footerNote: 'Généré par GarageLink');
 
             if (kIsWeb) {
@@ -218,15 +248,24 @@ class _DevisPreviewPageState extends ConsumerState<DevisPreviewPage>
 
         case 'print':
           if (isDevis) {
-            final Devis devis = doc as Devis;
-            final bytes = await PdfService.instance.buildDevisPdfBytes(devis, footerNote: 'Généré par GarageLink');
+            final Devis devis = doc;
+
+            final dynUser = ref.read(currentUserProvider);
+            final User? user = _extractUserFrom(dynUser);
+
+            if (user == null) {
+              _showErrorMessage('Impossible de récupérer les infos du garage pour générer le PDF.');
+              break;
+            }
+
+            final bytes = await PdfService.instance.buildDevisPdfBytes(devis, user, footerNote: 'Généré par GarageLink');
             await PdfService.instance.printPdfBytes(bytes);
             _showSuccessMessage('Impression Devis lancée');
             break;
           }
 
           if (isFacture) {
-            final Facture facture = doc as Facture;
+            final Facture facture = doc;
             final bytes = await PdfService.instance.buildFacturePdfBytes(facture, footerNote: 'Généré par GarageLink');
             await PdfService.instance.printPdfBytes(bytes);
             _showSuccessMessage('Impression Facture lancée');
@@ -296,10 +335,12 @@ class _DevisPreviewPageState extends ConsumerState<DevisPreviewPage>
     );
   }
 
+ 
+
+  
+
   @override
   Widget build(BuildContext context) {
-    // Determine the document to preview:
-    // priority: widget.facture > widget.devis > provider.devis
     final Facture? previewFacture = widget.facture;
     final Devis? previewDevisFromParam = widget.devis;
     final Devis previewDevisFromProvider = ref.watch(devisProvider).toDevis();
@@ -307,13 +348,18 @@ class _DevisPreviewPageState extends ConsumerState<DevisPreviewPage>
     final bool haveFacture = previewFacture != null;
     final Devis previewDevis = previewDevisFromParam ?? previewDevisFromProvider;
 
-    // Decide which document to show (facture wins if present)
     final bool isFacture = haveFacture;
-    final Object docToUse = isFacture ? previewFacture! : previewDevis;
+    final Object docToUse = isFacture ? previewFacture : previewDevis;
 
-    // safe client name for filenames
+    // watch currentUserProvider (could be AsyncValue<User?> or User?)
+    final dynamic userWatch = ref.watch(currentUserProvider);
+    final User? user = _extractUserFrom(userWatch);
+
+    // build a widget for garage info that handles loading/error when provider is AsyncValue
+    
+
     final String safeClientForFilename = isFacture
-        ? ((previewFacture!.clientInfo.nom?.isNotEmpty ?? false) ? previewFacture.clientInfo.nom! : 'client')
+        ? ((previewFacture.clientInfo.nom?.isNotEmpty ?? false) ? previewFacture.clientInfo.nom! : 'client')
             .replaceAll(RegExp(r"[^A-Za-z0-9_]"), "_")
         : ((previewDevis.clientName.isNotEmpty ? previewDevis.clientName : 'client'))
             .replaceAll(RegExp(r"[^A-Za-z0-9_]"), "_");
@@ -344,19 +390,43 @@ class _DevisPreviewPageState extends ConsumerState<DevisPreviewPage>
                       ),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(12),
-                        child: PdfPreview(
-                          canChangeOrientation: false,
-                          canChangePageFormat: false,
-                          build: (format) async {
-                            if (isFacture) {
-                              return await PdfService.instance.buildFacturePdfBytes(previewFacture!, footerNote: 'Généré par GarageLink');
-                            } else {
-                              return await PdfService.instance.buildDevisPdfBytes(previewDevis, footerNote: 'Généré par GarageLink');
-                            }
-                          },
-                          pdfFileName: '${isFacture ? 'facture' : 'devis'}_$safeClientForFilename.pdf',
-                          allowPrinting: true,
-                          allowSharing: true,
+                        child: ListView(
+                          padding: const EdgeInsets.all(0),
+                          children: [
+                           
+                            // Le PDF preview
+                            SizedBox(
+                              height: 600, // hauteur fixe ou adaptative selon besoin
+                              child: PdfPreview(
+                                canChangeOrientation: false,
+                                canChangePageFormat: false,
+                                build: (format) async {
+                                  if (isFacture) {
+                                    return await PdfService.instance
+                                        .buildFacturePdfBytes(previewFacture, footerNote: 'Généré par GarageLink');
+                                  } else {
+                                    // ensure we have a user to pass
+                                    if (user == null) {
+                                      // attempt to read synchronously if not in watch
+                                      final dyn = ref.read(currentUserProvider);
+                                      final User? u = _extractUserFrom(dyn);
+                                      if (u == null) {
+                                        // fallback: show an empty PDF (or throw) — here we return an empty doc
+                                        debugPrint('Aucun user disponible pour générer le PDF du devis.');
+                                        return (await PdfService.instance.buildDevisPdfBytes(previewDevis, User(username: '', email: ''), footerNote: 'Généré par GarageLink'));
+                                      }
+                                      return await PdfService.instance.buildDevisPdfBytes(previewDevis, u, footerNote: 'Généré par GarageLink');
+                                    }
+                                    return await PdfService.instance
+                                        .buildDevisPdfBytes(previewDevis, user, footerNote: 'Généré par GarageLink');
+                                  }
+                                },
+                                pdfFileName: '${isFacture ? 'facture' : 'devis'}_$safeClientForFilename.pdf',
+                                allowPrinting: true,
+                                allowSharing: true,
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     ),
@@ -395,14 +465,11 @@ class _DevisPreviewPageState extends ConsumerState<DevisPreviewPage>
   }
 
   Widget _buildModernSliverAppBar(Devis? devis, bool isFacture) {
-    // If facture mode, show generic "Facture" title and client from facture
     final String title = isFacture ? 'Facture' : 'Devis';
     final DevisStatus? status = isFacture ? null : devis?.status;
     final String clientLabel = isFacture
         ? (widget.facture?.clientInfo.nom?.isNotEmpty ?? false ? widget.facture!.clientInfo.nom! : 'Client')
         : (devis?.clientName.isNotEmpty ?? false ? devis!.clientName : 'Client');
-
-    final bool accepted = (!isFacture && status == DevisStatus.accepte) || (isFacture);
 
     return SliverAppBar(
       expandedHeight: 140,
@@ -575,7 +642,6 @@ class _DevisPreviewPageState extends ConsumerState<DevisPreviewPage>
   }
 
   List<Widget> _buildAnimatedActionsGeneric(bool isFacture) {
-    // Determine the doc to pass to handler
     final Object docToUse = isFacture ? (widget.facture as Object) : (widget.devis ?? ref.watch(devisProvider).toDevis());
 
     final actions = [

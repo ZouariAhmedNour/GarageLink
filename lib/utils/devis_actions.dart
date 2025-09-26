@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:garagelink/models/devis.dart';
+import 'package:garagelink/models/user.dart';
+import 'package:garagelink/providers/auth_provider.dart';
 import 'package:garagelink/providers/devis_provider.dart';
 import 'package:garagelink/providers/historique_devis_provider.dart';
 import 'package:garagelink/services/devis_api.dart';
@@ -12,18 +14,6 @@ import 'package:printing/printing.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:garagelink/global.dart'; // UrlApi
 
-String _statusToString(DevisStatus s) {
-  switch (s) {
-    case DevisStatus.envoye:
-      return 'envoye';
-    case DevisStatus.accepte:
-      return 'accepte';
-    case DevisStatus.refuse:
-      return 'refuse';
-    case DevisStatus.brouillon:
-      return 'brouillon';
-  }
-}
 
 /// Sauvegarde le devis courant comme brouillon dans l'historique local
 Future<void> saveDraft(WidgetRef ref) async {
@@ -75,6 +65,11 @@ Future<void> generateAndSendDevis(
   String? recipientEmail,
 }) async {
   final Devis base = devisToSend ?? ref.read(devisProvider).toDevis();
+    final dynamic userWatch = ref.read(currentUserProvider);
+
+  final User? user = (userWatch is AsyncValue)
+      ? userWatch.asData?.value
+      : (userWatch is User ? userWatch : null);
 
   // Construire Devis avec statut 'envoye' localement (pour l'historique)
   final Devis toSave = Devis(
@@ -155,9 +150,13 @@ Future<void> generateAndSendDevis(
 
     // 2) Mettre à jour l'historique local (ajout ou remplacement)
     final historique = ref.read(historiqueDevisProvider);
-    final idx = historique.indexWhere((d) =>
-        (d.id != null && created.id != null && d.id == created.id) ||
-        (d.devisId.isNotEmpty && created.devisId.isNotEmpty && d.devisId == created.devisId));
+    final idx = historique.indexWhere(
+      (d) =>
+          (d.id != null && created.id != null && d.id == created.id) ||
+          (d.devisId.isNotEmpty &&
+              created.devisId.isNotEmpty &&
+              d.devisId == created.devisId),
+    );
     if (idx == -1) {
       ref.read(historiqueDevisProvider.notifier).ajouterDevis(created);
     } else {
@@ -169,37 +168,55 @@ Future<void> generateAndSendDevis(
     // recherche le devis avec le champ "id" (le custom DEVxxx). Donc on
     // DOIT transmettre le DEVxxx (created.devisId) si disponible.
     // -------------------------------------------------------------------------
-    final String idForServerSend = (created.devisId.isNotEmpty) ? created.devisId : (created.id ?? '');
+    final String idForServerSend = (created.devisId.isNotEmpty)
+        ? created.devisId
+        : (created.id ?? '');
     // Pour construire les liens d'accept/refuse (qui utilisent findByIdAndUpdate)
     // il faut l'_id Mongo du document : created.id (si présent)
-    final String mongoIdForLinks = (created.id != null && created.id!.isNotEmpty) ? created.id! : '';
+    final String mongoIdForLinks =
+        (created.id != null && created.id!.isNotEmpty) ? created.id! : '';
 
     // Si on a un token ET qu'aucun recipientEmail n'a été fourni,
     // on privilégie l'envoi via le backend (il prendra l'email client et enverra le mail + liens).
-    if (token != null && token.isNotEmpty && (recipientEmail == null || recipientEmail.trim().isEmpty) && idForServerSend.isNotEmpty) {
+    if (token != null &&
+        token.isNotEmpty &&
+        (recipientEmail == null || recipientEmail.trim().isEmpty) &&
+        idForServerSend.isNotEmpty) {
       try {
         await DevisApi.sendDevisByEmail(token: token, devisId: idForServerSend);
         // Best-effort : mettre à jour l'historique local si besoin (backend mettra status envoye)
         try {
-          ref.read(historiqueDevisProvider.notifier).updateStatusById(idForServerSend, DevisStatus.envoye);
+          ref
+              .read(historiqueDevisProvider.notifier)
+              .updateStatusById(idForServerSend, DevisStatus.envoye);
         } catch (_) {}
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Devis envoyé par le serveur (email envoyé)'), backgroundColor: Colors.green),
+          const SnackBar(
+            content: Text('Devis envoyé par le serveur (email envoyé)'),
+            backgroundColor: Colors.green,
+          ),
         );
         return; // terminé : l'envoi est fait par le backend
       } catch (e) {
         // échec de l'envoi via backend -> on bascule en fallback local
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Envoi via serveur échoué : ${e.toString()} — utilisation du partage local'), backgroundColor: Colors.orange),
+          SnackBar(
+            content: Text(
+              'Envoi via serveur échoué : ${e.toString()} — utilisation du partage local',
+            ),
+            backgroundColor: Colors.orange,
+          ),
         );
         // on continue vers la génération PDF + partage
       }
     }
 
     // 3) Générer PDF bytes (fallback / mailto / partage local)
-    Uint8List pdfBytes;
+     Uint8List pdfBytes;
     try {
-      pdfBytes = await PdfService.instance.buildDevisPdfBytes(created, footerNote: 'Généré par GarageLink');
+      if (user == null) throw Exception('Impossible de récupérer les infos du garage (user)');
+      pdfBytes = await PdfService.instance.buildDevisPdfBytes(created, user, footerNote: 'Généré par GarageLink');
+      //                                                        ^^^^
     } catch (e) {
       if (kDebugMode) debugPrint('Erreur buildDevisPdfBytes: $e');
       throw Exception('Impossible de générer le PDF : $e');
@@ -215,13 +232,19 @@ Future<void> generateAndSendDevis(
     } else if (baseUrl.endsWith('/api/')) {
       baseUrl = baseUrl.substring(0, baseUrl.length - 5);
     }
-    final String acceptUrl = mongoIdForLinks.isNotEmpty ? '$baseUrl/api/devis/$mongoIdForLinks/accept' : '';
-    final String refuseUrl = mongoIdForLinks.isNotEmpty ? '$baseUrl/api/devis/$mongoIdForLinks/refuse' : '';
+    final String acceptUrl = mongoIdForLinks.isNotEmpty
+        ? '$baseUrl/api/devis/$mongoIdForLinks/accept'
+        : '';
+    final String refuseUrl = mongoIdForLinks.isNotEmpty
+        ? '$baseUrl/api/devis/$mongoIdForLinks/refuse'
+        : '';
 
     // 4) Si recipientEmail fourni -> on essaie mailto: vers cette adresse (compose)
     // On inclut dans le corps les liens d'accept/refuse (si on possède l'_id Mongo)
     if (recipientEmail != null && recipientEmail.trim().isNotEmpty) {
-      final subject = Uri.encodeComponent('Devis GarageLink - ${created.devisId.isNotEmpty ? created.devisId : (created.id ?? '')}');
+      final subject = Uri.encodeComponent(
+        'Devis GarageLink - ${created.devisId.isNotEmpty ? created.devisId : (created.id ?? '')}',
+      );
 
       final buffer = StringBuffer();
       buffer.writeln('Bonjour ${created.clientName},');
@@ -230,7 +253,9 @@ Future<void> generateAndSendDevis(
       buffer.writeln('Total TTC: ${created.totalTTC.toStringAsFixed(2)} DT');
       buffer.writeln();
       if (acceptUrl.isNotEmpty && refuseUrl.isNotEmpty) {
-        buffer.writeln('Vous pouvez accepter ou refuser ce devis en cliquant sur les liens suivants :');
+        buffer.writeln(
+          'Vous pouvez accepter ou refuser ce devis en cliquant sur les liens suivants :',
+        );
         buffer.writeln('Accepter : $acceptUrl');
         buffer.writeln('Refuser  : $refuseUrl');
         buffer.writeln();
@@ -239,23 +264,33 @@ Future<void> generateAndSendDevis(
       buffer.writeln('Votre garage');
 
       final body = Uri.encodeComponent(_removeExtraNewlines(buffer.toString()));
-      final uri = Uri.parse('mailto:$recipientEmail?subject=$subject&body=$body');
+      final uri = Uri.parse(
+        'mailto:$recipientEmail?subject=$subject&body=$body',
+      );
 
       if (await canLaunchUrl(uri)) {
         await launchUrl(uri);
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Boîte mail ouverte')));
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Boîte mail ouverte')));
         return;
       } else {
         // mailto impossible -> partager le PDF
         await Printing.sharePdf(bytes: pdfBytes, filename: filename);
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Impossible d\'ouvrir le mail, PDF partagé')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Impossible d\'ouvrir le mail, PDF partagé'),
+          ),
+        );
         return;
       }
     }
 
     // 5) Pas d'email fourni et on n'a pas (ou pas pu) envoyer via serveur -> partager le PDF
     await Printing.sharePdf(bytes: pdfBytes, filename: filename);
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('PDF partagé / prêt à être envoyé')));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('PDF partagé / prêt à être envoyé')),
+    );
   } catch (e, st) {
     debugPrint('generateAndSendDevis erreur: $e\n$st');
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur génération/envoi : $e')));
