@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:garagelink/models/facture.dart';
 import 'package:garagelink/global.dart';
@@ -233,15 +234,101 @@ class FactureApi {
   }
 
   /// GET $UrlApi/stats/summary
-  static Future<FactureStats> getFactureStats(String token) async {
+    static Future<FactureStats> getFactureStats(String token) async {
     final url = Uri.parse('$UrlApi/stats/summary');
     final resp = await http.get(url, headers: _authHeaders(token));
-    final json = jsonDecode(resp.body) as Map<String, dynamic>;
-    if (resp.statusCode == 200 && json['success'] == true) {
-      final payload = (json['data'] ?? json) as Map<String, dynamic>;
-      return FactureStats.fromJson(payload);
+
+    // DEBUG: log pour voir la réponse brute
+    debugPrint('FactureApi.getFactureStats -> status: ${resp.statusCode}');
+    debugPrint('FactureApi.getFactureStats -> body: ${resp.body}');
+
+    if (resp.statusCode != 200) {
+      // essaie d'extraire un message d'erreur si possible
+      try {
+        final parsedErr = jsonDecode(resp.body);
+        final errMsg = (parsedErr is Map) ? (parsedErr['message'] ?? parsedErr['error'] ?? parsedErr) : parsedErr;
+        throw Exception('Erreur getFactureStats: ${resp.statusCode} — $errMsg');
+      } catch (_) {
+        throw Exception('Erreur getFactureStats: ${resp.statusCode} — ${resp.body}');
+      }
     }
-    throw Exception('Erreur getFactureStats: ${resp.statusCode} ${resp.body}');
+
+    // parse JSON
+    dynamic parsed;
+    try {
+      parsed = jsonDecode(resp.body);
+    } catch (e) {
+      throw Exception('Réponse non JSON pour getFactureStats: ${e.toString()} — body: ${resp.body}');
+    }
+
+    // Normaliser payload : on accepte plusieurs formes (data, stats, racine)
+    Map<String, dynamic> payload;
+    if (parsed is Map<String, dynamic>) {
+      if (parsed['data'] is Map<String, dynamic>) {
+        payload = Map<String, dynamic>.from(parsed['data']);
+      } else if (parsed['stats'] is Map<String, dynamic>) {
+        payload = Map<String, dynamic>.from(parsed['stats']);
+      } else {
+        payload = Map<String, dynamic>.from(parsed);
+      }
+    } else {
+      throw Exception('Format inattendu pour getFactureStats: ${parsed.runtimeType}');
+    }
+
+    // helpers robustes pour convertir num/string/null -> double/int
+    double parseDouble(dynamic v) {
+      if (v == null) return 0.0;
+      if (v is double) return v;
+      if (v is int) return v.toDouble();
+      if (v is num) return v.toDouble();
+      if (v is String) {
+        final cleaned = v.replaceAll(',', '.').trim();
+        return double.tryParse(cleaned) ?? 0.0;
+      }
+      return 0.0;
+    }
+
+    int parseInt(dynamic v) {
+      if (v == null) return 0;
+      if (v is int) return v;
+      if (v is double) return v.toInt();
+      if (v is num) return v.toInt();
+      if (v is String) {
+        final cleaned = v.replaceAll(',', '.').trim();
+        return int.tryParse(cleaned) ?? (double.tryParse(cleaned)?.toInt() ?? 0);
+      }
+      return 0;
+    }
+
+    // clés alternatives courantes (tolérantes)
+    int totalFactures = parseInt(payload['totalFactures'] ?? payload['totalFacture'] ?? payload['count'] ?? payload['total_invoices']);
+    double totalTTC = parseDouble(payload['totalTTC'] ?? payload['total'] ?? payload['total_ttc'] ?? payload['totalTtc']);
+    double totalPaye = parseDouble(payload['totalPaye'] ?? payload['totalPaid'] ?? payload['total_paye']);
+    double totalPayePartiel = parseDouble(payload['totalPayePartiel'] ?? payload['totalPartialPaid'] ?? payload['total_paye_partiel']);
+    double totalEncaisse = parseDouble(payload['totalEncaisse'] ?? payload['encaissement'] ?? payload['collected'] ?? 0);
+    double totalImpaye = parseDouble(payload['totalImpaye'] ?? payload['totalUnpaid'] ?? payload['unpaid'] ?? 0);
+
+    int facturesPayees = parseInt(payload['facturesPayees'] ?? payload['paidInvoices'] ?? payload['invoicesPaid']);
+    int facturesEnRetard = parseInt(payload['facturesEnRetard'] ?? payload['overdueInvoices'] ?? payload['invoicesOverdue']);
+    int facturesPartiellesPayees = parseInt(payload['facturesPartiellesPayees'] ?? payload['partialPaidInvoices'] ?? payload['partial_paid']);
+    int facturesEnAttente = parseInt(payload['facturesEnAttente'] ?? payload['pendingInvoices'] ?? payload['invoicesPending']);
+
+    double tauxPaiement = parseDouble(payload['tauxPaiement'] ?? payload['paymentRate'] ?? payload['taux'] ?? payload['rate']);
+
+    // Construire et retourner l'objet FactureStats en utilisant le constructeur existant
+    return FactureStats(
+      totalFactures: totalFactures,
+      totalTTC: totalTTC,
+      totalPaye: totalPaye,
+      totalPayePartiel: totalPayePartiel,
+      totalEncaisse: totalEncaisse,
+      totalImpaye: totalImpaye,
+      facturesPayees: facturesPayees,
+      facturesEnRetard: facturesEnRetard,
+      facturesPartiellesPayees: facturesPartiellesPayees,
+      facturesEnAttente: facturesEnAttente,
+      tauxPaiement: tauxPaiement,
+    );
   }
 }
 

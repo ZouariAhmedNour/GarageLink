@@ -2,6 +2,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:garagelink/services/facture_api.dart';
+import 'package:garagelink/services/ficheClient_api.dart';
+import 'package:garagelink/services/service_api.dart';
 import 'package:get/get.dart';
 
 import 'package:garagelink/ClientsScreens/chercherGarage.dart';
@@ -44,10 +47,49 @@ class _MecaHomePageState extends ConsumerState<MecaHomePage> {
   // évite d'enregistrer plusieurs fois les listeners (on garde dans build mais on protège)
   bool _listenersRegistered = false;
 
+  int _serviceCount = 0;
+  int _clientCount = 0;
+  double _chiffreAffaire = 0.0;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _initAuth());
+     _fetchDashboardStats();
+  }
+
+  Future<void> _fetchDashboardStats() async {
+    try {
+      final token = ref.read(authTokenProvider);
+
+      // Récupère le nombre de services
+      final services = await ServiceApi.getAllServices(token: token);
+      final serviceCount = services.length;
+
+      // Récupère le nombre de clients
+      // Utilise FicheClientApi.getFicheClients si tu veux tous les clients
+      final clients = await FicheClientApi.getFicheClients(token ?? '');
+      final clientCount = clients.length;
+
+      // Récupère le chiffre d'affaire (exemple: somme des factures, à adapter selon ton modèle)
+      // Ici, on suppose que tu as une méthode pour récupérer toutes les factures et calculer le CA
+     double ca = 0.0;
+try {
+  final stats = await FactureApi.getFactureStats(token ?? '');
+  ca = stats.totalTTC;
+} catch (e) {
+  debugPrint('Erreur récupération CA via stats endpoint: $e');
+  // si tu veux, ici tu peux tenter un fallback (ex: lister les factures et sommer),
+  // mais attention au coût réseau. Sinon, laisse ca = 0 et corrige le backend ou l'adaptateur.
+}
+      setState(() {
+        _serviceCount = serviceCount;
+        _clientCount = clientCount;
+        _chiffreAffaire = ca;
+      });
+    } catch (e) {
+      debugPrint('Erreur dashboard stats: $e');
+    }
   }
 
   Future<void> _initAuth() async {
@@ -310,7 +352,7 @@ class _MecaHomePageState extends ConsumerState<MecaHomePage> {
       ref.listen<int>(newNotificationProvider, (previous, next) {
         if (!mounted) return;
         final prev = previous ?? 0;
-        final nextVal = next ?? 0;
+        final nextVal = next;
         if (nextVal > prev) {
           try {
             SystemSound.play(SystemSoundType.alert);
@@ -427,11 +469,11 @@ class _MecaHomePageState extends ConsumerState<MecaHomePage> {
                   const SizedBox(height: 20),
                   Row(
                     children: [
-                      buildQuickStat('Services', '12', Icons.build),
+                      buildQuickStat('Services', '$_serviceCount', Icons.build),
                       const SizedBox(width: 20),
-                      buildQuickStat('Clients', '48', Icons.people),
+                      buildQuickStat('Clients', '$_clientCount', Icons.people),
                       const SizedBox(width: 20),
-                      buildQuickStat('CA', '15KDT', Icons.money),
+                      buildQuickStat('CA', '${_chiffreAffaire.toStringAsFixed(2)} DT', Icons.money),
                     ],
                   ),
                 ],
